@@ -25,19 +25,20 @@ export default function GraphEditor({
   const dispatch = useDispatch();
   const g = locateGraph(s, scope);
   const nodes = Object.fromEntries(Object.entries(g.nodes).filter(([, n]) => filterNode(n)));
-  const edges = g.edges.filter((e) => nodes[e.from] && nodes[e.to]);
   const frames = g.frames || {};
   const numberMarkers = g.numberMarkers || {};
   const titleMarkers = g.titleMarkers || {};
+  const isVisibleEndpoint = (id) => Boolean(nodes[id] || titleMarkers[id]);
+  const edges = g.edges.filter((e) => isVisibleEndpoint(e.from) && isVisibleEndpoint(e.to));
   const paletteById = Object.fromEntries(palette.map((p) => [p.id, p]));
   const selId = selection?.kind === 'graphnode' && sameScope(selection.scope, scope) && nodes[selection.id] ? selection.id : null;
   const selFrame = selection?.kind === 'graphframe' && sameScope(selection.scope, scope) && frames[selection.id] ? selection.id : null;
   const selNumberMarker = selection?.kind === 'graphnumber' && sameScope(selection.scope, scope) && numberMarkers[selection.id] ? selection.id : null;
   const selTitleMarker = selection?.kind === 'graphtitle' && sameScope(selection.scope, scope) && titleMarkers[selection.id] ? selection.id : null;
 
-  const colorOf = (n) => n.kind === 'framework'
+  const colorOf = (n) => n?.kind === 'framework'
     ? (n.color || FRAMEWORK_TYPES[n.frameworkId]?.color || ENTITY_COLORS.framework)
-    : n.color || paletteById[n.kind]?.color || ENTITY_COLORS[n.kind] || '#8B92A6';
+    : n?.color || paletteById[n?.kind]?.color || ENTITY_COLORS[n?.kind] || '#8B92A6';
   const iconOf = (n) => n.kind === 'framework' ? (FRAMEWORK_TYPES[n.frameworkId]?.icon || 'target') : (paletteById[n.kind]?.icon || null);
   const renderSupportingPreview = (n) => {
     const preview = supportingMechanicSubnodePreview(n, s);
@@ -192,7 +193,7 @@ export default function GraphEditor({
             actions: Object.entries(positions).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_NODE', scope, id, patch })),
           })}
           onResizeNode={(id, patch) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch })}
-          onConnect={(from, to, edgePatch = {}) => dispatch({ type: 'GRAPH_ADD_EDGE', scope, from, to, color: colorOf(g.nodes[from]), ...edgePatch })}
+          onConnect={(from, to, edgePatch = {}) => dispatch({ type: 'GRAPH_ADD_EDGE', scope, from, to, color: colorOf(g.nodes[from] || titleMarkers[from]), ...edgePatch })}
           onRemoveEdge={(e) => dispatch({ type: 'GRAPH_REMOVE_EDGE', scope, from: e.from, to: e.to })}
           onRemoveEdges={(hit) => hit.forEach((e) => dispatch({ type: 'GRAPH_REMOVE_EDGE', scope, from: e.from, to: e.to }))}
           onSetColor={(id, color) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch: { color } })}

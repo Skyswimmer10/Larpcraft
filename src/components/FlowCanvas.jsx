@@ -876,7 +876,7 @@ export default function FlowCanvas({
             <span key={side} data-side={side}
               className={`port titleport ${side}${linkTarget?.nodeId === marker.id && linkTarget.side === side ? ' target' : ''}`}
               title={`Connect to the title's ${side} side`}
-              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => onPortDown(e, marker, side)}
               onPointerEnter={(e) => onPortEnter(e, marker, side)}
               onPointerLeave={(e) => onPortLeave(e, marker, side)} />
           ))}
@@ -949,9 +949,14 @@ export default function FlowCanvas({
         })}
         {linkDrag && (() => {
           const fromSide = normalizeSide(linkDrag.side, 'right');
-          const a = outAnchor(nodes[linkDrag.from], fromSide);
+          const from = endpointFor(linkDrag.from);
+          if (!from) return null;
+          const a = outAnchor(from, fromSide);
+          const color = nodes[linkDrag.from]
+            ? colorOf(nodes[linkDrag.from])
+            : (titleMarkers?.[linkDrag.from]?.color || '#5CA8F5');
           return <path d={edgePath(a, { x: linkDrag.x, y: linkDrag.y }, fromSide, 'left')}
-            stroke={colorOf(nodes[linkDrag.from])} strokeWidth="2" strokeDasharray="6 5" fill="none" opacity=".9" />;
+            stroke={color} strokeWidth="2" strokeDasharray="6 5" fill="none" opacity=".9" />;
         })()}
         {cutDrag && cutDrag.points.length > 1 && (
           <polyline

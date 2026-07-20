@@ -952,6 +952,7 @@ export default function Library({ group = 'physical', selection, onSelect }) {
     })),
   };
   const builderColor = (n) => {
+    if (!n) return '#5CA8F5';
     if (n._sub) return n.color || SUBNODE_TYPES[n.kind]?.color || '#F08CB4';
     if (n.kind === 'framework') return n.color || FRAMEWORK_TYPES[n.frameworkId]?.color || '#E8D25C';
     if (n.kind === 'concept') return n.color || ADDITIONAL_NODE_TYPES[n.conceptKind]?.color || '#E8D25C';
