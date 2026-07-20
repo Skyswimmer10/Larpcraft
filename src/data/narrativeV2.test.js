@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   makeProjectSeed, makeEmptyProject, migrateProject,
   NARR_NODE_TYPES, NARRATIVE_KINDS, FACT_KINDS, FACT_BLANK,
+  BASE_NODE_TYPES, CONCEPT_INTERNAL_NODE_TYPES,
+  cloneCharacterCardTemplate, normalizeCharacterCard,
 } from './seed.js';
 
 describe('facts registry seed', () => {
@@ -46,6 +48,13 @@ describe('facts registry seed', () => {
 });
 
 describe('typed narrative nodes', () => {
+  it('concept question helpers stay separate from main base nodes', () => {
+    expect(Object.keys(CONCEPT_INTERNAL_NODE_TYPES)).toEqual(['conceptTitle', 'conceptQuestion', 'conceptChoice']);
+    for (const kind of Object.keys(CONCEPT_INTERNAL_NODE_TYPES)) {
+      expect(BASE_NODE_TYPES[kind]).toBeUndefined();
+    }
+  });
+
   it('NARRATIVE_KINDS covers every typed node plus legacy story', () => {
     expect(NARRATIVE_KINDS).toContain('story');
     for (const k of Object.keys(NARR_NODE_TYPES)) expect(NARRATIVE_KINDS).toContain(k);
@@ -96,5 +105,35 @@ describe('FACT_BLANK', () => {
     expect(f.id).toBe('F-NEW');
     expect(FACT_KINDS[f.kind]).toBeTruthy();
     expect(f.sensorId).toBeNull();
+  });
+});
+
+describe('Character card loose schema', () => {
+  it('deep-copies the project template with fresh ids and empty selections', () => {
+    const template = makeEmptyProject('x').meta.characterCardTemplate;
+    const a = cloneCharacterCardTemplate(template);
+    const b = cloneCharacterCardTemplate(template);
+    expect(a.questions.map((q) => q.prompt)).toEqual(template.questions.map((q) => q.prompt));
+    expect(a.questions.every((q) => q.answer === '')).toBe(true);
+    expect(a.typeGroups.every((g) => g.selectedId === null)).toBe(true);
+    expect(a.questions[0].id).not.toBe(template.questions[0].id);
+    expect(a.questions[0].id).not.toBe(b.questions[0].id);
+  });
+
+  it('migrates old character text fields into authored question rows', () => {
+    const card = normalizeCharacterCard({
+      id: 'N-OLD',
+      kind: 'character',
+      title: 'The Guide',
+      body: 'Helpful but costly.',
+      casting: 'Played by a senior facilitator.',
+      emptyNote: '',
+    });
+    expect(card.title).toBe('The Guide');
+    expect(card.description).toBe('Helpful but costly.');
+    expect(card.questions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prompt: 'Casting', answer: 'Played by a senior facilitator.' }),
+    ]));
+    expect(card.questions.some((q) => q.prompt === 'Empty Note')).toBe(false);
   });
 });

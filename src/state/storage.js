@@ -1,13 +1,18 @@
 // Local-first persistence: each store (library / active project) saves its
 // whole state under its own IndexedDB key, debounced after every change.
-// Under Electron this module is the seam to swap for fs-based project files.
-//
-// IndexedDB is the primary store, but Chrome blocks it on file:// origins.
-// So the offline single-file build (opened by double-click) falls back to
-// localStorage, which does work from file://. localStorage is capped at
-// ~5MB, so heavy image libraries may not fit — the File > Save .json export
-// remains the durable, unlimited path either way.
+// IndexedDB is the primary store, with localStorage as the offline fallback.
 import { get, set, del } from 'idb-keyval';
+
+const IDB_TIMEOUT_MS = 1800;
+
+function withStorageTimeout(promise, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error(`${label} timed out`)), IDB_TIMEOUT_MS);
+    }),
+  ]);
+}
 
 const ls = (() => {
   try {
@@ -21,20 +26,23 @@ const ls = (() => {
 })();
 
 export async function loadKey(key) {
+  let idbTimeout = null;
   try {
-    const v = await get(key);
+    const v = await withStorageTimeout(get(key), `IndexedDB load for ${key}`);
     if (v != null) return v;
-  } catch {
-    // IndexedDB unavailable (e.g. file://) — fall through to localStorage.
+  } catch (err) {
+    if (err?.message?.includes('timed out')) idbTimeout = err;
+    console.warn(`LARP Craft: IndexedDB load failed (${key}); trying localStorage fallback.`, err);
   }
   if (ls) {
     try {
       const raw = ls.getItem(key);
       if (raw != null) return JSON.parse(raw);
     } catch {
-      /* corrupt or unreadable — treat as empty */
+      /* corrupt or unreadable -- treat as empty */
     }
   }
+  if (idbTimeout) throw idbTimeout;
   return null;
 }
 
@@ -43,12 +51,11 @@ export function saveKeyDebounced(key, state) {
   clearTimeout(timers[key]);
   timers[key] = setTimeout(() => {
     set(key, state).catch((err) => {
-      // IndexedDB failed (blocked on file://, or quota) — try localStorage.
       if (!ls) { console.warn(`LARP Craft: save failed (${key})`, err); return; }
       try {
         ls.setItem(key, JSON.stringify(state));
       } catch (lsErr) {
-        console.warn(`LARP Craft: save failed (${key}) — data too large for offline storage; use File > Save to keep your work.`, lsErr);
+        console.warn(`LARP Craft: save failed (${key}) -- data too large for offline storage; use File > Save to keep your work.`, lsErr);
       }
     });
   }, 400);

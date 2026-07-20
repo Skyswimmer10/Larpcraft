@@ -91,6 +91,15 @@ describe('frames', () => {
     expect(s.frames['F'].x).toBe(10);
   });
 
+  it('moves a support arrow without carrying nearby nodes', () => {
+    let s = makeEmptyProject('g');
+    s.frames = { A: { id: 'A', label: 'Arrow', shape: 'arrow', x: 0, y: 0, w: 200, h: 80, color: '#5CA8F5' } };
+    s.nodes = { IN: { id: 'IN', kind: 'event', title: 'in', x: 50, y: 50 } };
+    s = reducer(s, { type: 'FRAME_MOVE', frameId: 'A', dx: 30, dy: 20 });
+    expect(s.frames.A).toMatchObject({ x: 30, y: 20, w: 200, h: 80 });
+    expect(s.nodes.IN).toMatchObject({ x: 50, y: 50 });
+  });
+
   it('FRAME_TO_COMPOSITE folds members into a concept node sub-graph', () => {
     let s = makeEmptyProject('g');
     s.frames = { F: { id: 'F', label: 'Act 1', x: 0, y: 0, w: 300, h: 300, color: '#5CA8F5' } };

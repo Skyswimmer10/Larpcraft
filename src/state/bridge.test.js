@@ -54,50 +54,140 @@ describe('library → project import bridge', () => {
     expect(loc.sensorIds).toEqual([]);
   });
 
-  it('imports a story structure as a detached full-graph copy', () => {
+  it('imports a new-system story structure as a detached full-graph copy', () => {
     let proj = makeEmptyProject('Test Game');
-    const result = importStory(lib, proj, 'LIB-STORY-BETRAY');
-    expect(Object.keys(result.nodes)).toHaveLength(4);
-    expect(result.edges).toHaveLength(3);
-    // ids are remapped to project instance ids, provenance kept, all story
+    const structure = {
+      id: 'LIB-STORY-TEST',
+      name: 'Custom branching structure',
+      description: 'Built from the shared node palette.',
+      estMinutes: 20,
+      nodes: {
+        S1: { id: 'S1', kind: 'event', title: 'Opening exchange', x: 40, y: 120, body: 'The hook lands.', color: null },
+        S2: { id: 'S2', kind: 'quest', title: 'Choose a route', x: 340, y: 60, body: 'The goal splits into paths.', color: null },
+      },
+      subnodes: {
+        SB1: { id: 'SB1', kind: 'outcomeBranches', title: 'Outcome Branches', x: 340, y: 210, parentRef: { nodeId: 'S2' }, notes: '', keywords: [], branches: [], history: [] },
+      },
+      edges: [
+        { from: 'S1', to: 'S2', label: 'offer the choice', color: null },
+        { from: 'SB1', to: 'S1', label: 'fallback loop', color: null },
+      ],
+    };
+    const testLib = { ...lib, stories: { ...lib.stories, [structure.id]: structure } };
+    const result = importStory(testLib, proj, structure.id);
+    expect(Object.keys(result.nodes)).toHaveLength(2);
+    expect(Object.keys(result.subnodes)).toHaveLength(1);
+    expect(result.edges).toHaveLength(2);
+    // ids are remapped to project instance ids and the real node kinds survive.
     for (const n of Object.values(result.nodes)) {
       expect(n.id).toMatch(/^GAME-N-\d+$/);
-      expect(n.primitiveId).toMatch(/^LIB-NAR-/);
-      expect(n.kind).toBe('story');
+      expect(['event', 'quest']).toContain(n.kind);
     }
-    expect(result.edges.every((e) => result.nodes[e.from] && result.nodes[e.to])).toBe(true);
-    expect(result.edges.map((e) => e.label)).toContain('suspicion grows');
+    const graphIds = { ...result.nodes, ...result.subnodes };
+    expect(result.edges.every((e) => graphIds[e.from] && graphIds[e.to])).toBe(true);
+    expect(result.edges.map((e) => e.label)).toContain('fallback loop');
     proj = reducer(proj, { type: 'IMPORT_FROM_LIBRARY', ...result });
-    expect(Object.keys(proj.nodes)).toHaveLength(4);
+    expect(Object.keys(proj.nodes)).toHaveLength(2);
+    expect(Object.keys(proj.subnodes)).toHaveLength(1);
 
     // editing the copy leaves the master template untouched (detached)
     const copyId = Object.keys(proj.nodes)[0];
     reducer(proj, { type: 'UPDATE_ENTITY', coll: 'nodes', id: copyId, patch: { title: 'Changed' } });
-    expect(lib.stories['LIB-STORY-BETRAY'].nodes.S1.title).toBe('Start Briefing');
+    expect(testLib.stories[structure.id].nodes.S1.title).toBe('Opening exchange');
   });
 
   it('storyTrackToStructure saves the macro story arc as a Story Structure', () => {
     const proj = makeProjectSeed();
     const struct = storyTrackToStructure(proj, 'LIB-STORY-N001', 'Chimera arc');
-    // narrative-side nodes (event/character/storyLocation/item/quest/concept),
-    // remapped to S-ids and normalised to kind 'story' for the library structure.
-    const narrativeCount = Object.values(proj.nodes).filter((n) => NARRATIVE_KINDS.includes(n.kind)).length;
-    expect(Object.keys(struct.nodes).length).toBe(narrativeCount);
-    expect(Object.values(struct.nodes).every((n) => n.kind === 'story')).toBe(true);
+    // Master Story is separate from the detailed Narrative Weaver graph.
+    expect(Object.keys(struct.nodes).length).toBe(Object.keys(proj.masterNodes).length);
+    expect(Object.values(struct.nodes).every((n) => n.kind === 'masterAct')).toBe(true);
     // the N-TWIST → N-END story edge survives, remapped
     const titles = Object.values(struct.nodes).map((n) => n.title);
-    expect(titles).toEqual(expect.arrayContaining(['Briefing', 'Extraction']));
+    expect(titles).toEqual(expect.arrayContaining(['Act 1 - The Briefing', 'Act 5 - Extraction']));
+    expect(struct.edges).toHaveLength(proj.masterEdges.length);
     expect(struct.name).toBe('Chimera arc');
   });
 
-  it('imports a narrative node as a story node with its text', () => {
+  it('seeds the story library with reusable story structures', () => {
+    expect(Object.keys(lib.narrative)).toHaveLength(0);
+    expect(Object.keys(lib.stories)).toEqual(expect.arrayContaining(['LIB-STORY-ITEM-NODE-GRAPH', 'LIB-STORY-TURTLE-COLLECTION']));
+    expect(lib.stories['LIB-STORY-TURTLE-COLLECTION'].name).toBe('Ninja Turtle Costume Collection');
+    expect(lib.stories['LIB-STORY-ITEM-NODE-GRAPH'].nodes.S1).toMatchObject({
+      kind: 'item',
+      shortTitle: 'Item',
+      itemType: 'Artifact',
+      buildStatus: 'concept',
+      noSoloSolve: true,
+    });
+  });
+
+  it('imports the seeded Ninja Turtle collection as a detached story graph', () => {
     const proj = makeEmptyProject('Test Game');
-    const result = importNarrative(lib, proj, 'LIB-NAR-005'); // Quartermaster Mank bio
-    const node = result.nodes[result.createdId];
-    expect(node.primitiveId).toBe('LIB-NAR-005');
-    expect(node.kind).toBe('story');
-    expect(node.title).toBe('Quartermaster Mank');
-    expect(node.body).toContain('meticulous ledgers');
+    const result = importStory(lib, proj, 'LIB-STORY-TURTLE-COLLECTION');
+    expect(Object.values(result.nodes).map((n) => n.title)).toEqual(expect.arrayContaining([
+      'Turtle Costume Collection',
+      'Turtle Assembly Moment',
+    ]));
+    const container = Object.values(result.nodes).find((n) => n.title === 'Turtle Costume Collection');
+    expect(container.kind).toBe('concept');
+    expect(container.sub.nodes.P5.title).toBe('Shell');
+  });
+
+  it('preserves simplified concept core fields and question choices when importing a story structure', () => {
+    const proj = makeEmptyProject('Test Game');
+    const structure = {
+      id: 'LIB-STORY-CONCEPT-MODULES',
+      name: 'Concept module test',
+      description: 'Checks concept data survives graph import.',
+      estMinutes: 10,
+      nodes: {
+        S1: {
+          id: 'S1',
+          kind: 'concept',
+          conceptKind: 'storyConcept',
+          title: 'Mercy Debt',
+          name: 'Mercy Debt',
+          x: 40,
+          y: 90,
+          body: 'A debt that turns mercy into leverage.',
+          description: 'A debt that turns mercy into leverage.',
+          conceptType: 'moral_dilemma',
+          status: 'draft',
+          onePromise: 'Players decide what mercy costs.',
+          conceptQuestions: [
+            {
+              id: 'cq-1',
+              prompt: 'What does mercy cost?',
+              choices: [
+                { id: 'cc-1', label: 'Protect the debtor' },
+                { id: 'cc-2', label: 'Expose the debt' },
+              ],
+            },
+          ],
+          conceptModules: {
+            conflict_engine: {
+              coreContradiction: 'Mercy creates obligation.',
+              conflictShape: 'right_vs_right',
+              moralAxis: ['loyalty', 'justice'],
+              playerPressure: 'Who deserves protection?',
+            },
+          },
+        },
+      },
+      edges: [],
+    };
+    const result = importStory({ ...lib, stories: { ...lib.stories, [structure.id]: structure } }, proj, structure.id);
+    const concept = Object.values(result.nodes)[0];
+    expect(concept).toMatchObject({
+      kind: 'concept',
+      title: 'Mercy Debt',
+      name: 'Mercy Debt',
+      conceptType: 'moral_dilemma',
+      onePromise: 'Players decide what mercy costs.',
+    });
+    expect(concept.conceptQuestions[0].choices.map((choice) => choice.label)).toEqual(['Protect the debtor', 'Expose the debt']);
+    expect(concept.conceptModules.conflict_engine.moralAxis).toEqual(['loyalty', 'justice']);
   });
 
   it('imports a mechanic node type as a node of its baseKind', () => {
@@ -109,43 +199,49 @@ describe('library → project import bridge', () => {
     expect(node.title).toBe('Sensor Trigger');
   });
 
-  it('narrative nodes instantiate as structure nodes for the template editor', () => {
-    const st = lib.stories['LIB-STORY-COLDCASE'];
-    const node = narrativeToStructNode(lib.narrative['LIB-NAR-002'], st.nodes, 300, 200);
-    expect(st.nodes[node.id]).toBeUndefined();
-    expect(node).toMatchObject({ primitiveId: 'LIB-NAR-002', kind: 'story', title: 'Plot Twist', x: 300, y: 200 });
+  it('saved reusable node templates instantiate with their new-system node kind', () => {
+    const template = { id: 'LIB-NAR-TEMPLATE', nodeClass: 'base', nodeKind: 'event', name: 'Template Event', body: 'One sentence setup.', color: '#5CA8F5' };
+    const node = narrativeToStructNode(template, {}, 300, 200);
+    expect(node).toMatchObject({ primitiveId: 'LIB-NAR-TEMPLATE', kind: 'event', title: 'Template Event', x: 300, y: 200 });
   });
 
   it('mechanic structures use the same node-graph engine, keyed to mech nodes', async () => {
     const { mechPrimitiveToStructNode } = await import('./bridge.js');
     // seeded mechanic structures exist and are built from mechanic nodes
-    expect(Object.keys(lib.mechStructures).length).toBeGreaterThanOrEqual(2);
+    expect(Object.keys(lib.mechStructures)).toEqual(expect.arrayContaining(['LIB-MSTRUCT-DOOR', 'LIB-MSTRUCT-TURTLE-SHELL-REACTION']));
     for (const st of Object.values(lib.mechStructures)) {
-      for (const n of Object.values(st.nodes)) expect(lib.mechPrimitives[n.primitiveId]).toBeDefined();
+      for (const n of Object.values(st.nodes)) expect(lib.mechPrimitives[n.primitiveId] || lib.mechSubnodes[n.primitiveId]).toBeDefined();
     }
+    const turtle = lib.mechStructures['LIB-MSTRUCT-TURTLE-SHELL-REACTION'];
+    expect(turtle.name).toBe('NinjaTurtleShellReaction');
+    expect(turtle.nodes.S1.mechKind).toBe('taskTemplate');
+    const nestedTitles = Object.values(turtle.nodes.S1.sub.nodes).map((n) => n.title);
+    expect(nestedTitles).toEqual(expect.arrayContaining(['Mask / Headband', 'Shell', 'Shell GPS Tracker', 'Dwell Delay', 'MacroDroid Phone Bridge', 'Play MP3 Reaction']));
+    expect(nestedTitles).not.toContain('Frequency Control');
+    expect(turtle.nodes.S1.sub.nodes.D7).toMatchObject({ frequencyLimitEnabled: true, frequencyTriggerCount: 3, frequencyTimePeriod: '10 minutes', cooldownEnabled: true, cooldownDuration: '2 minutes' });
+    expect(turtle.nodes.S1.sub.nodes.D11).toMatchObject({ frequencyLimitEnabled: true, frequencyTriggerCount: 3, frequencyTimePeriod: '10 minutes', cooldownEnabled: true, cooldownDuration: '2 minutes' });
+    expect(JSON.stringify(turtle)).not.toMatch(/personality|Funny|Lore|Useful|being worn/i);
     // dropping a mechanic node onto the canvas keeps its baseKind
     const st = lib.mechStructures['LIB-MSTRUCT-DOOR'];
-    const node = mechPrimitiveToStructNode(lib.mechPrimitives['LIB-MPRIM-SENSOR'], st.nodes, 100, 100);
-    expect(node).toMatchObject({ primitiveId: 'LIB-MPRIM-SENSOR', kind: 'sensor', title: 'Sensor Trigger' });
+    const node = mechPrimitiveToStructNode(lib.mechPrimitives['LIB-MPRIM-SENSOR-NODE'], st.nodes, 100, 100);
+    expect(node).toMatchObject({ primitiveId: 'LIB-MPRIM-SENSOR-NODE', kind: 'sensor', mechKind: 'sensorNode', title: 'Sensor Node' });
     // editing a mech-structure node via the generic reducer path (detached template)
     const s2 = reducer(lib, { type: 'UPDATE_ENTITY', coll: 'mechStructures', id: 'LIB-MSTRUCT-DOOR', patch: { nodes: { ...st.nodes, S1: { ...st.nodes.S1, title: 'Renamed' } } } });
     expect(s2.mechStructures['LIB-MSTRUCT-DOOR'].nodes.S1.title).toBe('Renamed');
   });
 
   it('the narrative and mechanic node pools are cleanly separated', () => {
-    // narrative holds only story content (no sensor/mechanic baseKinds)
-    expect(lib.narrative['LIB-NAR-001']).toBeDefined();
-    expect(Object.values(lib.narrative).every((n) => !n.baseKind || n.baseKind === undefined)).toBe(true);
+    // the narrative template pool starts empty until designers save new-system reusable nodes.
+    expect(Object.keys(lib.narrative)).toHaveLength(0);
+    expect(Object.values(lib.narrative).every((n) => n.nodeClass)).toBe(true);
     // mechanic node tree holds the physical/sensor/task types
     const mechNames = Object.values(lib.mechPrimitives).map((p) => p.name);
-    expect(mechNames).toEqual(expect.arrayContaining(['Sensor Trigger', 'Physical Challenge', 'Countdown Pressure', 'Waypoint Check-in']));
-    // seeded structures are pure narrative
-    for (const st of Object.values(lib.stories)) {
-      for (const n of Object.values(st.nodes)) {
-        expect(lib.narrative[n.primitiveId]).toBeDefined();
-        expect(n.kind).toBe('story');
-      }
+    expect(mechNames).toEqual(expect.arrayContaining(['Sensor Node', 'Actuator Node', 'Character State', 'Challenge Core']));
+    for (const oldName of ['Cross-Task Resource', 'Sensor + Actuator', 'Waypoint Check-in', 'Item Handoff', 'Environmental Puzzle', 'Physical Challenge', 'Knowledge State', 'Physical State', 'NPC State', 'Countdown Pressure']) {
+      expect(mechNames).not.toContain(oldName);
     }
+    // old example story structures are no longer seeded into the library.
+    expect(Object.keys(lib.stories)).toEqual(expect.arrayContaining(['LIB-STORY-ITEM-NODE-GRAPH', 'LIB-STORY-TURTLE-COLLECTION']));
   });
 
   it('imports a mechanic with its params, then micro-adjusts without touching the library', () => {
@@ -210,9 +306,10 @@ describe('library → project import bridge', () => {
     };
     delete old.narrative; delete old.mechPrimitives; delete old.narrativeCategories;
     const m = migrateLibrary(old);
-    // story primitive + element land in narrative; sensor primitive lands in mechPrimitives
-    expect(m.narrative['LIB-PRIM-BRIEF'].category).toBe('story-beat');
-    expect(m.narrative['LIB-ELM-001'].body).toBe('A traitor.');
+    // old story primitive + element are retired; sensor primitive remains mechanic.
+    expect(m.narrative['LIB-PRIM-BRIEF']).toBeUndefined();
+    expect(m.narrative['LIB-ELM-001']).toBeUndefined();
+    expect(Object.values(m.narrative).every((n) => n.nodeClass)).toBe(true);
     expect(m.mechPrimitives['LIB-PRIM-SENSOR'].baseKind).toBe('sensor');
     expect(m.narrativeCategories['plot-hook']).toBeDefined();
     expect(m.primitives).toBeUndefined();

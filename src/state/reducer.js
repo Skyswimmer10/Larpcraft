@@ -6,35 +6,53 @@
 // A `scope` addresses one editable {nodes, edges} graph in the project:
 //   { coll:'nodes' }                        → the narrative graph
 //   { coll:'taskNodes' }                    → the surface Task flow
+//   { coll:'masterNodes' }                  → the separate Master Story graph
 //   { coll, parentId }                      → that parent node's nested `.sub`
 //   { coll, parentPath:[id0,id1,…] }        → deeper nesting (≤ 3 levels)
-const topKeys = (coll) => (coll === 'taskNodes' ? { nk: 'taskNodes', ek: 'taskEdges' } : { nk: 'nodes', ek: 'edges' });
+const topKeys = (coll) => {
+  if (coll === 'taskNodes') return { nk: 'taskNodes', ek: 'taskEdges', fk: 'taskFrames', mk: 'taskNumberMarkers', tk: 'taskTitleMarkers' };
+  if (coll === 'storyboardNodes') return { nk: 'storyboardNodes', ek: 'storyboardEdges', fk: 'storyboardFrames', mk: 'storyboardNumberMarkers', tk: 'storyboardTitleMarkers' };
+  if (coll === 'masterNodes') return { nk: 'masterNodes', ek: 'masterEdges', fk: 'masterFrames', mk: 'masterNumberMarkers', tk: 'masterTitleMarkers' };
+  return { nk: 'nodes', ek: 'edges', fk: 'frames', mk: 'numberMarkers', tk: 'titleMarkers' };
+};
 const scopePath = (scope) => scope.parentPath ?? (scope.parentId ? [scope.parentId] : []);
 
 export function locateGraph(state, scope) {
-  const { nk, ek } = topKeys(scope.coll);
+  const { nk, ek, fk, mk, tk } = topKeys(scope.coll);
   let nodes = state[nk] || {};
   let edges = state[ek] || [];
+  let frames = state[fk] || {};
+  let numberMarkers = state[mk] || {};
+  let titleMarkers = state[tk] || {};
   for (const pid of scopePath(scope)) {
-    const sub = nodes[pid]?.sub || { nodes: {}, edges: [] };
+    const sub = nodes[pid]?.sub || { nodes: {}, edges: [], frames: {}, numberMarkers: {}, titleMarkers: {} };
     nodes = sub.nodes || {};
     edges = sub.edges || [];
+    frames = sub.frames || {};
+    numberMarkers = sub.numberMarkers || {};
+    titleMarkers = sub.titleMarkers || {};
   }
-  return { nodes, edges };
+  return { nodes, edges, frames, numberMarkers, titleMarkers };
 }
 function writeGraph(state, scope, next) {
-  const { nk, ek } = topKeys(scope.coll);
+  const { nk, ek, fk, mk, tk } = topKeys(scope.coll);
   const path = scopePath(scope);
-  if (path.length === 0) return { ...state, [nk]: next.nodes, [ek]: next.edges };
+  if (path.length === 0) {
+    const patch = { [nk]: next.nodes, [ek]: next.edges };
+    if (next.frames) patch[fk] = next.frames;
+    if (next.numberMarkers) patch[mk] = next.numberMarkers;
+    if (next.titleMarkers) patch[tk] = next.titleMarkers;
+    return { ...state, ...patch };
+  }
   // Rebuild the chain of parents immutably from the top down.
   const rebuild = (nodes, depth) => {
     const pid = path[depth];
     const parent = nodes[pid];
     if (!parent) return nodes;
-    const sub = parent.sub || { nodes: {}, edges: [] };
+    const sub = parent.sub || { nodes: {}, edges: [], frames: {}, numberMarkers: {}, titleMarkers: {} };
     const inner = depth === path.length - 1
-      ? { nodes: next.nodes, edges: next.edges }
-      : { nodes: rebuild(sub.nodes || {}, depth + 1), edges: sub.edges || [] };
+      ? { nodes: next.nodes, edges: next.edges, frames: next.frames || sub.frames || {}, numberMarkers: next.numberMarkers || sub.numberMarkers || {}, titleMarkers: next.titleMarkers || sub.titleMarkers || {} }
+      : { nodes: rebuild(sub.nodes || {}, depth + 1), edges: sub.edges || [], frames: sub.frames || {}, numberMarkers: sub.numberMarkers || {}, titleMarkers: sub.titleMarkers || {} };
     return { ...nodes, [pid]: { ...parent, sub: inner } };
   };
   return { ...state, [nk]: rebuild(state[nk], 0) };
@@ -55,14 +73,18 @@ export function reducer(state, action) {
     case 'RESET':
       return action.seed;
 
+    case 'BATCH':
+      return (action.actions || []).reduce((next, child) => reducer(next, child), state);
+
     // Generic field edit from the inspector: { coll:'items', id, patch:{name:'…'} }
     // Narrative nodes and subnodes also log a change-history entry.
     case 'UPDATE_ENTITY': {
       const { coll, id, patch } = action;
-      const entity = state[coll][id];
+      const current = state[coll] || {};
+      const entity = current[id];
       if (!entity) return state;
       const next = (coll === 'nodes' || coll === 'subnodes') ? withHistory(entity, patch) : { ...entity, ...patch };
-      return { ...state, [coll]: { ...state[coll], [id]: next } };
+      return { ...state, [coll]: { ...current, [id]: next } };
     }
 
     // Issue a physical item to a player. Availability flips to 'in-use'
@@ -141,14 +163,17 @@ export function reducer(state, action) {
       if (!state[coll]?.[id]) return state;
       const next = { ...state[coll] };
       delete next[id];
-      return { ...state, [coll]: next };
+      return coll === 'titleMarkers' || coll === 'frameworks'
+        ? { ...state, [coll]: next, edges: state.edges.filter((e) => e.from !== id && e.to !== id) }
+        : { ...state, [coll]: next };
     }
 
     // "Add new" buttons: insert a fresh entity into a collection.
     case 'ADD_ENTITY': {
       const { coll, entity } = action;
-      if (!entity?.id || state[coll][entity.id]) return state;
-      return { ...state, [coll]: { ...state[coll], [entity.id]: entity } };
+      const current = state[coll] || {};
+      if (!entity?.id || current[entity.id]) return state;
+      return { ...state, [coll]: { ...current, [entity.id]: entity } };
     }
 
     // CSV import: entities are fully built by the caller (existing records
@@ -167,6 +192,11 @@ export function reducer(state, action) {
         sensors: { ...state.sensors, ...(action.sensors || {}) },
         mechanics: { ...(state.mechanics || {}), ...(action.mechanics || {}) },
         nodes: { ...state.nodes, ...(action.nodes || {}) },
+        subnodes: { ...(state.subnodes || {}), ...(action.subnodes || {}) },
+        frameworks: { ...(state.frameworks || {}), ...(action.frameworks || {}) },
+        frames: { ...(state.frames || {}), ...(action.frames || {}) },
+        numberMarkers: { ...(state.numberMarkers || {}), ...(action.numberMarkers || {}) },
+        titleMarkers: { ...(state.titleMarkers || {}), ...(action.titleMarkers || {}) },
         edges: action.edges?.length ? [...state.edges, ...action.edges] : state.edges,
       };
     }
@@ -178,6 +208,10 @@ export function reducer(state, action) {
     // Per-game settings (hero backdrop image + opacity, etc.).
     case 'SET_META': {
       return { ...state, meta: { ...state.meta, ...action.patch } };
+    }
+
+    case 'SET_STORY_DYNAMICS_GRAPH': {
+      return { ...state, storyDynamicsGraph: action.graph };
     }
 
     // Delete a node and every connection (and Weaver alignment) touching it.
@@ -213,6 +247,20 @@ export function reducer(state, action) {
       return { ...state, subnodes, edges: state.edges.filter((e) => !doomed.has(e.from) && !doomed.has(e.to)) };
     }
 
+    case 'CLEAR_NARRATIVE_CANVAS': {
+      return {
+        ...state,
+        nodes: {},
+        subnodes: {},
+        frameworks: {},
+        frames: {},
+        numberMarkers: {},
+        titleMarkers: {},
+        edges: [],
+        alignments: [],
+      };
+    }
+
     // Weaver: position of a story beat on the left story-track canvas
     // (kept separate from its Narrative & Quests canvas position).
     case 'SET_STORY_POS': {
@@ -245,11 +293,13 @@ export function reducer(state, action) {
     // Connect two nodes (or subnodes — e.g. an Outcome branch merging into a
     // later node). Ignores self-loops and duplicate connections.
     case 'ADD_EDGE': {
-      const { from, to, label = '', color = null } = action;
-      const exists = (id) => state.nodes[id] || state.subnodes?.[id];
+      const { from, to, label = '', color = null, fromSide = 'right', toSide = 'left' } = action;
+      const exists = (id) => state.nodes[id] || state.subnodes?.[id] || state.frameworks?.[id] || state.titleMarkers?.[id];
       if (from === to || !exists(from) || !exists(to)) return state;
-      if (state.edges.some((e) => e.from === from && e.to === to)) return state;
-      return { ...state, edges: [...state.edges, { from, to, label, color }] };
+      if (state.edges.some((e) => e.from === from && e.to === to)) {
+        return { ...state, edges: state.edges.map((e) => e.from === from && e.to === to ? { ...e, fromSide, toSide } : e) };
+      }
+      return { ...state, edges: [...state.edges, { from, to, label, color, fromSide, toSide }] };
     }
 
     // ---- frames: purely visual grouping; moving a frame carries members ----
@@ -259,6 +309,9 @@ export function reducer(state, action) {
       const { frameId, dx, dy } = action;
       const fr = state.frames?.[frameId];
       if (!fr) return state;
+      if (fr.shape === 'circle' || fr.shape === 'arrow') {
+        return { ...state, frames: { ...state.frames, [frameId]: { ...fr, x: fr.x + dx, y: fr.y + dy } } };
+      }
       const inside = (x, y) => x >= fr.x && x <= fr.x + fr.w && y >= fr.y && y <= fr.y + fr.h;
       const shift = (coll) => Object.fromEntries(Object.entries(coll).map(([id, n]) =>
         [id, inside(n.x, n.y) ? { ...n, x: n.x + dx, y: n.y + dy } : n]));
@@ -266,7 +319,7 @@ export function reducer(state, action) {
         if (id === frameId) return [id, { ...f, x: f.x + dx, y: f.y + dy }];
         return [id, inside(f.x, f.y) && inside(f.x + f.w, f.y + f.h) ? { ...f, x: f.x + dx, y: f.y + dy } : f];
       }));
-      return { ...state, frames, nodes: shift(state.nodes), subnodes: shift(state.subnodes || {}) };
+      return { ...state, frames, nodes: shift(state.nodes), subnodes: shift(state.subnodes || {}), frameworks: shift(state.frameworks || {}), numberMarkers: shift(state.numberMarkers || {}), titleMarkers: shift(state.titleMarkers || {}) };
     }
 
     // Convert a Frame into a Composite (concept node): member nodes move into
@@ -357,17 +410,23 @@ export function reducer(state, action) {
       delete nodes[id];
       const next = writeGraph(state, scope, { nodes, edges: g.edges.filter((e) => e.from !== id && e.to !== id) });
       // Deleting a top-level task also clears its Weaver alignments.
-      if (scope.coll === 'taskNodes' && !scopePath(scope).length) {
+      if ((scope.coll === 'taskNodes' || scope.coll === 'storyboardNodes') && !scopePath(scope).length) {
         next.alignments = (next.alignments || []).filter((a) => a.task !== id);
+      }
+      if (scope.coll === 'masterNodes' && !scopePath(scope).length) {
+        next.alignments = (next.alignments || []).filter((a) => a.story !== id);
       }
       return next;
     }
     case 'GRAPH_ADD_EDGE': {
-      const { scope, from, to, label = '', color = null } = action;
+      const { scope, from, to, label = '', color = null, fromSide = 'right', toSide = 'left' } = action;
       const g = locateGraph(state, scope);
-      if (from === to || !g.nodes[from] || !g.nodes[to]) return state;
-      if (g.edges.some((e) => e.from === from && e.to === to)) return state;
-      return writeGraph(state, scope, { nodes: g.nodes, edges: [...g.edges, { from, to, label, color }] });
+      const exists = (id) => g.nodes[id] || g.titleMarkers?.[id];
+      if (from === to || !exists(from) || !exists(to)) return state;
+      if (g.edges.some((e) => e.from === from && e.to === to)) {
+        return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges.map((e) => e.from === from && e.to === to ? { ...e, fromSide, toSide } : e) });
+      }
+      return writeGraph(state, scope, { nodes: g.nodes, edges: [...g.edges, { from, to, label, color, fromSide, toSide }] });
     }
     case 'GRAPH_UPDATE_EDGE': {
       const { scope, from, to, patch } = action;
@@ -382,6 +441,100 @@ export function reducer(state, action) {
 
     // Uploaded file lands on the entity's image field — `field` picks which
     // one (default cover 'image'; locations also have 'schematic').
+    case 'GRAPH_CLEAR': {
+      const { scope } = action;
+      const next = writeGraph(state, scope, { nodes: {}, edges: [], frames: {}, numberMarkers: {}, titleMarkers: {} });
+      if ((scope.coll === 'taskNodes' || scope.coll === 'storyboardNodes' || scope.coll === 'masterNodes') && !scopePath(scope).length) {
+        next.alignments = [];
+      }
+      return next;
+    }
+
+    case 'GRAPH_ADD_FRAME': {
+      const { scope, frame } = action;
+      const g = locateGraph(state, scope);
+      if (!frame?.id || g.frames?.[frame.id]) return state;
+      return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames: { ...(g.frames || {}), [frame.id]: frame } });
+    }
+    case 'GRAPH_UPDATE_FRAME': {
+      const { scope, id, patch } = action;
+      const g = locateGraph(state, scope);
+      if (!g.frames?.[id]) return state;
+      return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames: { ...g.frames, [id]: { ...g.frames[id], ...patch } } });
+    }
+    case 'GRAPH_DELETE_FRAME': {
+      const { scope, id } = action;
+      const g = locateGraph(state, scope);
+      if (!g.frames?.[id]) return state;
+      const frames = { ...g.frames };
+      delete frames[id];
+      return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames });
+    }
+    case 'GRAPH_ADD_NUMBER_MARKER': {
+      const { scope, marker } = action;
+      const g = locateGraph(state, scope);
+      if (!marker?.id || g.numberMarkers?.[marker.id]) return state;
+      return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames: g.frames, numberMarkers: { ...(g.numberMarkers || {}), [marker.id]: marker } });
+    }
+    case 'GRAPH_UPDATE_NUMBER_MARKER': {
+      const { scope, id, patch } = action;
+      const g = locateGraph(state, scope);
+      if (!g.numberMarkers?.[id]) return state;
+      return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames: g.frames, numberMarkers: { ...g.numberMarkers, [id]: { ...g.numberMarkers[id], ...patch } } });
+    }
+    case 'GRAPH_DELETE_NUMBER_MARKER': {
+      const { scope, id } = action;
+      const g = locateGraph(state, scope);
+      if (!g.numberMarkers?.[id]) return state;
+      const numberMarkers = { ...g.numberMarkers };
+      delete numberMarkers[id];
+      return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames: g.frames, numberMarkers });
+    }
+    case 'GRAPH_ADD_TITLE_MARKER': {
+      const { scope, marker } = action;
+      const g = locateGraph(state, scope);
+      if (!marker?.id || g.titleMarkers?.[marker.id]) return state;
+      return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames: g.frames, numberMarkers: g.numberMarkers, titleMarkers: { ...(g.titleMarkers || {}), [marker.id]: marker } });
+    }
+    case 'GRAPH_UPDATE_TITLE_MARKER': {
+      const { scope, id, patch } = action;
+      const g = locateGraph(state, scope);
+      if (!g.titleMarkers?.[id]) return state;
+      return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames: g.frames, numberMarkers: g.numberMarkers, titleMarkers: { ...g.titleMarkers, [id]: { ...g.titleMarkers[id], ...patch } } });
+    }
+    case 'GRAPH_DELETE_TITLE_MARKER': {
+      const { scope, id } = action;
+      const g = locateGraph(state, scope);
+      if (!g.titleMarkers?.[id]) return state;
+      const titleMarkers = { ...g.titleMarkers };
+      delete titleMarkers[id];
+      return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges.filter((e) => e.from !== id && e.to !== id), frames: g.frames, numberMarkers: g.numberMarkers, titleMarkers });
+    }
+    case 'GRAPH_MOVE_FRAME': {
+      const { scope, id, dx, dy } = action;
+      const g = locateGraph(state, scope);
+      const fr = g.frames?.[id];
+      if (!fr) return state;
+      if (fr.shape === 'circle' || fr.shape === 'arrow') {
+        return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames: { ...g.frames, [id]: { ...fr, x: fr.x + dx, y: fr.y + dy } } });
+      }
+      const inside = (x, y) => x >= fr.x && x <= fr.x + fr.w && y >= fr.y && y <= fr.y + fr.h;
+      const nodes = Object.fromEntries(Object.entries(g.nodes).map(([nodeId, n]) => (
+        [nodeId, inside(n.x, n.y) ? { ...n, x: n.x + dx, y: n.y + dy } : n]
+      )));
+      const frames = Object.fromEntries(Object.entries(g.frames || {}).map(([frameId, f]) => {
+        if (frameId === id) return [frameId, { ...f, x: f.x + dx, y: f.y + dy }];
+        return [frameId, inside(f.x, f.y) && inside(f.x + f.w, f.y + f.h) ? { ...f, x: f.x + dx, y: f.y + dy } : f];
+      }));
+      const numberMarkers = Object.fromEntries(Object.entries(g.numberMarkers || {}).map(([markerId, marker]) => (
+        [markerId, inside(marker.x, marker.y) ? { ...marker, x: marker.x + dx, y: marker.y + dy } : marker]
+      )));
+      const titleMarkers = Object.fromEntries(Object.entries(g.titleMarkers || {}).map(([markerId, marker]) => (
+        [markerId, inside(marker.x, marker.y) ? { ...marker, x: marker.x + dx, y: marker.y + dy } : marker]
+      )));
+      return writeGraph(state, scope, { nodes, edges: g.edges, frames, numberMarkers, titleMarkers });
+    }
+
     case 'SET_IMAGE': {
       const { coll, id, image, field = 'image' } = action;
       const entity = state[coll][id];

@@ -46,6 +46,7 @@ export function importItem(lib, proj, templateId) {
     id, templateId: t.id,
     name: t.name, type: t.type, description: t.description,
     propNotes: t.propNotes, loreNotes: t.loreNotes,
+    origin: t.origin || '', persistsAcrossTasks: !!t.persistsAcrossTasks,
     mechanicIds: [...(t.mechanicIds || [])],
     sensorReqs,
     buildStatus: 'concept', availability: 'ready',
@@ -97,20 +98,91 @@ export function importStory(lib, proj, storyId) {
 
   const idMap = {};
   const nodes = {};
+  const subnodes = {};
   tplNodes.forEach((n) => {
     const id = genId({ ...proj.nodes, ...nodes }, `${proj.meta.prefix}-N-`);
     idMap[n.id] = id;
     nodes[id] = {
       id, primitiveId: n.primitiveId ?? null, kind: n.kind, title: n.title,
       x: n.x - minX + 60, y: n.y - minY + offsetY,
-      body: n.body ?? '', color: n.color ?? null,
-      locationId: null, itemId: null, mechanicIds: [], sensorIds: [],
+      body: n.body ?? '', color: n.color ?? null, w: n.w ?? undefined, h: n.h ?? undefined,
+      conceptKind: n.conceptKind, conceptId: n.conceptId ?? (n.kind === 'concept' ? n.primitiveId ?? null : null),
+      ...(n.kind === 'concept' ? {
+        name: n.name ?? n.title,
+        description: n.description ?? n.body ?? '',
+        conceptType: n.conceptType ?? 'unset',
+        status: n.status ?? 'seed',
+        onePromise: n.onePromise ?? '',
+        referenceFrameworkIds: JSON.parse(JSON.stringify(n.referenceFrameworkIds || [])),
+        ...(n.conceptQuestions ? { conceptQuestions: JSON.parse(JSON.stringify(n.conceptQuestions)) } : {}),
+        ...(n.conceptModules ? { conceptModules: JSON.parse(JSON.stringify(n.conceptModules)) } : {}),
+      } : {}),
+      collapsed: n.kind === 'concept' ? true : n.collapsed,
+      conceptAnswers: n.kind === 'concept' ? {} : n.conceptAnswers,
+      sub: n.sub ? JSON.parse(JSON.stringify(n.sub)) : undefined,
+      teamId: null, sets: [], locationId: null, itemId: null, mechanicIds: [], sensorIds: [], history: [],
     };
   });
+  for (const sn of Object.values(t.subnodes || {})) {
+    const id = genId({ ...(proj.subnodes || {}), ...subnodes }, `${proj.meta.prefix}-SB-`);
+    idMap[sn.id] = id;
+    subnodes[id] = {
+      ...sn,
+      id,
+      x: sn.x - minX + 60,
+      y: sn.y - minY + offsetY,
+      parentRef: sn.parentRef?.nodeId && idMap[sn.parentRef.nodeId]
+        ? { ...sn.parentRef, nodeId: idMap[sn.parentRef.nodeId] }
+        : sn.parentRef?.subnodeId && idMap[sn.parentRef.subnodeId]
+          ? { ...sn.parentRef, subnodeId: idMap[sn.parentRef.subnodeId] }
+          : null,
+      history: [],
+    };
+  }
+  const frameworks = {};
+  for (const fw of Object.values(t.frameworks || {})) {
+    const id = genId({ ...(proj.frameworks || {}), ...frameworks }, `${proj.meta.prefix}-FW-`);
+    frameworks[id] = {
+      ...fw,
+      id,
+      x: fw.x - minX + 60,
+      y: fw.y - minY + offsetY,
+    };
+  }
+  const frames = {};
+  for (const fr of Object.values(t.frames || {})) {
+    const id = genId({ ...(proj.frames || {}), ...frames }, `${proj.meta.prefix}-FR-`);
+    frames[id] = {
+      ...fr,
+      id,
+      x: fr.x - minX + 60,
+      y: fr.y - minY + offsetY,
+    };
+  }
+  const numberMarkers = {};
+  for (const marker of Object.values(t.numberMarkers || {})) {
+    const id = genId({ ...(proj.numberMarkers || {}), ...numberMarkers }, `${proj.meta.prefix}-NUM-`);
+    numberMarkers[id] = {
+      ...marker,
+      id,
+      x: marker.x - minX + 60,
+      y: marker.y - minY + offsetY,
+    };
+  }
+  const titleMarkers = {};
+  for (const marker of Object.values(t.titleMarkers || {})) {
+    const id = genId({ ...(proj.titleMarkers || {}), ...titleMarkers }, `${proj.meta.prefix}-TTL-`);
+    titleMarkers[id] = {
+      ...marker,
+      id,
+      x: marker.x - minX + 60,
+      y: marker.y - minY + offsetY,
+    };
+  }
   const edges = t.edges
     .filter((e) => idMap[e.from] && idMap[e.to])
     .map((e) => ({ from: idMap[e.from], to: idMap[e.to], label: e.label || '', color: e.color ?? null }));
-  return { nodes, edges, createdId: idMap[tplNodes[0].id] };
+  return { nodes, subnodes, frameworks, frames, numberMarkers, titleMarkers, edges, createdId: idMap[tplNodes[0].id] };
 }
 
 // A single narrative building block dropped into the game as a story node.
@@ -142,36 +214,63 @@ export function importMechPrimitive(lib, proj, primitiveId, x = 100, y = 100) {
 // Instantiate a narrative node INSIDE a story structure (library editor).
 export function narrativeToStructNode(narrative, structNodes, x, y) {
   const id = genId(structNodes, 'S');
+  const kind = narrative.nodeKind || narrative.kind || 'story';
+  const saved = narrative.template ? JSON.parse(JSON.stringify(narrative.template)) : {};
   return {
-    id, primitiveId: narrative.id, kind: 'story', title: narrative.name,
-    x: Math.round(x), y: Math.round(y), body: narrative.body || '', color: narrative.color ?? null,
+    ...saved,
+    id, primitiveId: narrative.id, kind, title: narrative.name,
+    x: Math.round(x), y: Math.round(y), body: saved.body ?? narrative.body ?? '', color: narrative.color ?? saved.color ?? null,
+    ...(kind === 'item' ? {
+      itemType: saved.itemType ?? narrative.itemType ?? 'Artifact',
+      shortTitle: saved.shortTitle ?? narrative.shortTitle ?? 'Item',
+      playerDescription: saved.playerDescription ?? narrative.playerDescription ?? '',
+      facilitatorDescription: saved.facilitatorDescription ?? narrative.facilitatorDescription ?? '',
+      imageRef: saved.imageRef ?? narrative.imageRef ?? '',
+      buildStatus: saved.buildStatus ?? narrative.buildStatus ?? 'concept',
+      origin: saved.origin ?? narrative.origin ?? '',
+      placementNodeIds: saved.placementNodeIds ?? narrative.placementNodeIds ?? [],
+      linkedMechanicNodeIds: saved.linkedMechanicNodeIds ?? narrative.linkedMechanicNodeIds ?? [],
+      linkedMechanicIds: saved.linkedMechanicIds ?? narrative.linkedMechanicIds ?? [],
+      sensorHooks: saved.sensorHooks ?? narrative.sensorHooks ?? '',
+      noSoloSolve: saved.noSoloSolve ?? narrative.noSoloSolve ?? false,
+      mechanicMeaning: saved.mechanicMeaning ?? narrative.mechanicMeaning ?? '',
+      attachedTemplateNotes: saved.attachedTemplateNotes ?? narrative.attachedTemplateNotes ?? '',
+      persistsAcrossTasks: saved.persistsAcrossTasks ?? !!narrative.persistsAcrossTasks,
+    } : {}),
   };
 }
 
-// Save the active game's macro story track (its story-kind nodes + the edges
-// between them) to the Library as a reusable Story Structure. Positions come
-// from the Weaver's story-track layout so the saved template mirrors it.
+// Save the active game's separate Master Story graph to the Library as a
+// reusable Story Structure. This is the macro act-track, not the detailed
+// Narrative Weaver graph.
 export function storyTrackToStructure(proj, id, name) {
-  const storyNodes = Object.values(proj.nodes).filter((n) => NARRATIVE_KINDS.includes(n.kind) || n.elementId);
+  const storyNodes = Object.values(proj.masterNodes || {});
   const idMap = {};
   const nodes = {};
   storyNodes.forEach((n, i) => {
     const sid = `S${i + 1}`;
     idMap[n.id] = sid;
-    const pos = proj.storyTrack?.[n.id] || { x: 60, y: 40 + i * 180 };
-    nodes[sid] = { id: sid, primitiveId: n.primitiveId ?? null, kind: 'story', title: n.title, x: pos.x, y: pos.y, body: n.body || '', color: n.color ?? null };
+    nodes[sid] = { id: sid, primitiveId: n.primitiveId ?? null, kind: n.kind, title: n.title, x: n.x ?? 60, y: n.y ?? 40 + i * 180, body: n.body || '', color: n.color ?? null, w: n.w ?? undefined, h: n.h ?? undefined };
   });
-  const edges = proj.edges
+  const edges = (proj.masterEdges || [])
     .filter((e) => idMap[e.from] && idMap[e.to])
     .map((e) => ({ from: idMap[e.from], to: idMap[e.to], label: e.label || '', color: e.color ?? null }));
-  return { id, name, description: `Saved from ${proj.meta.name}`, estMinutes: 30, nodes, edges };
+  const frames = JSON.parse(JSON.stringify(proj.masterFrames || {}));
+  const numberMarkers = JSON.parse(JSON.stringify(proj.masterNumberMarkers || {}));
+  const titleMarkers = JSON.parse(JSON.stringify(proj.masterTitleMarkers || {}));
+  return { id, name, description: `Saved from ${proj.meta.name}`, estMinutes: 30, nodes, edges, frames, numberMarkers, titleMarkers };
 }
 
 // Instantiate a mechanic node INSIDE a mechanic structure (library editor).
 export function mechPrimitiveToStructNode(primitive, structNodes, x, y) {
   const id = genId(structNodes, 'S');
+  const {
+    id: _pid, name: _name, baseKind: _baseKind, defaultBody: _defaultBody,
+    inputs: _inputs, outputs: _outputs, color: _color, icon: _icon, ...extras
+  } = primitive;
   return {
-    id, primitiveId: primitive.id, kind: primitive.baseKind, title: primitive.name,
+    ...JSON.parse(JSON.stringify(extras)),
+    id, primitiveId: primitive.id, kind: primitive.baseKind, mechKind: primitive.mechKind, title: primitive.name,
     x: Math.round(x), y: Math.round(y), body: primitive.defaultBody || '', color: primitive.color ?? null,
   };
 }

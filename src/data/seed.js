@@ -1,3 +1,5 @@
+import { cloneDefaultStoryDynamicsGraph } from './storyDynamics.js';
+
 // Two separate stores:
 //
 //  LIBRARY (master database, persists across games)
@@ -11,14 +13,19 @@
 //      game-state fields (build status, availability, placement, assignment,
 //      sensor battery) · edits affect only this game
 
-export const LIB_REV = 9;
-export const SEED_REV = 7;
+export const LIB_REV = 16;
+export const SEED_REV = 9;
 
 // Default item types — seeds the editable lib.itemTypes collection.
 export const DEFAULT_ITEM_TYPES = {
   artifact: { id: 'artifact', label: 'Artifact', color: '#E0A23C' },
   gadget: { id: 'gadget', label: 'Gadget', color: '#3EC6D6' },
   consumable: { id: 'consumable', label: 'Consumable', color: '#E88F8F' },
+  key: { id: 'key', label: 'Key', color: '#E8D25C' },
+  clue: { id: 'clue', label: 'Clue', color: '#5CA8F5' },
+  status: { id: 'status', label: 'Status', color: '#A87BF0' },
+  tool: { id: 'tool', label: 'Tool', color: '#43BF87' },
+  wearable: { id: 'wearable', label: 'Wearable', color: '#F08CB4' },
 };
 
 // Location map stage: coordinates for markers/arrows live in a fixed 160×90
@@ -39,6 +46,7 @@ export const DEFAULT_NARRATIVE_CATEGORIES = {
   'npc-bio': { id: 'npc-bio', label: 'NPC bio', color: '#E0A23C', icon: 'swap' },
   'rumor': { id: 'rumor', label: 'Rumor', color: '#43BF87', icon: 'zap' },
   'lore': { id: 'lore', label: 'Lore fragment', color: '#A87BF0', icon: 'cog' },
+  'supporting-notes': { id: 'supporting-notes', label: 'Supporting Notes', color: '#8B92A6', icon: 'book' },
 };
 
 // Descriptive tabs shown under a Game Master Rule's core principle.
@@ -102,10 +110,384 @@ export const BASE_NODE_TYPES = {
   event: { id: 'event', label: 'Event', color: '#5CA8F5', icon: 'zap', blurb: 'Something that happens — a scene, an encounter, a moment.' },
   character: { id: 'character', label: 'Character', color: '#E0A23C', icon: 'user', blurb: 'A person in the story — NPC, actor role, or figure.' },
   storyLocation: { id: 'storyLocation', label: 'Story Location', color: '#43BF87', icon: 'pin', blurb: 'A place as the story sees it (link it to a real venue record).' },
-  item: { id: 'item', label: 'Item', color: '#3EC6D6', icon: 'box', blurb: 'An object that matters to the story.' },
+  item: { id: 'item', label: 'Story Item', color: '#3EC6D6', icon: 'box', blurb: 'An object that matters to the story; optionally link it to a physical prop.' },
   quest: { id: 'quest', label: 'Quest', color: '#A87BF0', icon: 'target', blurb: 'A goal players pursue across one or more events.' },
 };
 export const BASE_KINDS = Object.keys(BASE_NODE_TYPES);
+
+// Concept-internal planning nodes. These stay out of the main base-node
+// palette and only appear when editing a concept's inner graph.
+export const CONCEPT_INTERNAL_NODE_TYPES = {
+  conceptTitle: { id: 'conceptTitle', label: 'Section Title', color: '#E8D25C', icon: 'layers', blurb: 'A heading that visually groups concept questions.' },
+  conceptQuestion: { id: 'conceptQuestion', label: 'Concept Question', color: '#5CA8F5', icon: 'book', blurb: 'A design question inside a concept; connect it to choices.' },
+  conceptChoice: { id: 'conceptChoice', label: 'Concept Choice', color: '#A87BF0', icon: 'swap', blurb: 'A possible answer, angle, or path from a concept question.' },
+};
+
+export const DEFAULT_CHARACTER_CARD_TEMPLATE = {
+  questions: [
+    { id: 'ccq-default-1', prompt: 'What do they want, and why right now?', answer: '' },
+    { id: 'ccq-default-2', prompt: 'What would they never do?', answer: '' },
+    { id: 'ccq-default-3', prompt: 'What do they give a team - object, information, or permission?', answer: '' },
+    { id: 'ccq-default-4', prompt: 'One sentence only this character could say.', answer: '' },
+    { id: 'ccq-default-5', prompt: 'What does a team see or hear in the first ten seconds?', answer: '' },
+  ],
+  typeGroups: [
+    {
+      id: 'ccg-default-role',
+      label: 'Role',
+      selectedId: null,
+      options: [
+        { id: 'cco-default-role-1', label: 'Guide' },
+        { id: 'cco-default-role-2', label: 'Antagonist' },
+        { id: 'cco-default-role-3', label: 'Gatekeeper' },
+        { id: 'cco-default-role-4', label: 'Ensemble' },
+        { id: 'cco-default-role-5', label: 'Lore figure' },
+      ],
+    },
+    {
+      id: 'ccg-default-archetype',
+      label: 'Archetype',
+      selectedId: null,
+      options: [
+        { id: 'cco-default-arch-1', label: 'Explorer' },
+        { id: 'cco-default-arch-2', label: 'Sage' },
+        { id: 'cco-default-arch-3', label: 'Muse' },
+        { id: 'cco-default-arch-4', label: 'Rebel' },
+        { id: 'cco-default-arch-5', label: 'Defender' },
+        { id: 'cco-default-arch-6', label: 'Warrior' },
+      ],
+    },
+  ],
+};
+
+const characterCardId = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+const cloneQuestionRow = (q, withAnswer = false) => ({
+  id: characterCardId('ccq'),
+  prompt: q?.prompt ?? '',
+  answer: withAnswer ? (q?.answer ?? '') : '',
+});
+const cloneTypeGroup = (g, withSelection = false) => {
+  const options = (g?.options || []).map((o) => ({ id: characterCardId('cco'), label: o?.label ?? '' }));
+  const oldSelected = withSelection ? g?.selectedId ?? null : null;
+  const selectedIndex = withSelection ? (g?.options || []).findIndex((o) => o.id === oldSelected) : -1;
+  return {
+    id: characterCardId('ccg'),
+    label: g?.label ?? '',
+    options,
+    selectedId: selectedIndex >= 0 ? options[selectedIndex]?.id ?? null : null,
+  };
+};
+export const cloneCharacterCardTemplate = (template = DEFAULT_CHARACTER_CARD_TEMPLATE) => ({
+  questions: (template.questions || DEFAULT_CHARACTER_CARD_TEMPLATE.questions).map((q) => cloneQuestionRow(q, false)),
+  typeGroups: (template.typeGroups || DEFAULT_CHARACTER_CARD_TEMPLATE.typeGroups).map((g) => cloneTypeGroup(g, false)),
+});
+export const cloneCharacterCardTemplateForSettings = (template = DEFAULT_CHARACTER_CARD_TEMPLATE) => ({
+  questions: (template.questions || DEFAULT_CHARACTER_CARD_TEMPLATE.questions).map((q) => ({ ...cloneQuestionRow(q, false), answer: '' })),
+  typeGroups: (template.typeGroups || DEFAULT_CHARACTER_CARD_TEMPLATE.typeGroups).map((g) => cloneTypeGroup(g, false)),
+});
+const characterCardReserved = new Set([
+  'id', 'kind', 'title', 'name', 'body', 'description', 'questions', 'typeGroups', 'x', 'y', 'color', 'teamId',
+  'sets', 'locationId', 'itemId', 'mechanicIds', 'sensorIds', 'history', 'primitiveId', 'image', 'sub', 'collapsed',
+]);
+const characterFieldLabel = (key) => key
+  .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+  .replace(/[_-]+/g, ' ')
+  .replace(/\b\w/g, (m) => m.toUpperCase());
+const sanitizeCharacterQuestions = (rows = []) => rows.map((q) => ({
+  id: q?.id || characterCardId('ccq'),
+  prompt: q?.prompt ?? '',
+  answer: q?.answer ?? '',
+}));
+const sanitizeCharacterTypeGroups = (groups = []) => groups.map((g) => {
+  const options = (g?.options || []).map((o) => ({ id: o?.id || characterCardId('cco'), label: o?.label ?? '' }));
+  const selectedId = options.some((o) => o.id === g?.selectedId) ? g.selectedId : null;
+  return { id: g?.id || characterCardId('ccg'), label: g?.label ?? '', options, selectedId };
+});
+export const normalizeCharacterCard = (node = {}, template = DEFAULT_CHARACTER_CARD_TEMPLATE) => {
+  const title = node.title ?? node.name ?? '';
+  const description = node.description ?? node.body ?? '';
+  const hasCardData = Array.isArray(node.questions) || Array.isArray(node.typeGroups);
+  if (hasCardData) {
+    const seeded = cloneCharacterCardTemplate(template);
+    return {
+      title,
+      description,
+      questions: Array.isArray(node.questions) ? sanitizeCharacterQuestions(node.questions) : seeded.questions,
+      typeGroups: Array.isArray(node.typeGroups) ? sanitizeCharacterTypeGroups(node.typeGroups) : seeded.typeGroups,
+    };
+  }
+  const migratedQuestions = [];
+  for (const [key, value] of Object.entries(node)) {
+    if (characterCardReserved.has(key)) continue;
+    if (typeof value === 'string' && value.trim()) {
+      migratedQuestions.push({ id: characterCardId('ccq'), prompt: characterFieldLabel(key), answer: value });
+    }
+  }
+  const seeded = cloneCharacterCardTemplate(template);
+  return {
+    title,
+    description,
+    questions: migratedQuestions.length ? migratedQuestions : seeded.questions,
+    typeGroups: seeded.typeGroups,
+  };
+};
+
+export const MASTER_ACT_TYPE = {
+  id: 'masterAct', label: 'Master Act', color: '#3EC6D6', icon: 'layers',
+  blurb: 'A macro story act: short, theater-like, and separate from detailed narrative nodes.',
+};
+
+export const FRAMEWORK_TYPES = {
+  fate: {
+    id: 'fate',
+    label: 'FATE',
+    title: 'FATE',
+    color: '#E8D25C',
+    icon: 'target',
+    blurb: 'A reference framework for shaping attention, credibility, belonging, and feeling.',
+    summary: 'Focus attention, establish authority, activate tribe, and engage emotion.',
+    phases: [
+      {
+        key: 'F',
+        name: 'Focus',
+        short: 'Draw attention to the specific behavior, choice, or moment that matters.',
+        detail: 'Focus reduces noise. In a live game, this means making the meaningful action visible enough that players know where to put their attention.',
+      },
+      {
+        key: 'A',
+        name: 'Authority',
+        short: 'Show why the action has weight, consequence, or legitimacy.',
+        detail: 'Authority gives the moment credibility. It can come from an NPC, a rule, a visible result, a social signal, or the world responding clearly.',
+      },
+      {
+        key: 'T',
+        name: 'Tribe',
+        short: 'Connect the action to group identity, status, and shared belonging.',
+        detail: 'Tribe makes behavior socially meaningful. Players are more likely to change or commit when the group recognizes the action as part of who they are together.',
+      },
+      {
+        key: 'E',
+        name: 'Emotion',
+        short: 'Attach feeling so the action is remembered and cared about.',
+        detail: 'Emotion turns information into motivation. Fear, pride, relief, grief, wonder, or loyalty can make the choice matter beyond pure mechanics.',
+      },
+    ],
+  },
+  kolbLearningCycle: {
+    id: 'kolbLearningCycle',
+    label: "Kolb's Learning Cycle",
+    title: "Kolb's Learning Cycle",
+    color: '#5CA8F5',
+    icon: 'swap',
+    layout: 'cycle',
+    blurb: 'A reference framework for designing learning through experience, reflection, concepts, and experimentation.',
+    summary: 'Concrete experience leads to reflective observation, abstract conceptualization, and active experimentation.',
+    phases: [
+      {
+        key: 'CE',
+        name: 'Concrete Experience',
+        short: 'Players do, encounter, attempt, fail, succeed, or feel something directly.',
+        detail: 'Concrete experience is the lived moment. In a game, this is the task, scene, surprise, social interaction, physical action, or emotional beat players actually go through.',
+      },
+      {
+        key: 'RO',
+        name: 'Reflective Observation',
+        short: 'Players look back at what happened and notice patterns, surprises, mistakes, and feelings.',
+        detail: 'Reflection turns activity into meaning. Build moments where players can compare perspectives, ask what changed, or notice why the outcome happened.',
+      },
+      {
+        key: 'AC',
+        name: 'Abstract Conceptualization',
+        short: 'Players form a principle, rule, theory, tactic, or lesson from the experience.',
+        detail: 'Conceptualization gives the experience a portable idea. This can be an explicit debrief insight or an in-world realization that changes how players understand the problem.',
+      },
+      {
+        key: 'AE',
+        name: 'Active Experimentation',
+        short: 'Players test the new idea in the next situation and see whether it works.',
+        detail: 'Experimentation closes the loop by turning learning into action. The next challenge should let players apply, revise, or stress-test what they believe they learned.',
+      },
+    ],
+  },
+  humanValues: {
+    id: 'humanValues',
+    label: 'Human Values',
+    title: 'Human Values',
+    color: '#68D7C0',
+    icon: 'heart',
+    layout: 'values',
+    blurb: 'A reference map of emotional value poles that reliably pull human attention and feeling.',
+    summary: 'Value tensions such as belonging, safety, status, freedom, love, skill, wealth, health, and survival.',
+    phases: [
+      {
+        key: 'Together',
+        name: 'Alone',
+        short: 'Belonging, loyalty, exclusion, abandonment, and the need to not face the world alone.',
+        detail: 'Together versus alone is one of the strongest social values. Use it when a scene is about being accepted, isolated, rescued, exiled, or choosing the group over the self.',
+      },
+      {
+        key: 'Safety',
+        name: 'Danger',
+        short: 'Protection, threat, risk, fear, shelter, alarms, and exposed choices.',
+        detail: 'Safety versus danger makes players care because the body reacts before the intellect does. It is useful for tension, relief, rescue, caution, and escalating stakes.',
+      },
+      {
+        key: 'Victory',
+        name: 'Defeat',
+        short: 'Winning, failing, proving oneself, humiliation, comeback, and final outcome.',
+        detail: 'Victory versus defeat gives a task emotional direction. It can be literal score, but it can also be pride, mission success, public failure, or a meaningful loss.',
+      },
+      {
+        key: 'High status',
+        name: 'Low status',
+        short: 'Respect, command, shame, rank, recognition, social power, and loss of face.',
+        detail: 'Status shifts are emotionally hot. A player may care deeply when an NPC honors them, doubts them, promotes them, humiliates them, or treats them as invisible.',
+      },
+      {
+        key: 'Free',
+        name: 'Slavery',
+        short: 'Choice, escape, control, captivity, coercion, debt, and being owned by a system.',
+        detail: 'Free versus slavery frames whether characters can choose their own path. It works for locked spaces, blackmail, contracts, mind control, debt, and rebellion.',
+      },
+      {
+        key: 'Wealthy',
+        name: 'Poor',
+        short: 'Resources, scarcity, comfort, desperation, reward, greed, and survival pressure.',
+        detail: 'Wealthy versus poor can mean money, supplies, influence, information, time, or equipment. It makes resources feel meaningful instead of abstract.',
+      },
+      {
+        key: 'Life',
+        name: 'Death',
+        short: 'Survival, sacrifice, grief, urgency, rescue, mortality, and irreversible stakes.',
+        detail: 'Life versus death creates immediate gravity. Use carefully in live games, especially when the tone should stay adventurous rather than traumatic.',
+      },
+      {
+        key: 'Skilled',
+        name: 'Unskilled',
+        short: 'Mastery, competence, embarrassment, training, talent, and earning capability.',
+        detail: 'Skilled versus unskilled lets players feel growth. It is useful when a task reveals who is capable, who needs help, and who becomes better through play.',
+      },
+      {
+        key: 'Healthy',
+        name: 'Sick',
+        short: 'Strength, weakness, contamination, injury, recovery, endurance, and vulnerability.',
+        detail: 'Health versus sickness can be physical, emotional, or social. It adds feeling to fatigue, poison, healing, infection, breakdown, or restoration.',
+      },
+      {
+        key: 'Love',
+        name: 'Ambivalence / Hatred',
+        short: 'Attachment, indifference, rejection, rivalry, affection, betrayal, and emotional allegiance.',
+        detail: 'Love through ambivalence to hatred gives relationship scenes their emotional temperature. It is useful for NPC bonds, faction attitudes, loyalty tests, and betrayals.',
+      },
+      {
+        key: 'Friend',
+        name: 'Stranger / Enemy',
+        short: 'Trust, unfamiliarity, suspicion, hostility, alliance, recognition, and threat.',
+        detail: 'Friend through stranger to enemy makes social meaning legible. It helps designers decide whether a person or faction should feel safe, unknown, or opposed.',
+      },
+    ],
+  },
+  haidtMoralConflicts: {
+    id: 'haidtMoralConflicts',
+    label: 'Haidt Moral Conflicts',
+    title: 'Haidt Moral Conflicts',
+    color: '#E86AA0',
+    icon: 'alert',
+    layout: 'values',
+    blurb: 'A reference framework for six basic moral tensions adapted from Jonathan Haidt.',
+    summary: 'Care, fairness, liberty, authority, loyalty, and purity conflicts as story-design pressure points.',
+    phases: [
+      {
+        key: 'Care',
+        name: 'Harm',
+        short: 'Compassion, protection, injury, cruelty, rescue, and the duty to prevent suffering.',
+        detail: 'Care versus harm asks who is being hurt and who is responsible for protection. It is useful when a choice turns on mercy, neglect, sacrifice, or the cost of keeping someone safe.',
+      },
+      {
+        key: 'Fairness',
+        name: 'Cheating',
+        short: 'Justice, reciprocity, earned reward, exploitation, rigged rules, and broken bargains.',
+        detail: 'Fairness versus cheating makes players notice whether the game world is treating people honestly. It works well for disputed rewards, corrupt systems, hidden advantages, and promises that may be broken.',
+      },
+      {
+        key: 'Liberty',
+        name: 'Oppression',
+        short: 'Freedom, coercion, control, resistance, domination, and the right to choose.',
+        detail: 'Liberty versus oppression frames a conflict around agency. Use it when players must decide whether to obey, rebel, free someone, or accept limits for a larger purpose.',
+      },
+      {
+        key: 'Authority',
+        name: 'Subversion',
+        short: 'Order, rank, tradition, leadership, rebellion, disrespect, and undermined command.',
+        detail: 'Authority versus subversion asks whether hierarchy is legitimate or corrupt. It can make orders, rituals, chain of command, and acts of defiance feel morally charged.',
+      },
+      {
+        key: 'Loyalty',
+        name: 'Betrayal',
+        short: 'Alliance, belonging, duty to the group, treason, abandonment, and divided allegiance.',
+        detail: 'Loyalty versus betrayal turns relationships into stakes. It is strongest when players must choose between factions, teams, promises, personal bonds, or the mission.',
+      },
+      {
+        key: 'Purity',
+        name: 'Filth',
+        short: 'Sanctity, contamination, taboo, corruption, disgust, cleansing, and protected boundaries.',
+        detail: 'Purity versus filth is about what a culture treats as sacred or polluted. Use it carefully for taboos, cursed objects, forbidden places, moral corruption, or ritual cleansing.',
+      },
+    ],
+  },
+  jungianMasculineArchetypes: {
+    id: 'jungianMasculineArchetypes',
+    label: 'Jungian Masculine Archetypes',
+    title: 'Jungian Masculine Archetypes',
+    color: '#CFA56A',
+    icon: 'layers',
+    layout: 'archetypes',
+    blurb: 'A reference framework for King, Warrior, Magician, and Lover archetypes with immature roots and shadow distortions.',
+    summary: 'Four mature masculine archetypes mapped between fullness and immature/shadow expressions: King, Warrior, Magician, and Lover.',
+    phases: [
+      {
+        key: 'King',
+        name: 'Divine Child',
+        adultActiveShadow: 'Tyrant',
+        adultPassiveShadow: 'Weakling',
+        childActiveShadow: 'High Chair Tyrant',
+        childPassiveShadow: 'Weakling Prince',
+        short: 'Fullness: generative order, blessing, steadiness, and rightful responsibility.',
+        detail: 'The King in fullness creates order and gives life to the group. Its mature active shadow is the Tyrant; its mature passive shadow is the Weakling. Its immature root is the Divine Child, split between the High Chair Tyrant and the Weakling Prince.',
+      },
+      {
+        key: 'Warrior',
+        name: 'Hero',
+        adultActiveShadow: 'Sadist',
+        adultPassiveShadow: 'Masochist',
+        childActiveShadow: 'Grandstander Bully',
+        childPassiveShadow: 'Coward',
+        short: 'Fullness: discipline, courage, endurance, boundaries, and clean decisive action.',
+        detail: 'The Warrior in fullness acts with purpose and restraint. Its mature active shadow is the Sadist; its mature passive shadow is the Masochist. Its immature root is the Hero, split between the Grandstander Bully and the Coward.',
+      },
+      {
+        key: 'Magician',
+        name: 'Precocious Child',
+        adultActiveShadow: 'Detached Manipulator',
+        adultPassiveShadow: 'Denying Innocent One',
+        childActiveShadow: 'Know-it-all Trickster',
+        childPassiveShadow: 'Dummy',
+        short: 'Fullness: insight, craft, hidden knowledge, initiation, and careful transformation.',
+        detail: 'The Magician in fullness understands systems and reveals what others cannot yet see. Its mature active shadow is the Detached Manipulator; its mature passive shadow is the Denying Innocent One. Its immature root is the Precocious Child, split between the Know-it-all Trickster and the Dummy.',
+      },
+      {
+        key: 'Lover',
+        name: 'Oedipal Child',
+        adultActiveShadow: 'Addicted Lover',
+        adultPassiveShadow: 'Impotent Lover',
+        childActiveShadow: "Momma's Boy",
+        childPassiveShadow: 'Dreamer',
+        short: 'Fullness: aliveness, empathy, sensuality, connection, beauty, and deep attachment.',
+        detail: 'The Lover in fullness feels, bonds, values, and responds to the world with vivid presence. Its mature active shadow is the Addicted Lover; its mature passive shadow is the Impotent Lover. Its immature root is the Oedipal Child, split between Momma\'s Boy and the Dreamer.',
+      },
+    ],
+  },
+};
 
 // Additional Nodes: all five behave identically (collapsed card → Expand shows
 // the grouped internal map on the canvas; Edit opens a dedicated viewport).
@@ -142,7 +524,13 @@ export const SUBNODE_TYPES = {
   locationArchetype: { id: 'locationArchetype', label: 'Location Archetype', color: '#E88FD2', icon: 'pin', attachesTo: ['storyLocation'], blurb: 'Gives a location personality that flavors attached events and quests.' },
   narrativeResponse: { id: 'narrativeResponse', label: 'Narrative Response', color: '#F0A8C8', icon: 'book', childOf: ['relChange', 'internalState', 'branch'], blurb: 'Rich-text story consequence.' },
   emotionalTone: { id: 'emotionalTone', label: 'Emotional Tone', color: '#F5C2DC', icon: 'zap', childOf: ['relChange', 'internalState', 'branch'], blurb: 'Light flavor tags: Cold Fury, Quiet Hope, Lingering Distrust…' },
+  comment: { id: 'comment', label: 'Comment', color: '#E8D25C', icon: 'book', attachesTo: ['*'], category: 'supporting', blurb: 'Designer note or explanation attached to the narrative graph.' },
+  characterState: { id: 'characterState', label: 'Character State', color: '#F08CB4', icon: 'user', attachesTo: ['character', 'event', 'quest'], category: 'supporting', blurb: 'Pre-programmed character/NPC state for dialogue trees and AI agent behavior.' },
+  value: { id: 'value', label: 'Value', color: '#E8D25C', icon: 'pin', attachesTo: ['*'], blurb: 'Defines numeric or tradable value of an item or resource.' },
+  lifespan: { id: 'lifespan', label: 'Lifespan', color: '#43BF87', icon: 'clock', attachesTo: ['*'], blurb: 'Defines how long this item or resource persists across tasks or sessions.' },
+  spendUseRule: { id: 'spendUseRule', label: 'Spend / Use Rule', color: '#E0A23C', icon: 'swap', attachesTo: ['*'], blurb: 'Defines how this item or resource can be spent, used, or consumed.' },
 };
+SUBNODE_TYPES.outcomeBranches.blurb = 'Defines meaningfully different narrative outcomes from one event or choice.';
 
 // Fresh subnode factory. Every subnode shares the common shell (position,
 // parentRef, notes/keywords, history) plus kind-specific fields.
@@ -164,6 +552,32 @@ export const SUBNODE_BLANK = (id, kind) => {
       return { ...common, text: '' };
     case 'emotionalTone':
       return { ...common, tags: [] };
+    case 'comment':
+      return { ...common, notes: '' };
+    case 'characterState':
+      return { ...common, emotionalState: 'Neutral', behavioralNotes: '', effects: '' };
+    case 'value':
+      return {
+        ...common,
+        purpose: 'Defines numeric or tradable value of an item or resource.',
+        initialValue: '',
+        currentValue: '',
+        maxValue: '',
+      };
+    case 'lifespan':
+      return {
+        ...common,
+        purpose: 'Defines how long this item or resource persists across tasks or sessions.',
+        lifespanType: 'Task only',
+        description: '',
+      };
+    case 'spendUseRule':
+      return {
+        ...common,
+        purpose: 'Defines how this item or resource can be spent, used, or consumed.',
+        usageRules: '',
+        limitations: '',
+      };
     default:
       return common;
   }
@@ -203,28 +617,303 @@ export const TASK_DETAIL_TYPES = {
 };
 export const TASK_DETAIL_KINDS = Object.keys(TASK_DETAIL_TYPES);
 
+export const MECHANIC_SUBNODE_TYPES = {
+  progressiveFeedback: {
+    id: 'progressiveFeedback', label: 'Progressive Feedback Mod', color: '#58C7A6', icon: 'zap',
+    purpose: 'Forces the designer to define how success in one part of the task makes the next part easier or more obvious. Creates a positive feedback loop so players feel progress.',
+    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    fields: [
+      { key: 'feedbackType', label: 'Feedback Type', type: 'multiselect', required: true, options: ['Visual cue', 'Audio cue', 'Physical unlock', 'Information reveal', 'Reduced difficulty', 'Time bonus'] },
+      { key: 'triggerCondition', label: 'Trigger Condition', type: 'text', required: true },
+      { key: 'effectDescription', label: 'Effect Description', type: 'textarea', required: true },
+      { key: 'strengthIntensity', label: 'Strength / Intensity', type: 'select', options: ['Subtle', 'Moderate', 'Strong', 'Dramatic'] },
+      { key: 'canStack', label: 'Can Stack', type: 'checkbox' },
+    ],
+  },
+  failSafeScaffolding: {
+    id: 'failSafeScaffolding', label: 'Fail-Safe + Scaffolding Mod', color: '#E8D25C', icon: 'layers',
+    purpose: 'Provides structured ways to recover from failure or near-failure. Prevents players from feeling like total failures when they were close to succeeding.',
+    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    fields: [
+      { key: 'hintLevelCount', label: 'Hint Levels', type: 'number', required: true },
+      { key: 'hintTrigger', label: 'Hint Trigger', type: 'select', required: true, options: ['Time passed', 'Failed attempts', 'Facilitator call', 'Player request', 'Custom'] },
+      { key: 'easierAlternativeEnabled', label: 'Easier Alternative Path', type: 'checkbox' },
+      { key: 'easierAlternativePath', label: 'Alternative Path Notes', type: 'textarea' },
+      { key: 'partialCreditRule', label: 'Partial Credit Rule', type: 'text' },
+      { key: 'skipEnabled', label: 'Skip Option', type: 'checkbox' },
+      { key: 'skipCondition', label: 'Skip Condition / Consequence', type: 'textarea' },
+      { key: 'gracePeriodMinutes', label: 'Grace Period', type: 'number', suffix: 'minutes' },
+    ],
+  },
+  escalatingPressure: {
+    id: 'escalatingPressure', label: 'Escalating Pressure Mod', color: '#E86464', icon: 'clock',
+    purpose: 'Creates growing urgency and difficulty during the task. Pressure can increase through time, physical demand, environmental changes, or other escalating factors.',
+    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    fields: [
+      { key: 'pressureType', label: 'Pressure Type', type: 'multiselect', required: true, options: ['Time', 'Physical demand', 'Environmental change', 'Noise/light', 'Resource drain', 'NPC pressure'] },
+      { key: 'baseDurationMinutes', label: 'Base Duration', type: 'number', required: true, suffix: 'minutes' },
+      { key: 'escalationTrigger', label: 'Escalation Trigger', type: 'text', required: true },
+      { key: 'escalationEffect', label: 'Escalation Effect', type: 'textarea', required: true },
+      { key: 'canBePaused', label: 'Can Be Paused', type: 'checkbox' },
+    ],
+  },
+  cooperativeEthosRole: {
+    id: 'cooperativeEthosRole', label: 'Cooperative Ethos / Role Mod', color: '#A87BF0', icon: 'user',
+    purpose: 'Defines how cooperation should emerge in the task, either through differentiated roles or synchronized team actions, and sets the expected social tone of play.',
+    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    fields: [
+      { key: 'cooperationStyle', label: 'Cooperation Style', type: 'select', required: true, options: ['Differentiated roles', 'Synchronized action', 'Relay', 'Parallel tracks', 'Shared planning'] },
+      { key: 'roleSuggestions', label: 'Role Suggestions', type: 'textarea' },
+      { key: 'ethosTone', label: 'Ethos Tone', type: 'select', required: true, options: ['Calm trust', 'Urgent coordination', 'Playful chaos', 'Mutual support', 'Leadership rotation'] },
+      { key: 'ethosToneGuidance', label: 'Ethos Tone Guidance', type: 'readonly', required: true },
+      { key: 'teamDiscussionPrompt', label: 'Team Discussion Prompt', type: 'text' },
+    ],
+  },
+  noSoloEnforcer: {
+    id: 'noSoloEnforcer', label: 'No-Solo Enforcer', color: '#F08CB4', icon: 'cross',
+    purpose: 'Structurally prevents a single player from completing the task alone by enforcing physical, spatial, or timing requirements.',
+    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    fields: [
+      { key: 'enforcementType', label: 'Enforcement Type', type: 'multiselect', required: true, options: ['Simultaneous actions', 'Physical distance', 'Different information', 'Multiple props', 'Timing split', 'Role lock'] },
+      { key: 'minimumPlayers', label: 'Minimum Players', type: 'number', required: true },
+    ],
+  },
+  arbitration: {
+    id: 'arbitration', label: 'Arbitration Mod', color: '#5CA8F5', icon: 'flag',
+    purpose: 'Handles situations where real-world conditions create uncertainty or variance. Provides tolerance and fallback rules.',
+    attachesTo: ['challengeCore', 'taskTemplate', '*'], category: 'gameplayModifiers',
+    fields: [
+      { key: 'varianceHandling', label: 'Variance Handling', type: 'select', required: true, options: ['Strict', 'Small tolerance', 'Generous tolerance', 'Facilitator judgment'] },
+      { key: 'toleranceDescription', label: 'Tolerance Description', type: 'text' },
+      { key: 'partialCreditRule', label: 'Partial Credit Rule', type: 'text' },
+      { key: 'facilitatorOverride', label: 'Facilitator Override', type: 'checkbox' },
+      { key: 'logging', label: 'Logging', type: 'checkbox' },
+    ],
+  },
+  teamDiscussionPrompt: {
+    id: 'teamDiscussionPrompt', label: 'Team Discussion Prompt', color: '#43BF87', icon: 'book',
+    purpose: 'Allows the designer to insert a specific question or prompt that the team should discuss before, during, or after a task. This subnode is reusable across many different tasks.',
+    attachesTo: ['challengeCore', 'taskTemplate', '*'], reusable: true, category: 'gameplayModifiers',
+    fields: [
+      { key: 'discussionPrompt', label: 'Discussion Prompt', type: 'textarea', required: true },
+      { key: 'whenToUse', label: 'When to Use', type: 'select', options: ['Before task', 'During task', 'After task', 'Between attempts'] },
+      { key: 'facilitatorNote', label: 'Facilitator Note', type: 'text' },
+    ],
+  },
+  facilitatorNote: {
+    id: 'facilitatorNote', label: 'Facilitator Note', color: '#8B92A6', icon: 'pin',
+    purpose: 'A simple, reusable note that can be attached to any task or subnode. It contains guidance for the person running the game.',
+    attachesTo: ['challengeCore', 'taskTemplate', '*'], reusable: true, category: 'supporting',
+    fields: [
+      { key: 'facilitatorGuidance', label: 'Facilitator Guidance', type: 'textarea', required: true },
+    ],
+  },
+  triggerDelay: {
+    id: 'triggerDelay', label: 'Trigger Delay', color: '#5CA8F5', icon: 'clock',
+    purpose: 'Adds a delay before the sensor or actuator activates after the trigger condition is met.',
+    attachesTo: ['sensorNode', 'actuatorNode', '*'], reusable: true, category: 'gameplayModifiers',
+    fields: [
+      { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
+      { key: 'delayDuration', label: 'Delay Duration', type: 'text', required: true },
+      { key: 'delayType', label: 'Delay Type', type: 'select', options: ['Fixed', 'Random', 'Variable'] },
+    ],
+  },
+  frequencyControl: {
+    id: 'frequencyControl', label: 'Frequency Control', color: '#E8D25C', icon: 'clock',
+    purpose: 'Deprecated. Frequency limiting now lives inside Sensor and Actuator nodes.',
+    attachesTo: ['sensorNode', 'actuatorNode', 'taskTemplate', '*'], reusable: true, category: 'gameplayModifiers',
+    deprecated: true, hiddenFromPalette: true,
+    fields: [
+      { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
+      { key: 'maxTriggersPerSession', label: 'Max Triggers per Session', type: 'text', required: true },
+      { key: 'cooldown', label: 'Cooldown / Frequency Rule', type: 'text' },
+    ],
+  },
+  multipleOutputLogic: {
+    id: 'multipleOutputLogic', label: 'Multi-Output Resolver', color: '#A87BF0', icon: 'swap',
+    purpose: 'Defines different outputs based on different input conditions.',
+    attachesTo: ['sensorNode', 'actuatorNode', '*'], reusable: true, category: 'gameplayModifiers',
+    fields: [
+      { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
+      { key: 'inputConditions', label: 'Input Conditions', type: 'textarea', required: true },
+      { key: 'correspondingOutputs', label: 'Corresponding Outputs', type: 'textarea', required: true },
+      { key: 'defaultOutput', label: 'Default Output', type: 'text' },
+    ],
+  },
+  conditionalActivation: {
+    id: 'conditionalActivation', label: 'Conditional Activation', color: '#E0A23C', icon: 'flag',
+    purpose: 'Requires additional conditions to be met before the sensor or actuator can activate.',
+    attachesTo: ['sensorNode', 'actuatorNode', '*'], reusable: true, category: 'gameplayModifiers',
+    fields: [
+      { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
+      { key: 'requiredConditions', label: 'Required Conditions', type: 'textarea', required: true },
+      { key: 'logicType', label: 'Logic Type', type: 'select', options: ['AND', 'OR'] },
+    ],
+  },
+  value: {
+    id: 'value', label: 'Value', color: '#E8D25C', icon: 'pin',
+    purpose: 'Defines numeric or tradable value of an item or resource.',
+    attachesTo: ['*'], reusable: true, category: 'gameplayModifiers',
+    fields: [
+      { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
+      { key: 'initialValue', label: 'Initial Value', type: 'text' },
+      { key: 'currentValue', label: 'Current Value', type: 'text' },
+      { key: 'maxValue', label: 'Max Value', type: 'text' },
+    ],
+  },
+  lifespan: {
+    id: 'lifespan', label: 'Lifespan', color: '#43BF87', icon: 'clock',
+    purpose: 'Defines how long this item or resource persists.',
+    attachesTo: ['*'], reusable: true, category: 'gameplayModifiers',
+    fields: [
+      { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
+      { key: 'lifespanType', label: 'Lifespan Type', type: 'select', required: true, options: ['Task only', 'Full session/game', 'Permanent', 'Custom'] },
+      { key: 'description', label: 'Description', type: 'textarea' },
+    ],
+  },
+  spendUseRule: {
+    id: 'spendUseRule', label: 'Spend / Use Rule', color: '#E0A23C', icon: 'swap',
+    purpose: 'Defines how this item or resource can be spent or used.',
+    attachesTo: ['*'], reusable: true, category: 'gameplayModifiers',
+    fields: [
+      { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
+      { key: 'usageRules', label: 'Usage Rules', type: 'textarea', required: true },
+      { key: 'limitations', label: 'Limitations', type: 'textarea' },
+    ],
+  },
+  spectrumOfYesOutcomes: {
+    id: 'spectrumOfYesOutcomes', label: 'Spectrum of Yes Outcomes', color: '#8B7BF5', icon: 'layers',
+    purpose: 'Defines the graduated outcome levels for the task, from best to worst.',
+    attachesTo: ['challengeCore', 'taskTemplate', '*'], reusable: true, category: 'gameplayModifiers',
+    fields: [
+      { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
+      { key: 'outcomeLevels', label: 'Outcome Levels', type: 'textarea', required: true },
+      { key: 'yesAndDescription', label: 'Yes and', type: 'textarea' },
+      { key: 'yesDescription', label: 'Yes', type: 'textarea' },
+      { key: 'yesButDescription', label: 'Yes but', type: 'textarea' },
+      { key: 'noButDescription', label: 'No but', type: 'textarea' },
+      { key: 'noDescription', label: 'No', type: 'textarea' },
+      { key: 'noAndDescription', label: 'No and', type: 'textarea' },
+      { key: 'defaultSelection', label: 'Default Selection', type: 'multiselect', options: ['Yes and', 'Yes', 'Yes but', 'No but', 'No', 'No and'] },
+    ],
+  },
+  readinessStatus: {
+    id: 'readinessStatus', label: 'Readiness Status', color: '#6FD9A7', icon: 'flag',
+    purpose: 'Shows the current development or readiness state of the attached element.',
+    attachesTo: ['*'], reusable: true, category: 'supporting',
+    fields: [
+      { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
+      { key: 'status', label: 'Status', type: 'select', required: true, options: ['Draft', 'In Progress', 'Ready for Testing', 'Ready', 'Retired'] },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+  player: {
+    id: 'player', label: 'Player', color: '#5CA8F5', icon: 'user',
+    purpose: 'Selects one or more players from the game player database.',
+    attachesTo: ['*'], reusable: true, category: 'supporting',
+    fields: [
+      { key: 'playerIds', label: 'Players', type: 'playerRefs' },
+    ],
+  },
+  team: {
+    id: 'team', label: 'Team', color: '#E0A23C', icon: 'layers',
+    purpose: 'Selects one or more teams from the game team database.',
+    attachesTo: ['*'], reusable: true, category: 'supporting',
+    fields: [
+      { key: 'teamIds', label: 'Teams', type: 'teamRefs' },
+    ],
+  },
+  comment: {
+    id: 'comment', label: 'Comment', color: '#E8D25C', icon: 'book',
+    purpose: 'Freeform comment or designer note attached to any element.',
+    attachesTo: ['*'], reusable: true, category: 'supporting',
+    fields: [
+      { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
+      { key: 'commentText', label: 'Comment Text', type: 'textarea', required: true },
+      { key: 'authorDate', label: 'Author / Date', type: 'text' },
+    ],
+  },
+  coreMechanicModifier: {
+    id: 'coreMechanicModifier', label: 'Core Mechanic Modifier', color: '#E0A23C', icon: 'cog',
+    purpose: 'Allows the designer to deliberately change one core aspect of the task to create a meaningfully different experience or difficulty level.',
+    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    fields: [
+      { key: 'variationCategory', label: 'Variation Category', type: 'select', required: true, options: ['Timing', 'Space', 'Body limit', 'Information', 'Props', 'Sensors', 'Resources', 'Difficulty'] },
+      { key: 'variationDescription', label: 'Variation Description', type: 'textarea', required: true },
+      { key: 'canBeCombined', label: 'Can Be Combined', type: 'checkbox' },
+    ],
+  },
+};
+
+export const MECHANIC_SUBNODE_KINDS = Object.keys(MECHANIC_SUBNODE_TYPES);
+
 // Blank factories for the Library's "+ New …" buttons and id prefixes.
 export const LIB_PREFIX = {
   items: 'LIB-ITM-', locations: 'LIB-LOC-', mechanics: 'LIB-MECH-N', sensors: 'LIB-SEN-N',
-  narrative: 'LIB-NAR-', mechPrimitives: 'LIB-MPRIM-', stories: 'LIB-STORY-N',
-  mechStructures: 'LIB-MSTRUCT-N', gmRules: 'LIB-GMR-', concepts: 'LIB-CPT-N',
+  narrative: 'LIB-NAR-', mechPrimitives: 'LIB-MPRIM-', mechSubnodes: 'LIB-MSUB-', mechanicRestrictionTypes: 'RST-', mechanicInteractionTypes: 'PIT-', mechanicSensorTypes: 'SNT-', mechanicActuatorTypes: 'ACT-', stories: 'LIB-STORY-N',
+  mechanicCharacterEmotionTypes: 'CEM-', mechStructures: 'LIB-MSTRUCT-N', gmRules: 'LIB-GMR-', concepts: 'LIB-CPT-N',
 };
+
+const mechanicSubnodeFieldDefault = (field) => {
+  if (field.type === 'checkbox') return false;
+  if (field.type === 'number') return field.required ? 1 : 0;
+  if (field.type === 'multiselect' || field.type === 'playerRefs' || field.type === 'teamRefs') return [];
+  if (field.type === 'select') return field.options?.[0] || '';
+  if (field.type === 'readonly') return '';
+  return '';
+};
+
+export const MECHANIC_SUBNODE_BLANK = (id, kind = 'progressiveFeedback') => {
+  const t = MECHANIC_SUBNODE_TYPES[kind] || MECHANIC_SUBNODE_TYPES.progressiveFeedback;
+  const fields = Object.fromEntries((t.fields || []).map((field) => [
+    field.key,
+    field.type === 'readonly' && field.key === 'purpose' ? t.purpose
+      : t.id === 'spectrumOfYesOutcomes' && field.key === 'outcomeLevels' ? 'Yes and\nYes\nYes but\nNo but\nNo\nNo and'
+        : t.id === 'spectrumOfYesOutcomes' && field.key === 'defaultSelection' ? ['Yes and', 'Yes', 'Yes but', 'No but', 'No', 'No and']
+          : mechanicSubnodeFieldDefault(field),
+  ]));
+  return {
+    id,
+    kind: t.id,
+    name: t.label,
+    purpose: t.purpose,
+    color: t.color,
+    icon: t.icon,
+    category: t.category || 'gameplayModifiers',
+    reusable: !!t.reusable,
+    deprecated: !!t.deprecated,
+    hiddenFromPalette: !!t.hiddenFromPalette,
+    attachesTo: t.attachesTo || ['*'],
+    collapseDepth: 0,
+    fields,
+  };
+};
+
 export const LIB_BLANK = {
-  items: (id) => ({ id, name: 'New item template', type: 'gadget', description: '', propNotes: '', loreNotes: '', mechanicIds: [], sensorReqs: [], image: null }),
+  items: (id) => ({ id, name: 'New item template', type: 'gadget', description: '', propNotes: '', loreNotes: '', origin: '', persistsAcrossTasks: false, mechanicIds: [], sensorReqs: [], image: null }),
   locations: (id) => ({ id, name: 'New location template', notes: '', safety: '', image: null }),
   mechanics: (id) => ({ id, name: 'New mechanic', summary: '', params: [] }),
   sensors: (id) => ({ id, kind: 'New sensor type', label: '' }),
-  // Unified narrative building block (story-only): shows in the Narrative
-  // library and drops onto the story-structure canvas.
-  narrative: (id) => ({ id, name: 'New narrative element', category: 'story-beat', color: '#5CA8F5', icon: 'flag', body: '', tags: [], inputs: ['in'], outputs: ['out'] }),
+  // Reusable node templates saved from the new Node Builder.
+  narrative: (id) => ({ id, nodeClass: 'base', nodeKind: 'event', name: 'New event template', category: 'event', color: '#5CA8F5', icon: 'zap', body: '', tags: [], inputs: ['in'], outputs: ['out'] }),
   // Mechanic node type (sensor/physical/task) for the Game Mechanics node tree.
-  mechPrimitives: (id) => ({ id, name: 'New mechanic node', baseKind: 'mechanic', color: '#A87BF0', icon: 'cog', inputs: ['in'], outputs: ['out'], defaultBody: '', estMinutes: 5, crew: 0 }),
-  stories: (id) => ({ id, name: 'New structure', description: '', estMinutes: 15, nodes: {}, edges: [] }),
-  mechStructures: (id) => ({ id, name: 'New mechanic structure', description: '', estMinutes: 10, nodes: {}, edges: [] }),
+  mechPrimitives: (id) => ({ id, name: 'New mechanic node', mechKind: 'challengeCore', baseKind: 'mechanic', color: '#A87BF0', icon: 'cog', inputs: ['in'], outputs: ['out'], defaultBody: '', estMinutes: 5, crew: 0, refs: {}, collapseDepth: 0 }),
+  mechSubnodes: (id) => MECHANIC_SUBNODE_BLANK(id),
+  mechanicRestrictionTypes: (id) => ({ id, label: 'Custom restriction', custom: true }),
+  mechanicInteractionTypes: (id) => ({ id, label: 'Custom interaction', custom: true }),
+  mechanicSensorTypes: (id) => ({ id, label: 'Custom sensor', custom: true }),
+  mechanicActuatorTypes: (id) => ({ id, label: 'Custom actuator', custom: true }),
+  mechanicCharacterEmotionTypes: (id) => ({ id, label: 'Custom emotion', custom: true }),
+  stories: (id) => ({ id, name: 'New structure', description: '', estMinutes: 15, nodes: {}, edges: [], frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {} }),
+  mechStructures: (id) => ({ id, name: 'New mechanic structure', description: '', estMinutes: 10, nodes: {}, edges: [], numberMarkers: {}, titleMarkers: {} }),
   gmRules: (id) => ({ id, title: 'New game master rule', principle: '', implementation: '', rationale: '', aiRule: '' }),
   // Additional Node ("concept") template: starts completely empty — the
   // designer builds inside it, renames it, and it becomes reusable.
-  concepts: (id) => ({ id, category: 'storyConcept', name: 'New concept', description: '', premade: false, questions: [], example: {}, nodes: {}, edges: [] }),
+  concepts: (id) => ({
+    id, category: 'storyConcept', name: 'New concept', description: '',
+    conceptType: 'unset', status: 'seed', onePromise: '', referenceFrameworkIds: [],
+    premade: false, questions: [], example: {}, nodes: {}, edges: [], frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {}
+  }),
 };
 
 // Migration: preserve user-authored library data across schema bumps.
@@ -236,6 +925,7 @@ export function migrateLibrary(saved) {
   if (!saved || typeof saved !== 'object' || !saved.items) return makeLibrarySeed();
   const seed = makeLibrarySeed();
   const merged = { ...saved };
+  const savedRev = Number(saved.rev || 0);
 
   if (saved.primitives || saved.elements || saved.elementTypes) {
     const narrative = { ...(saved.narrative || {}) };
@@ -260,11 +950,521 @@ export function migrateLibrary(saved) {
     delete merged.elementTypes;
   }
 
+  merged.narrative = Object.fromEntries(Object.entries(merged.narrative || {}).filter(([, n]) => n.nodeClass));
+  const retiredMechKinds = new Set(['sensorActuator', 'crossTaskResource']);
+  const retiredMechIds = new Set([
+    'LIB-MPRIM-SENSOR-ACTUATOR',
+    'LIB-MPRIM-CROSS-TASK-RESOURCE',
+    'LIB-MPRIM-WAYPT',
+    'LIB-MPRIM-HANDOFF',
+    'LIB-MPRIM-PUZZLE',
+    'LIB-MPRIM-PHYS',
+    'LIB-MPRIM-TIMER',
+    'LIB-MPRIM-KNOWLEDGE',
+    'LIB-MPRIM-PHYSICAL-STATE',
+    'LIB-MPRIM-NPC-STATE',
+  ]);
+  merged.mechPrimitives = Object.fromEntries(Object.entries(merged.mechPrimitives || {}).filter(([id, n]) => (
+    !retiredMechIds.has(id) && !retiredMechKinds.has(n?.mechKind)
+  )));
+  merged.stories = Object.fromEntries(Object.entries(merged.stories || {}).filter(([id, st]) =>
+    !['LIB-STORY-BETRAY', 'LIB-STORY-COLDCASE'].includes(id)
+    && Object.values(st.nodes || {}).every((n) => n.kind !== 'story')));
+
   for (const key of Object.keys(seed)) {
     if (merged[key] === undefined) merged[key] = seed[key];
   }
+  merged.itemTypes = { ...seed.itemTypes, ...(merged.itemTypes || {}) };
+  merged.mechPrimitives = Object.fromEntries(Object.entries({ ...seed.mechPrimitives, ...(merged.mechPrimitives || {}) }).map(([id, node]) => {
+    if (id === 'LIB-MPRIM-SENSOR') {
+      return [id, {
+        ...node,
+        deprecated: true,
+        hiddenFromPalette: true,
+        migrationHint: 'Use Sensor Node instead. This node is deprecated. Its functionality has been merged into the Sensor node.',
+        defaultBody: 'This node is deprecated. Its functionality has been merged into the Sensor node.',
+      }];
+    }
+    if (id === 'LIB-MPRIM-PROGRESS-STATE') {
+      return [id, {
+        ...node,
+        name: node.name || 'Progress State',
+        mechKind: 'progressState',
+        baseKind: 'mechanic',
+        category: 'supporting',
+        defaultBody: node.defaultBody || 'Visual task completion tracker: shows how many of 10 steps are complete.',
+        currentProgress: node.currentProgress || 1,
+        visualStyle: node.visualStyle || 'Segmented bar',
+        inputs: node.inputs || ['attach'],
+        outputs: node.outputs || ['progress'],
+      }];
+    }
+    if (id === 'LIB-MPRIM-CHARACTER-STATE') {
+      return [id, {
+        ...node,
+        deprecated: true,
+        hiddenFromPalette: true,
+        migrationHint: 'Character State has moved to Narrative Subnodes. Use the narrative Character State subnode for future story/dialogue behavior.',
+      }];
+    }
+    if (node?.mechKind === 'sensorNode') {
+      return [id, {
+        ...node,
+        inputRequired: node.inputRequired || '',
+        triggerCondition: node.triggerCondition || '',
+        frequencyLimitEnabled: !!node.frequencyLimitEnabled,
+        frequencyTriggerCount: node.frequencyTriggerCount || 1,
+        frequencyTimePeriod: node.frequencyTimePeriod || '1 minute',
+        cooldownEnabled: !!node.cooldownEnabled,
+        cooldownDuration: node.cooldownDuration || '30 seconds',
+        manualOverrideFallback: node.manualOverrideFallback || '',
+        reliability: node.reliability || '3',
+      }];
+    }
+    if (node?.mechKind === 'actuatorNode') {
+      return [id, {
+        ...node,
+        audioFileRef: node.audioFileRef || '',
+        frequencyLimitEnabled: !!node.frequencyLimitEnabled,
+        frequencyTriggerCount: node.frequencyTriggerCount || 1,
+        frequencyTimePeriod: node.frequencyTimePeriod || '1 minute',
+        cooldownEnabled: !!node.cooldownEnabled,
+        cooldownDuration: node.cooldownDuration || '30 seconds',
+        manualOverrideFallback: node.manualOverrideFallback || '',
+      }];
+    }
+    if (node?.mechKind !== 'physicalRestriction') return [id, node];
+    const sourceRefs = node.connectTo || {};
+    const connectTo = { nodeIds: sourceRefs.nodeIds || [] };
+    return [id, { ...node, connectTo }];
+  }));
+  merged.mechSubnodes = Object.fromEntries(Object.entries({ ...seed.mechSubnodes, ...(merged.mechSubnodes || {}) }).map(([id, sn]) => {
+    const type = MECHANIC_SUBNODE_TYPES[sn.kind] || {};
+    return [id, {
+      ...sn,
+      name: sn.name || type.label,
+      purpose: type.purpose || sn.purpose,
+      category: sn.category || type.category || 'gameplayModifiers',
+      deprecated: !!type.deprecated || !!sn.deprecated,
+      hiddenFromPalette: !!type.hiddenFromPalette || !!sn.hiddenFromPalette,
+    }];
+  }));
+  merged.mechStructures = Object.fromEntries(Object.entries(merged.mechStructures || {}).filter(([, st]) => (
+    Object.values(st.nodes || {}).every((n) => !retiredMechIds.has(n.primitiveId))
+  )));
+  merged.mechStructures = Object.fromEntries(Object.entries(merged.mechStructures || {}).map(([id, st]) => [
+    id,
+    {
+      ...st,
+      nodes: Object.fromEntries(Object.entries(st.nodes || {}).map(([nodeId, node]) => {
+        if (node?.mechKind === 'sensorNode') {
+          return [nodeId, {
+            ...node,
+            inputRequired: node.inputRequired || '',
+            triggerCondition: node.triggerCondition || '',
+            frequencyLimitEnabled: !!node.frequencyLimitEnabled,
+            frequencyTriggerCount: node.frequencyTriggerCount || 1,
+            frequencyTimePeriod: node.frequencyTimePeriod || '1 minute',
+            cooldownEnabled: !!node.cooldownEnabled,
+            cooldownDuration: node.cooldownDuration || '30 seconds',
+            manualOverrideFallback: node.manualOverrideFallback || '',
+            reliability: node.reliability || '3',
+          }];
+        }
+        if (node?.mechKind === 'actuatorNode') {
+          return [nodeId, {
+            ...node,
+            audioFileRef: node.audioFileRef || '',
+            frequencyLimitEnabled: !!node.frequencyLimitEnabled,
+            frequencyTriggerCount: node.frequencyTriggerCount || 1,
+            frequencyTimePeriod: node.frequencyTimePeriod || '1 minute',
+            cooldownEnabled: !!node.cooldownEnabled,
+            cooldownDuration: node.cooldownDuration || '30 seconds',
+            manualOverrideFallback: node.manualOverrideFallback || '',
+          }];
+        }
+        return [nodeId, node];
+      })),
+    },
+  ]));
+  if (savedRev < 13) {
+    merged.stories = { ...seed.stories, ...(merged.stories || {}) };
+    merged.mechStructures = { ...seed.mechStructures, ...(merged.mechStructures || {}) };
+  }
+  if (savedRev < 14) {
+    merged.items = {
+      ...(merged.items || {}),
+      'LIB-ITM-MACRODROID-PHONE': seed.items['LIB-ITM-MACRODROID-PHONE'],
+    };
+    merged.stories = {
+      ...(merged.stories || {}),
+      'LIB-STORY-TURTLE-COLLECTION': seed.stories['LIB-STORY-TURTLE-COLLECTION'],
+    };
+    merged.mechStructures = {
+      ...(merged.mechStructures || {}),
+      'LIB-MSTRUCT-TURTLE-SHELL-REACTION': seed.mechStructures['LIB-MSTRUCT-TURTLE-SHELL-REACTION'],
+    };
+  }
+  if (savedRev < 15) {
+    merged.stories = {
+      ...(merged.stories || {}),
+      'LIB-STORY-ITEM-NODE-GRAPH': seed.stories['LIB-STORY-ITEM-NODE-GRAPH'],
+    };
+  }
+  if (savedRev < 16) {
+    merged.gmRules = {
+      ...(merged.gmRules || {}),
+      'LIB-GMR-TURTLE-SHELLS': seed.gmRules['LIB-GMR-TURTLE-SHELLS'],
+    };
+    merged.stories = {
+      ...(merged.stories || {}),
+      'LIB-STORY-TURTLE-SESSION': seed.stories['LIB-STORY-TURTLE-SESSION'],
+    };
+    merged.mechStructures = {
+      ...(merged.mechStructures || {}),
+      'LIB-MSTRUCT-TURTLE-COSTUME-COLLECTION': seed.mechStructures['LIB-MSTRUCT-TURTLE-COSTUME-COLLECTION'],
+    };
+  }
   merged.rev = LIB_REV;
   return merged;
+}
+
+const turtleSvg = (label, color) => ({
+  kind: 'svg',
+  name: `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'turtle'}-reference.svg`,
+  dataUrl: `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160"><rect width="240" height="160" rx="18" fill="#151821"/><circle cx="64" cy="78" r="34" fill="${color}" opacity=".9"/><rect x="104" y="48" width="96" height="60" rx="14" fill="${color}" opacity=".72"/><text x="120" y="136" fill="#E9EBF3" font-family="Segoe UI,Arial" font-size="18" font-weight="700">${label}</text></svg>`)}`,
+});
+
+const mechanicSubnodeInstance = (id, subnodeKind, title, x, y, fields = {}) => {
+  const type = MECHANIC_SUBNODE_TYPES[subnodeKind] || {};
+  return {
+    id,
+    primitiveId: `LIB-MSUB-${subnodeKind}`,
+    kind: 'mechanicSubnode',
+    subnodeKind,
+    title,
+    x,
+    y,
+    body: type.purpose || '',
+    color: type.color || '#8B92A6',
+    icon: type.icon || 'pin',
+    category: type.category || 'gameplayModifiers',
+    attachesTo: type.attachesTo || ['*'],
+    fields: {
+      purpose: type.purpose || '',
+      ...fields,
+    },
+  };
+};
+
+function makeTurtleSessionStoryStructure() {
+  const items = [
+    ['I-SHELL', 'Shell', 'Shell', '#43BF87', 'Wearable', 'Giant, ridiculous, unmistakably turtle shell. Bulky by design.', 'Full lore: the shell makes the wearer visible as the team anchor. It is funny first, heroic second, and mechanically meaningful because the physical version carries GPS/audio behavior.'],
+    ['I-MASK', 'Mask / Headband', 'Mask', '#5CA8F5', 'Wearable', 'Color-coded headband that marks the team identity immediately.', 'Full lore: the visible identity piece. It should make team progress readable at a distance.'],
+    ['I-ARM', 'Arm Sweat Catchers', 'Arms', '#E0A23C', 'Wearable', 'Absurdly serious arm bands for very unserious heroics.', 'Full lore: a small costume escalation that helps players feel the collection growing.'],
+    ['I-LEG', 'Leg Sweat Catchers', 'Legs', '#A87BF0', 'Wearable', 'Leg bands that make the wearer look more committed than comfortable.', 'Full lore: visual progress and comedy through accumulation.'],
+    ['I-WEAPON', 'Foam Weapon', 'Weapon', '#F08CB4', 'Artifact', 'Safe turtle-themed prop weapon; impressive in photos, harmless in play.', 'Full lore: a symbolic team prop, not a combat invitation. Keep all use theatrical and safe.'],
+  ];
+  const nodes = Object.fromEntries(items.map(([id, title, shortTitle, color, baseType, playerLore, completeLore], index) => [id, {
+    id,
+    kind: 'item',
+    title,
+    shortTitle,
+    x: 70 + (index % 3) * 290,
+    y: 360 + Math.floor(index / 3) * 170,
+    body: playerLore,
+    playerLore,
+    completeLore,
+    baseType,
+    origin: 'Found, scavenged, awarded, or traded during a task zone.',
+    gameplayMeaning: 'Visible team identity and progression; the completed set makes the final group assembly readable and funny.',
+    persistsAcrossTasks: true,
+    color,
+    image: turtleSvg(shortTitle, color),
+  }]));
+  return {
+    id: 'LIB-STORY-TURTLE-SESSION',
+    name: 'Shells of the City - Turtle Session Structure',
+    description: 'Narrative/master overview structure for four turtle teams collecting costume pieces, crossing paths mid-session, reacting to voice-line events, and assembling for the final photo.',
+    estMinutes: 120,
+    nodes: {
+      MA1: {
+        id: 'MA1', kind: 'masterAct', title: 'Shells of the City', x: 60, y: 70,
+        body: 'Broad narrative phase: Turtle Power Rising. Four teams become visually recognizable turtles as the session escalates toward a shared final assembly.',
+        phaseNotes: 'Team player dynamics: shared absurdity of the bulky shell, intra-team bonding through problem-solving, inter-team visible progression when paths cross, and light competitive humor at final assembly.',
+        color: '#43BF87',
+      },
+      GMR1: {
+        id: 'GMR1', kind: 'quest', title: 'Game Master Rules', x: 420, y: 70,
+        body: 'Safety breaks fiction. Physical discomfort must stay comedic and manageable. Voice reactions should feel like the world recognizing the turtles.',
+        color: '#E0A23C',
+      },
+      TASK0: { id: 'TASK0', kind: 'task', title: 'Main Session - Costume Collection', x: 60, y: 210, startMin: 540, durationMin: 120, marginBeforeMin: 0, marginAfterMin: 0, body: 'Overall session task: teams collect, equip, cross paths, and assemble for the group photo.', color: '#5BC0BE' },
+      TASK1: { id: 'TASK1', kind: 'task', title: 'Zone 1 - First Collection', x: 340, y: 210, startMin: 550, durationMin: 30, marginBeforeMin: 0, marginAfterMin: 10, body: 'First piece collection and first reliable shell reaction.', color: '#5BC0BE' },
+      TRV1: { id: 'TRV1', kind: 'travel', title: 'Travel Time - First Crossing', x: 620, y: 250, startMin: 580, durationMin: 15, marginAfterMin: 10, body: 'Natural movement between zones; allow teams to notice each other progress.', color: '#E0A23C' },
+      TASK2: { id: 'TASK2', kind: 'task', title: 'Zone 2 - Mid-Session Crossing', x: 880, y: 210, startMin: 600, durationMin: 35, marginBeforeMin: 10, marginAfterMin: 15, body: 'Second-stage reactions and visible inter-team comparison.', color: '#5BC0BE' },
+      TRV2: { id: 'TRV2', kind: 'travel', title: 'Travel Time - Assembly Route', x: 1160, y: 250, startMin: 635, durationMin: 20, marginAfterMin: 15, body: 'Route into final shared photo area; delays are acceptable and should stay playful.', color: '#E0A23C' },
+      TASK3: { id: 'TASK3', kind: 'task', title: 'Final Assembly Photo', x: 1420, y: 210, startMin: 660, durationMin: 25, marginBeforeMin: 10, marginAfterMin: 0, body: 'All turtle teams assemble for the final group photo, even if some pieces are missing.', color: '#5BC0BE' },
+      L1P: { id: 'L1P', kind: 'storyLocation', title: 'Zone 1 Physical - First Collection Area', x: 980, y: 420, body: 'Physical task zone where the first costume pieces and first shell voice reaction can happen.', color: '#43BF87' },
+      L1N: { id: 'L1N', kind: 'storyLocation', title: 'Narrative Lore - First Collection Area', x: 1260, y: 420, body: 'Lore layer: the city first notices the turtle identity forming.', color: '#A87BF0' },
+      L2P: { id: 'L2P', kind: 'storyLocation', title: 'Zone 2 Physical - Crossing Area', x: 980, y: 580, body: 'Physical crossing zone where teams can see each other progress.', color: '#43BF87' },
+      L2N: { id: 'L2N', kind: 'storyLocation', title: 'Narrative Lore - Crossing Area', x: 1260, y: 580, body: 'Lore layer: teams become aware that other turtles are also rising.', color: '#A87BF0' },
+      E1: { id: 'E1', kind: 'event', title: 'Voice Reaction - First Recognition', x: 70, y: 760, body: 'Funny or useful first-stage voice line when a shell dwells in the zone.', color: '#5CA8F5' },
+      E2: { id: 'E2', kind: 'event', title: 'Voice Reaction - Second Stage', x: 420, y: 760, body: 'Later or near-completion voice line with funny, lore, or useful content.', color: '#5CA8F5' },
+      E3: { id: 'E3', kind: 'event', title: 'Final Group Photo Assembly', x: 780, y: 760, body: 'Culminating event: all teams meet, compare costumes, and take the final group photo.', color: '#E8D25C' },
+      C1: { id: 'C1', kind: 'concept', conceptKind: 'structureConcept', title: 'Four Turtle Team Variants', x: 60, y: 570, body: 'Duplicate the piece set per team: Leonardo/blue, Raphael/red, Donatello/purple, Michelangelo/orange. Each team uses the same story structure with different color and voice tone.', color: '#8B7BF5', collapsed: false },
+      ...nodes,
+    },
+    numberMarkers: {},
+    titleMarkers: {},
+    edges: [
+      { from: 'MA1', to: 'TASK0', label: 'master phase contains', color: null },
+      { from: 'GMR1', to: 'TASK0', label: 'rules guide', color: null },
+      { from: 'TASK0', to: 'TASK1', label: 'starts with', color: null },
+      { from: 'TASK1', to: 'TRV1', label: 'then move', color: null },
+      { from: 'TRV1', to: 'TASK2', label: 'cross paths', color: null },
+      { from: 'TASK2', to: 'TRV2', label: 'toward finale', color: null },
+      { from: 'TRV2', to: 'TASK3', label: 'assemble', color: null },
+      { from: 'L1P', to: 'L1N', label: 'physical to lore layer', color: null },
+      { from: 'L2P', to: 'L2N', label: 'physical to lore layer', color: null },
+      { from: 'TASK1', to: 'E1', label: 'first reaction', color: null },
+      { from: 'TASK2', to: 'E2', label: 'second reaction', color: null },
+      { from: 'TASK3', to: 'E3', label: 'culminates in', color: null },
+      ...items.map(([id]) => ({ from: id, to: 'E3', label: 'visible in final photo', color: null })),
+    ],
+    frames: {
+      F1: { id: 'F1', label: 'Master overview and timeline', x: 30, y: 40, w: 1680, h: 310, color: '#3EC6D6' },
+      F2: { id: 'F2', label: 'Story Items - reusable piece set', x: 30, y: 330, w: 880, h: 390, color: '#43BF87' },
+      F3: { id: 'F3', label: 'Lore locations and voice events', x: 940, y: 380, w: 760, h: 520, color: '#A87BF0' },
+    },
+  };
+}
+
+function makeTurtleCostumeMechanicsStructure() {
+  const turtles = [
+    { key: 'LEO', name: 'Leonardo', color: '#5CA8F5', tone: 'clear, leaderly, encouraging' },
+    { key: 'RAPH', name: 'Raphael', color: '#E86464', tone: 'dry, punchy, impatient but protective' },
+    { key: 'DON', name: 'Donatello', color: '#A87BF0', tone: 'technical, curious, problem-solving' },
+    { key: 'MIKE', name: 'Michelangelo', color: '#E0A23C', tone: 'playful, hungry, chaotic and upbeat' },
+  ];
+  const pieces = [
+    ['MASK', 'Mask / Headband', 'Artifact', 'Color-coded face identity piece.'],
+    ['ARM', 'Arm Sweat Catchers', 'Artifact', 'Comedic arm bands that make progress visible.'],
+    ['LEG', 'Leg Sweat Catchers', 'Artifact', 'Comedic leg bands that build the silhouette.'],
+    ['WEAPON', 'Foam Weapon', 'Artifact', 'Safe theatrical prop weapon, no real combat use.'],
+    ['SHELL', 'Giant Shell', 'Wearable', 'Giant, ridiculous, unmistakably turtle shell. Bulky by design.'],
+  ];
+  const zones = [
+    { key: 'Z1', title: 'Zone 1 - First Collection', x: 1040, y: 120, zone: 'GPS-ZONE-1', delay: '20 seconds', triggers: 2 },
+    { key: 'Z2', title: 'Zone 2 - Mid-Session Crossing', x: 1040, y: 560, zone: 'GPS-ZONE-2', delay: '30 seconds', triggers: 2 },
+    { key: 'Z3', title: 'Final Assembly Photo', x: 1040, y: 1000, zone: 'GPS-FINAL-ASSEMBLY', delay: '15 seconds', triggers: 1 },
+  ];
+  const nodes = {};
+  const edges = [];
+
+  turtles.forEach((turtle, teamIndex) => {
+    const baseX = 50 + teamIndex * 230;
+    nodes[`TEAM-${turtle.key}`] = mechanicSubnodeInstance(`TEAM-${turtle.key}`, 'team', `Team ${turtle.name}`, baseX, 80, { teamIds: [] });
+    nodes[`PLAYER-${turtle.key}`] = mechanicSubnodeInstance(`PLAYER-${turtle.key}`, 'player', `${turtle.name} Shell Wearer`, baseX, 210, { playerIds: [] });
+    nodes[`COMMENT-${turtle.key}`] = mechanicSubnodeInstance(`COMMENT-${turtle.key}`, 'comment', `${turtle.name} Tone Comment`, baseX, 340, {
+      commentText: `Voice tone for this team: ${turtle.tone}. Keep lines funny, occasionally useful, and never mean-spirited.`,
+      authorDate: 'Seed template',
+    });
+    nodes[`READY-${turtle.key}`] = mechanicSubnodeInstance(`READY-${turtle.key}`, 'readinessStatus', `${turtle.name} Readiness`, baseX, 470, {
+      status: 'Draft',
+      notes: 'Duplicate and bind this placeholder to real team/player records when importing into a game.',
+    });
+    edges.push(
+      { from: `TEAM-${turtle.key}`, to: `PLAYER-${turtle.key}`, label: 'designated wearer', color: null },
+      { from: `TEAM-${turtle.key}`, to: `COMMENT-${turtle.key}`, label: 'voice tone', color: null },
+      { from: `TEAM-${turtle.key}`, to: `READY-${turtle.key}`, label: 'production state', color: null },
+    );
+    pieces.forEach(([pieceKey, title, baseType, lore], pieceIndex) => {
+      const id = `${pieceKey}-${turtle.key}`;
+      const isShell = pieceKey === 'SHELL';
+      nodes[id] = {
+        id,
+        kind: 'item',
+        title: `${turtle.name} ${title}`,
+        shortTitle: isShell ? `${turtle.name} Shell` : title.replace(' / ', ' '),
+        x: baseX,
+        y: 650 + pieceIndex * 135,
+        body: lore,
+        playerLore: lore,
+        completeLore: isShell
+          ? 'Facilitator construction: minimum 40 cm protrusion, covers most of back, creates noticeable movement friction without pain, internal GPS tracker space, modular EVA foam on PVC frame preferred, heavy-duty Velcro plus backup straps.'
+          : 'Purely physical costume piece for visual progression, team identity, humor, and final photo readability.',
+        baseType,
+        origin: 'Found or scavenged in a task zone.',
+        gameplayMeaning: isShell
+          ? 'The only tech-enabled costume piece. Its bulk creates embodied comedic friction and its GPS tracker triggers voice-line reactions.'
+          : 'Visible collection progress; connects to the shell so the costume looks increasingly complete.',
+        persistsAcrossTasks: true,
+        buildStatus: isShell ? 'design' : 'concept',
+        color: isShell ? '#43BF87' : turtle.color,
+        image: turtleSvg(isShell ? `${turtle.name} Shell` : title, isShell ? '#43BF87' : turtle.color),
+      };
+      edges.push(
+        { from: `TEAM-${turtle.key}`, to: id, label: 'team piece', color: null },
+        { from: id, to: `READY-${turtle.key}`, label: 'track build status', color: null },
+      );
+      if (!isShell) edges.push({ from: id, to: `SHELL-${turtle.key}`, label: 'visual completion', color: null });
+    });
+  });
+
+  zones.forEach((zone, zoneIndex) => {
+    const y = zone.y;
+    nodes[`CC-${zone.key}`] = {
+      id: `CC-${zone.key}`, primitiveId: 'LIB-MPRIM-CHALLENGE-CORE', kind: 'mechanic', mechKind: 'challengeCore',
+      title: `${zone.title} Challenge Core`, x: zone.x, y,
+      body: 'Root task node for one major zone in the turtle costume mechanic.',
+      color: '#A87BF0',
+      goal: 'Collect and equip costume pieces while triggering voice reactions through the active shell.',
+      cooperationStyle: 'Asymmetric',
+      physicalTrackSubnodeIds: [`PR-${zone.key}`, `PI-${zone.key}`, `SN-${zone.key}`, `AC-${zone.key}`],
+      cognitiveTrackSubnodeIds: [`DISC-${zone.key}`, `SPEC-${zone.key}`],
+      noteColor: '#A87BF0',
+    };
+    nodes[`PR-${zone.key}`] = {
+      id: `PR-${zone.key}`, primitiveId: 'LIB-MPRIM-PHYSICAL-RESTRICTION', kind: 'mechanic', mechKind: 'physicalRestriction',
+      title: `${zone.title} Bulky Shell Restriction`, x: zone.x + 310, y: y - 110,
+      body: 'Bulky shell creates movement friction and comedic difficulty.',
+      color: '#F08CB4',
+      restrictionType: 'Custom',
+      connectTo: { nodeIds: turtles.map((t) => `SHELL-${t.key}`) },
+      safetyRule: 'Shell must never cause pain, overheating, blocked breathing, stair risk, or forced running. Safety breaks fiction immediately.',
+      stopCondition: 'Remove or loosen shell if the wearer reports pain, dizziness, panic, breathing restriction, heat stress, or unsafe terrain.',
+      noteColor: '#F08CB4',
+      attachedSubnodeIds: [],
+    };
+    nodes[`PI-${zone.key}`] = {
+      id: `PI-${zone.key}`, primitiveId: 'LIB-MPRIM-PROP-INTERACTION', kind: 'objective', mechKind: 'propInteraction',
+      title: `${zone.title} Collect + Equip Pieces`, x: zone.x + 310, y: y + 80,
+      body: 'Players collect, equip, carry, and visually assemble costume pieces.',
+      color: '#E0A23C',
+      interactionType: 'Custom',
+      successCondition: 'Team collects and equips the available costume pieces; partial progress still counts and remains visible.',
+      failureCondition: 'A piece is missed, dropped, or delayed; the team continues with partial visual progress.',
+      resetProcedure: 'Crew returns dropped pieces to the zone reset point and logs missing pieces for final photo handling.',
+      connectTo: { itemIds: [], sensorIds: [], nodeIds: turtles.flatMap((t) => pieces.map(([pieceKey]) => `${pieceKey}-${t.key}`)), ideas: [] },
+      noteColor: '#E0A23C',
+      attachedSubnodeIds: [],
+    };
+    nodes[`SN-${zone.key}`] = {
+      id: `SN-${zone.key}`, primitiveId: 'LIB-MPRIM-SENSOR-NODE', kind: 'sensor', mechKind: 'sensorNode',
+      title: `${zone.title} Shell GPS Sensor`, x: zone.x + 650, y: y - 110,
+      body: 'GPS zone sensor for shells. Fires only from shell location and dwell time.',
+      color: '#3EC6D6',
+      sensorType: 'GPS Zone',
+      zoneReference: zone.zone,
+      inputRequired: `Shell tracker enters ${zone.zone} and remains present for the dwell time. Partial activation can be treated as facilitator-confirmed if GPS jitters near the boundary.`,
+      triggerCondition: 'Two-stage trigger: first reaction after sustained presence; second reaction later, near task completion, or after visible progress.',
+      frequencyLimitEnabled: true,
+      frequencyTriggerCount: zone.triggers,
+      frequencyTimePeriod: '10 minutes',
+      cooldownEnabled: true,
+      cooldownDuration: '2 minutes',
+      manualOverrideFallback: 'Crew can manually confirm the shell is in-zone and play the intended MP3 if GPS fails.',
+      reliability: '3',
+      nodeColor: '#3EC6D6',
+    };
+    nodes[`AC-${zone.key}`] = {
+      id: `AC-${zone.key}`, primitiveId: 'LIB-MPRIM-ACTUATOR-NODE', kind: 'mechanic', mechKind: 'actuatorNode',
+      title: `${zone.title} Voice-Line Speaker`, x: zone.x + 980, y: y - 20,
+      body: 'Sound actuator that plays MP3 voice reactions through hidden/permanent or portable speakers.',
+      color: '#5CA8F5',
+      actuatorType: 'Sound',
+      audioFileRef: `${zone.key.toLowerCase()}-turtle-reaction.mp3`,
+      frequencyLimitEnabled: true,
+      frequencyTriggerCount: zone.triggers,
+      frequencyTimePeriod: '10 minutes',
+      cooldownEnabled: true,
+      cooldownDuration: '2 minutes',
+      outputDuration: 'One short MP3 line, ideally 4-12 seconds.',
+      outputIntensity: 'Clearly audible in the zone without startling nearby non-players.',
+      outputRhythm: 'Mix funny, lore, and useful lines. Slight turtle-specific tone variation is chosen by team instance.',
+      resetBehavior: 'Ready for the next allowed trigger after cooldown.',
+      manualOverrideFallback: 'Crew can play the MP3 manually from phone or backup speaker.',
+      nodeColor: '#5CA8F5',
+    };
+    nodes[`PS-${zone.key}`] = {
+      id: `PS-${zone.key}`, primitiveId: 'LIB-MPRIM-PROGRESS-STATE', kind: 'mechanic', mechKind: 'progressState',
+      title: `${zone.title} Collection Progress`, x: zone.x + 650, y: y + 135,
+      body: 'Overall task completion: costume pieces collected and reaction stages triggered.',
+      color: '#A87BF0',
+      currentProgress: zoneIndex === 0 ? 3 : zoneIndex === 1 ? 6 : 10,
+      visualStyle: 'Segmented bar',
+    };
+    const mods = [
+      ['COOP', 'cooperativeEthosRole', 'Role Split', { cooperationStyle: 'Differentiated roles', roleSuggestions: 'Wearer carries shell; collectors gather pieces; coordinator watches timing, route, and handoffs.', ethosTone: 'Playful chaos', ethosToneGuidance: 'Keep the team laughing while protecting the wearer from fatigue.', teamDiscussionPrompt: 'Who protects the shell wearer, who collects, and who watches the path?' }],
+      ['NOSOLO', 'noSoloEnforcer', 'No Solo Solve', { enforcementType: ['Multiple props', 'Role lock', 'Physical distance'], minimumPlayers: 2 }],
+      ['FEED', 'progressiveFeedback', 'Voice Feedback Escalation', { feedbackType: ['Audio cue', 'Information reveal'], triggerCondition: 'Dwell time sustained or piece count increases.', effectDescription: 'Voice lines become clearer, more useful, or more triumphant as the team progresses.', strengthIntensity: 'Moderate', canStack: true }],
+      ['FAIL', 'failSafeScaffolding', 'Fail Forward Voice Line', { hintLevelCount: 2, hintTrigger: 'Facilitator call', easierAlternativeEnabled: true, easierAlternativePath: 'If GPS or costume handling fails, allow humorous consolation line or lore fragment and continue.', partialCreditRule: 'Partial costume progress still counts visually.', skipEnabled: false, gracePeriodMinutes: 2 }],
+      ['DISC', 'teamDiscussionPrompt', 'Discussion Prompt', { discussionPrompt: 'Before moving on, ask: what is funniest about our current turtle silhouette, and what do we need next?', whenToUse: 'Between attempts', facilitatorNote: 'Use at zone entry, after first reaction, and when teams cross paths.' }],
+      ['ARB', 'arbitration', 'GPS Tolerance', { varianceHandling: 'Generous tolerance', toleranceDescription: 'Treat near-boundary GPS jitter as valid if the shell wearer is physically in the intended area.', partialCreditRule: 'Manual confirmation can count.', facilitatorOverride: true, logging: false }],
+      ['SPEC', 'spectrumOfYesOutcomes', 'Spectrum of Outcomes', { outcomeLevels: 'Yes and; Yes; Yes but; No but; No; No and', yesAndDescription: 'Voice line is funny/useful and team gains visible progress.', yesDescription: 'Voice line fires and piece is collected.', yesButDescription: 'Voice line fires late or with partial collection.', noButDescription: 'No trigger, but crew grants a consolation clue.', noDescription: 'No trigger and no piece yet; continue moving.', noAndDescription: 'Unsafe or chaotic handling; pause and reset safely.', defaultSelection: ['Yes and', 'Yes', 'Yes but', 'No but'] }],
+      ['PRES', 'escalatingPressure', 'Light Later Pressure', { pressureType: ['Time', 'Environmental change'], baseDurationMinutes: zoneIndex === 2 ? 10 : 20, escalationTrigger: 'Later zone or long dwell without progress.', escalationEffect: 'Increase urgency lightly through music, route instruction, or a teasing voice line.', canBePaused: true }],
+      ['MULTI', 'multipleOutputLogic', 'Two-Stage Voice Resolver', { inputConditions: 'Stage 1: first sustained dwell. Stage 2: later dwell, near completion, or after visible piece progress.', correspondingOutputs: 'Stage 1: recognition/funny line. Stage 2: lore/useful line or final hype line.', defaultOutput: 'Funny neutral turtle line.' }],
+      ['DELAY', 'triggerDelay', 'Dwell Delay', { delayDuration: zone.delay, delayType: 'Fixed' }],
+      ['FAC', 'facilitatorNote', 'Safety and Oversight', { facilitatorGuidance: 'Monitor shell fatigue, strap comfort, speaker placement, route crossings, and final photo coordination even with missing pieces.' }],
+      ['COMMENT', 'comment', 'Production Open Questions', { commentText: 'Open questions: exact shell dimensions, attachment method for modular sections, voice-line count per zone, speaker placement, and comfort calibration.', authorDate: 'Seed template' }],
+      ['READY', 'readinessStatus', 'Zone Readiness', { status: 'Draft', notes: 'Needs GPS field test, audio volume test, route test, and costume comfort test.' }],
+    ];
+    mods.forEach(([prefix, kind, title, fields], index) => {
+      const id = `${prefix}-${zone.key}`;
+      nodes[id] = mechanicSubnodeInstance(id, kind, `${zone.title} ${title}`, zone.x + 1320 + (index % 2) * 270, y - 190 + Math.floor(index / 2) * 120, fields);
+      edges.push({ from: `CC-${zone.key}`, to: id, label: 'modifier/support', color: null });
+    });
+    edges.push(
+      { from: `CC-${zone.key}`, to: `PR-${zone.key}`, label: 'physical restriction', color: null },
+      { from: `CC-${zone.key}`, to: `PI-${zone.key}`, label: 'prop interaction', color: null },
+      { from: `CC-${zone.key}`, to: `SN-${zone.key}`, label: 'zone input', color: null },
+      { from: `SN-${zone.key}`, to: `DELAY-${zone.key}`, label: 'dwell time', color: null },
+      { from: `DELAY-${zone.key}`, to: `MULTI-${zone.key}`, label: 'stage resolver', color: null },
+      { from: `MULTI-${zone.key}`, to: `AC-${zone.key}`, label: 'play selected MP3', color: null },
+      { from: `CC-${zone.key}`, to: `PS-${zone.key}`, label: 'progress indicator', color: null },
+    );
+    turtles.forEach((turtle) => {
+      edges.push(
+        { from: `TEAM-${turtle.key}`, to: `CC-${zone.key}`, label: 'runs this zone', color: null },
+        { from: `SHELL-${turtle.key}`, to: `PR-${zone.key}`, label: 'creates friction', color: null },
+        { from: `SHELL-${turtle.key}`, to: `SN-${zone.key}`, label: 'GPS source', color: null },
+        { from: `PLAYER-${turtle.key}`, to: `SN-${zone.key}`, label: 'wearer carries shell', color: null },
+      );
+    });
+  });
+
+  return {
+    id: 'LIB-MSTRUCT-TURTLE-COSTUME-COLLECTION',
+    name: 'TMNT Costume Collection - Multi-Team Mechanics',
+    description: 'Mechanics-only full-session template using existing Larcraft nodes: four teams, costume pieces, bulky shell restriction, GPS sensors, two-stage MP3 reactions, modifiers, progress, comments, facilitator notes, and readiness tags.',
+    estMinutes: 120,
+    nodes: {
+      S1: {
+        id: 'S1', primitiveId: 'LIB-MPRIM-TASK-TEMPLATE', kind: 'mechanic', mechKind: 'taskTemplate',
+        title: 'TMNT Costume Collection Mechanics', x: 70, y: 110,
+        body: 'Reusable mechanics container for the full multi-team turtle costume collection session. Open deeper levels to edit teams, pieces, zones, GPS triggers, audio, safety, and progress.',
+        color: '#8B7BF5',
+        estMinutes: 120, minPlayers: 8, maxPlayers: 28,
+        recommendedCrew: 'At least one roaming facilitator plus one tech/audio owner. More crew recommended for four simultaneous teams.',
+        difficultyPressure: 'Medium',
+        reusableAsLibraryTemplate: true,
+        sub: {
+          nodes,
+          edges,
+          frames: {
+            F1: { id: 'F1', label: 'Teams and designated shell wearers', x: 20, y: 35, w: 940, h: 560, color: '#5CA8F5' },
+            F2: { id: 'F2', label: 'Costume pieces - duplicate per turtle', x: 20, y: 610, w: 940, h: 790, color: '#43BF87' },
+            F3: { id: 'F3', label: 'Reusable zone challenge clusters', x: 990, y: 40, w: 1960, h: 1390, color: '#A87BF0' },
+          },
+        },
+      },
+    },
+    edges: [],
+    frames: {
+      F1: { id: 'F1', label: 'Full-session mechanics template', x: 35, y: 55, w: 500, h: 280, color: '#8B7BF5' },
+    },
+  };
 }
 
 export function makeLibrarySeed() {
@@ -303,6 +1503,7 @@ export function makeLibrarySeed() {
       'LIB-ITM-006': { id: 'LIB-ITM-006', name: 'Signal Beacon', type: 'gadget', description: 'Extraction call-in beacon for finales.', propNotes: '3D-printed shell, ESP32 + LED ring.', loreNotes: '', mechanicIds: [], sensorReqs: [{ sensorId: 'LIB-SEN-RF', note: 'GM console receiver' }], image: null },
       'LIB-ITM-007': { id: 'LIB-ITM-007', name: 'UV Torch', type: 'gadget', description: 'Reveals hidden ink markings.', propNotes: 'Consumer UV flashlight.', loreNotes: '', mechanicIds: ['LIB-MECH-UV'], sensorReqs: [], image: null },
       'LIB-ITM-008': { id: 'LIB-ITM-008', name: 'Medkit Prop', type: 'consumable', description: 'Revive kit: bandage cards + ritual instructions.', propNotes: 'Surplus pouch, 12 bandage cards.', loreNotes: '', mechanicIds: ['LIB-MECH-REVIVE'], sensorReqs: [], image: null },
+      'LIB-ITM-MACRODROID-PHONE': { id: 'LIB-ITM-MACRODROID-PHONE', name: 'MacroDroid Phone Bridge', type: 'gadget', description: 'Android phone running MacroDroid to receive the GPS trigger and play the assigned MP3 through a speaker.', propNotes: 'Phone with MacroDroid macro, charged battery, paired speaker, local MP3 files, and mobile data/GPS enabled.', loreNotes: '', mechanicIds: [], sensorReqs: [], image: null },
     },
 
     locations: {
@@ -319,32 +1520,140 @@ export function makeLibrarySeed() {
     // blocks — beats, plot hooks, briefing scripts, NPC bios, rumors, lore.
     // Each is a narrative node you can drop onto a story-structure canvas or
     // import into a game as a story node. No mechanic/sensor logic lives here.
-    narrative: {
-      'LIB-NAR-001': { id: 'LIB-NAR-001', name: 'Start Briefing', category: 'briefing-script', color: '#5CA8F5', icon: 'flag', body: 'Hand teams the mission dossier and start the clock.', tags: ['opening'], inputs: [], outputs: ['out'] },
-      'LIB-NAR-002': { id: 'LIB-NAR-002', name: 'Plot Twist', category: 'plot-hook', color: '#F08CB4', icon: 'alert', body: 'A revelation reframes the mission. Deliver via NPC or comms.', tags: ['twist'], inputs: ['in'], outputs: ['out'] },
-      'LIB-NAR-003': { id: 'LIB-NAR-003', name: 'The Double Agent', category: 'plot-hook', color: '#F08CB4', icon: 'alert', body: 'One trusted NPC has been feeding the opposing faction all along. Plant three small clues before the reveal.', tags: ['betrayal', 'mid-game'], inputs: ['in'], outputs: ['out'] },
-      'LIB-NAR-004': { id: 'LIB-NAR-004', name: 'Cold Open Briefing', category: 'briefing-script', color: '#5CA8F5', icon: 'flag', body: '"You were told this is a routine supply run. It is not. Twelve hours ago we lost contact with the site team…" — read aloud, then hand over the dossier.', tags: ['opening'], inputs: [], outputs: ['out'] },
-      'LIB-NAR-005': { id: 'LIB-NAR-005', name: 'Quartermaster Mank', category: 'npc-bio', color: '#E0A23C', icon: 'swap', body: 'Gruff, incorruptible, keeps meticulous ledgers. Will trade information only for returned equipment. Never leaves the depot.', tags: ['npc', 'trader'], inputs: ['in'], outputs: ['out'] },
-      'LIB-NAR-006': { id: 'LIB-NAR-006', name: 'The Meteor Rumor', category: 'rumor', color: '#43BF87', icon: 'zap', body: 'Players overhear: the artifact metal is not from Earth, and it hums near powered sensors. (True — usable as a hint.)', tags: ['hint', 'artifact'], inputs: ['in'], outputs: ['out'] },
-      'LIB-NAR-007': { id: 'LIB-NAR-007', name: 'Chimera Program Lore', category: 'lore', color: '#A87BF0', icon: 'cog', body: 'Operation Chimera was a cancelled cold-war program to hide a listening post inside civilian logistics. Its flight paths were never declassified.', tags: ['backstory'], inputs: ['in'], outputs: ['out'] },
-      'LIB-NAR-008': { id: 'LIB-NAR-008', name: 'Radio Intercept 03:00', category: 'plot-hook', color: '#F08CB4', icon: 'alert', body: 'A garbled transmission names one of the player teams as "the decoys". Broadcast it on the comms channel at the act break.', tags: ['twist', 'comms'], inputs: ['in'], outputs: ['out'] },
-    },
+    narrative: {},
 
     // MECHANIC PRIMITIVES (Game Mechanics node tree): the physical / sensor /
     // task node types — sensor triggers, puzzles, challenges, timers, waypoints,
     // handoffs. These are the mechanics counterpart to the narrative nodes.
     mechPrimitives: {
-      'LIB-MPRIM-WAYPT': { id: 'LIB-MPRIM-WAYPT', name: 'Waypoint Check-in', baseKind: 'location', color: '#43BF87', icon: 'pin', inputs: ['in'], outputs: ['out'], defaultBody: 'Team must physically reach and confirm a marked point.', estMinutes: 5, crew: 0 },
-      'LIB-MPRIM-SENSOR': { id: 'LIB-MPRIM-SENSOR', name: 'Sensor Trigger', baseKind: 'sensor', color: '#3EC6D6', icon: 'zap', inputs: ['arm'], outputs: ['fired'], defaultBody: 'Fires a quest flag when the linked hardware triggers.', estMinutes: 1, crew: 0 },
-      'LIB-MPRIM-HANDOFF': { id: 'LIB-MPRIM-HANDOFF', name: 'Item Handoff', baseKind: 'objective', color: '#E0A23C', icon: 'swap', inputs: ['in'], outputs: ['done'], defaultBody: 'A physical item changes hands — player↔player or player↔NPC.', estMinutes: 8, crew: 1 },
-      'LIB-MPRIM-PUZZLE': { id: 'LIB-MPRIM-PUZZLE', name: 'Environmental Puzzle', baseKind: 'mechanic', color: '#A87BF0', icon: 'cog', inputs: ['in'], outputs: ['solved', 'failed'], defaultBody: 'On-site puzzle using props or sensors; hint after 3 fails.', estMinutes: 12, crew: 0 },
-      'LIB-MPRIM-PHYS': { id: 'LIB-MPRIM-PHYS', name: 'Physical Challenge', baseKind: 'enemy', color: '#E86464', icon: 'cross', inputs: ['in'], outputs: ['won', 'lost'], defaultBody: 'Chase, carry, or evade — crew referees the outcome.', estMinutes: 10, crew: 2 },
-      'LIB-MPRIM-TIMER': { id: 'LIB-MPRIM-TIMER', name: 'Countdown Pressure', baseKind: 'mechanic', color: '#E8D25C', icon: 'clock', inputs: ['start'], outputs: ['expired'], defaultBody: 'Visible countdown; expiry punishes or escalates.', estMinutes: 15, crew: 0 },
+      'LIB-MPRIM-TASK-TEMPLATE': {
+        id: 'LIB-MPRIM-TASK-TEMPLATE', name: 'Task Template', mechKind: 'taskTemplate',
+        baseKind: 'mechanic', color: '#8B7BF5', icon: 'layers', inputs: ['start'], outputs: ['complete', 'branch'],
+        defaultBody: 'Reusable collapsed container for a complete task graph. Expand to edit the internal mechanics.',
+        estMinutes: 20, minPlayers: 3, maxPlayers: 7, crew: 0, recommendedCrew: '', refs: {}, collapseDepth: 1,
+        difficultyPressure: 'Medium', reusableAsLibraryTemplate: true,
+      },
+      'LIB-MPRIM-CHALLENGE-CORE': {
+        id: 'LIB-MPRIM-CHALLENGE-CORE', name: 'Challenge Core', mechKind: 'challengeCore',
+        baseKind: 'mechanic', color: '#A87BF0', icon: 'cog', inputs: ['start'], outputs: ['complete', 'branch'],
+        defaultBody: 'Central task controller: goal, physical/cognitive tracks, and cooperation style. Add subnodes for pressure, outcomes, fail-safes, and advanced rules.',
+        estMinutes: 15, crew: 1, refs: {}, collapseDepth: 0, goal: '', cooperationStyle: 'Parallel',
+        physicalTrackSubnodeIds: [], cognitiveTrackSubnodeIds: [], noteColor: '#A87BF0',
+      },
+      'LIB-MPRIM-PHYSICAL-RESTRICTION': {
+        id: 'LIB-MPRIM-PHYSICAL-RESTRICTION', name: 'Physical Restriction', mechKind: 'physicalRestriction',
+        baseKind: 'state', color: '#E86464', icon: 'cross', inputs: ['apply'], outputs: ['restricted', 'released'],
+        defaultBody: 'Applies a body, movement, communication, or carrying limitation with explicit safety and stop rules.',
+        estMinutes: 1, crew: 1, refs: {}, collapseDepth: 0, restrictionType: 'Blindfold',
+        connectTo: { nodeIds: [] },
+        safetyRule: '', stopCondition: '', noteColor: '#E86464', attachedSubnodeIds: [],
+      },
+      'LIB-MPRIM-PROP-INTERACTION': {
+        id: 'LIB-MPRIM-PROP-INTERACTION', name: 'Prop Interaction', mechKind: 'propInteraction',
+        baseKind: 'objective', color: '#E0A23C', icon: 'swap', inputs: ['in'], outputs: ['success', 'fail', 'reset'],
+        defaultBody: 'Defines how players manipulate existing physical item/artifact records: carry, balance, sort, throw, assemble, unlock, or trade.',
+        estMinutes: 8, crew: 0, refs: {}, collapseDepth: 0, interactionType: 'Balance',
+        successCondition: '', failureCondition: '', resetProcedure: '',
+        connectTo: { itemIds: [], sensorIds: [], nodeIds: [], ideas: [] },
+        noteColor: '#E0A23C', attachedSubnodeIds: [],
+      },
+      'LIB-MPRIM-SENSOR-NODE': {
+        id: 'LIB-MPRIM-SENSOR-NODE', name: 'Sensor Node', mechKind: 'sensorNode',
+        baseKind: 'sensor', color: '#3EC6D6', icon: 'zap', inputs: ['watch'], outputs: ['triggered'],
+        defaultBody: 'Gameplay sensor: what it detects, what input activates it, and when it should trigger in the game.',
+        estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0, sensorType: 'Pressure',
+        zoneReference: '', inputRequired: '', triggerCondition: '',
+        frequencyLimitEnabled: false, frequencyTriggerCount: 1, frequencyTimePeriod: '1 minute',
+        cooldownEnabled: false, cooldownDuration: '30 seconds',
+        manualOverrideFallback: '', reliability: '3', nodeColor: '#3EC6D6',
+      },
+      'LIB-MPRIM-ACTUATOR-NODE': {
+        id: 'LIB-MPRIM-ACTUATOR-NODE', name: 'Actuator Node', mechKind: 'actuatorNode',
+        baseKind: 'mechanic', color: '#5CA8F5', icon: 'flag', inputs: ['activate'], outputs: ['effect'],
+        defaultBody: 'Gameplay output: what happens in the world when this actuator fires.',
+        estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0, actuatorType: 'Light',
+        audioFileRef: '', outputDuration: '', outputIntensity: '', outputRhythm: '', resetBehavior: '',
+        frequencyLimitEnabled: false, frequencyTriggerCount: 1, frequencyTimePeriod: '1 minute',
+        cooldownEnabled: false, cooldownDuration: '30 seconds',
+        manualOverrideFallback: '', nodeColor: '#5CA8F5',
+      },
+      'LIB-MPRIM-CHARACTER-STATE': {
+        id: 'LIB-MPRIM-CHARACTER-STATE', name: 'Character State', mechKind: 'characterState',
+        baseKind: 'state', color: '#F08CB4', icon: 'user', inputs: ['observe'], outputs: ['respond', 'change'],
+        defaultBody: 'Pre-programmed character/NPC state for dialogue trees and AI agent behavior.',
+        estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0, emotionalState: 'Neutral',
+        behavioralNotes: '', nodeColor: '#F08CB4', attachedSubnodeIds: [],
+        deprecated: true, hiddenFromPalette: true,
+        migrationHint: 'Character State has moved to Narrative Subnodes. Use the narrative Character State subnode for future story/dialogue behavior.',
+      },
+      'LIB-MPRIM-SENSOR': {
+        id: 'LIB-MPRIM-SENSOR', name: 'Sensor Trigger', baseKind: 'sensor', color: '#3EC6D6', icon: 'zap',
+        inputs: ['arm'], outputs: ['fired'],
+        defaultBody: 'This node is deprecated. Its functionality has been merged into the Sensor node.',
+        estMinutes: 1, crew: 0, deprecated: true, hiddenFromPalette: true,
+        migrationHint: 'Use Sensor Node instead. This node is deprecated. Its functionality has been merged into the Sensor node.',
+      },
+      'LIB-MPRIM-PROGRESS-STATE': {
+        id: 'LIB-MPRIM-PROGRESS-STATE', name: 'Progress State', mechKind: 'progressState',
+        baseKind: 'mechanic', category: 'supporting', color: '#A87BF0', icon: 'pin',
+        inputs: ['attach'], outputs: ['progress'],
+        defaultBody: 'Visual task completion tracker: shows how many of 10 steps are complete.',
+        estMinutes: 1, crew: 0, currentProgress: 1, visualStyle: 'Segmented bar',
+      },
     },
+
+    // MECHANIC SUBNODES: attachable modifiers for mechanic nodes, especially
+    // Challenge Core and Task Template nodes. They mirror narrative subnodes:
+    // separate reusable library records, then attached into a specific task
+    // graph when the designer needs that modifier.
+    mechSubnodes: Object.fromEntries(MECHANIC_SUBNODE_KINDS.map((kind) => {
+      const id = `LIB-MSUB-${kind}`;
+      return [id, MECHANIC_SUBNODE_BLANK(id, kind)];
+    })),
 
     // Editable type systems (persist across games in the Library).
     itemTypes: { ...DEFAULT_ITEM_TYPES },
     narrativeCategories: { ...DEFAULT_NARRATIVE_CATEGORIES },
+    mechanicRestrictionTypes: {
+      'RST-BLINDFOLD': { id: 'RST-BLINDFOLD', label: 'Blindfold', custom: false },
+      'RST-BIND-ONE-HAND': { id: 'RST-BIND-ONE-HAND', label: 'Binding one hand', custom: false },
+      'RST-SILENCE': { id: 'RST-SILENCE', label: 'Silence', custom: false },
+      'RST-CARRY-LOAD': { id: 'RST-CARRY-LOAD', label: 'Carry load', custom: false },
+      'RST-MOBILITY-LIMIT': { id: 'RST-MOBILITY-LIMIT', label: 'Mobility limit', custom: false },
+    },
+    mechanicInteractionTypes: {
+      'PIT-BALANCE': { id: 'PIT-BALANCE', label: 'Balance', custom: false },
+      'PIT-CARRY': { id: 'PIT-CARRY', label: 'Carry', custom: false },
+      'PIT-SORT': { id: 'PIT-SORT', label: 'Sort', custom: false },
+      'PIT-THROW': { id: 'PIT-THROW', label: 'Throw', custom: false },
+      'PIT-ASSEMBLE': { id: 'PIT-ASSEMBLE', label: 'Assemble', custom: false },
+      'PIT-UNLOCK': { id: 'PIT-UNLOCK', label: 'Unlock', custom: false },
+      'PIT-TRADE': { id: 'PIT-TRADE', label: 'Trade', custom: false },
+    },
+    mechanicSensorTypes: {
+      'SNT-PRESSURE': { id: 'SNT-PRESSURE', label: 'Pressure', custom: false },
+      'SNT-NFC': { id: 'SNT-NFC', label: 'NFC', custom: false },
+      'SNT-MOTION': { id: 'SNT-MOTION', label: 'Motion', custom: false },
+      'SNT-GPS-ZONE': { id: 'SNT-GPS-ZONE', label: 'GPS Zone', custom: false },
+      'SNT-BUTTON': { id: 'SNT-BUTTON', label: 'Button', custom: false },
+    },
+    mechanicActuatorTypes: {
+      'ACT-LIGHT': { id: 'ACT-LIGHT', label: 'Light', custom: false },
+      'ACT-SOUND': { id: 'ACT-SOUND', label: 'Sound', custom: false },
+      'ACT-MOVEMENT': { id: 'ACT-MOVEMENT', label: 'Movement', custom: false },
+      'ACT-LOCK': { id: 'ACT-LOCK', label: 'Lock', custom: false },
+      'ACT-DISPLAY': { id: 'ACT-DISPLAY', label: 'Display', custom: false },
+      'ACT-MESSAGE': { id: 'ACT-MESSAGE', label: 'Message', custom: false },
+    },
+    mechanicCharacterEmotionTypes: {
+      'CEM-NEUTRAL': { id: 'CEM-NEUTRAL', label: 'Neutral', custom: false },
+      'CEM-SAD': { id: 'CEM-SAD', label: 'Sad', custom: false },
+      'CEM-ANGRY': { id: 'CEM-ANGRY', label: 'Angry', custom: false },
+      'CEM-JOYFUL': { id: 'CEM-JOYFUL', label: 'Joyful', custom: false },
+      'CEM-CONFUSED': { id: 'CEM-CONFUSED', label: 'Confused', custom: false },
+      'CEM-HOSTILE': { id: 'CEM-HOSTILE', label: 'Hostile', custom: false },
+      'CEM-ALLIED': { id: 'CEM-ALLIED', label: 'Allied', custom: false },
+    },
 
     // GAME MASTER RULES: global design principles that shape the whole game.
     // Each rule leads with a short core principle (≤4 sentences), then carries
@@ -366,6 +1675,14 @@ export function makeLibrarySeed() {
         rationale: 'Real-life games cannot pause and retry cleanly; a hard dead-end strands players physically and kills a session. Fail-forward design keeps everyone in motion, turns mistakes into story, and lets weaker teams still reach an ending.',
         aiRule: 'For every stage with a fail state, verify a defined next action exists on failure. If failure leads to "nothing happens" or "wait and try again", replace it with a consequence that changes the game state or opens an alternate route before finalizing.',
       },
+      'LIB-GMR-TURTLE-SHELLS': {
+        id: 'LIB-GMR-TURTLE-SHELLS',
+        title: 'Turtle Shell Comedy Safety',
+        principle: 'Bulky costume friction is allowed only while it stays funny, manageable, and clearly safe. Safety breaks fiction, and the shell wearer can stop or loosen the shell at any time.',
+        implementation: 'Brief teams that the shell is a comedic movement rule, not an endurance test. Crew watch fatigue, heat, strap pressure, terrain, and route crossings. Voice reactions should feel like the world recognizing the turtles, but failed GPS or missing pieces should fail forward with a manual line, a consolation joke, or a lore fragment.',
+        rationale: 'The mechanic works because the visible costume creates shared absurdity and social bonding. If discomfort becomes pain, embarrassment, or unsafe movement, the mechanic stops being playful and damages trust.',
+        aiRule: 'Before approving a turtle zone, verify shell comfort, stop condition, manual GPS fallback, speaker volume, route crossing logistics, and final photo handling for incomplete costumes.',
+      },
       'LIB-GMR-003': {
         id: 'LIB-GMR-003',
         title: 'Safety Breaks Fiction',
@@ -380,37 +1697,103 @@ export function makeLibrarySeed() {
     // assembled from narrative nodes (no mechanic nodes). Importing one into a
     // game creates a fully detached copy of the whole graph.
     stories: {
-      'LIB-STORY-BETRAY': {
-        id: 'LIB-STORY-BETRAY', name: 'Betrayal Reveal',
-        description: 'A slow-burn traitor arc: seed suspicion, twist the knife, then flip who the enemy really was.',
-        estMinutes: 30,
+      'LIB-STORY-TURTLE-SESSION': makeTurtleSessionStoryStructure(),
+      'LIB-STORY-ITEM-NODE-GRAPH': {
+        id: 'LIB-STORY-ITEM-NODE-GRAPH',
+        name: 'Item Node Graph Template',
+        description: 'Reusable inspector-first Item graph: minimal canvas card, full item detail in inspector, placement ports, linked mechanics, sensor hooks, and No-Solo-Solve support.',
+        estMinutes: 5,
         nodes: {
-          S1: { id: 'S1', primitiveId: 'LIB-NAR-001', kind: 'story', title: 'Start Briefing', x: 40, y: 120, body: 'Teams get the mission and meet the trusted contact.', color: null },
-          S2: { id: 'S2', primitiveId: 'LIB-NAR-003', kind: 'story', title: 'Seed of Doubt', x: 340, y: 60, body: 'First clue that the contact is a double agent.', color: null },
-          S3: { id: 'S3', primitiveId: 'LIB-NAR-008', kind: 'story', title: 'Radio Intercept', x: 640, y: 120, body: 'A transmission names a player team as the decoys.', color: null },
-          S4: { id: 'S4', primitiveId: 'LIB-NAR-002', kind: 'story', title: 'The Reveal', x: 940, y: 60, body: 'The contact turns; the real allegiance lands.', color: null },
+          S1: {
+            id: 'S1', kind: 'item', title: 'Item Name', shortTitle: 'Item',
+            x: 70, y: 150, body: 'Player-facing lore/flavor goes here. Keep it evocative, not mechanical.',
+            playerDescription: 'Player-facing lore/flavor goes here. Keep it evocative, not mechanical.',
+            facilitatorDescription: 'Practical real-world details: prop material, dimensions, storage, reset procedure, durability, safety, and crew handling.',
+            imageRef: 'Describe or reference the intended image/prop photo.',
+            itemType: 'Artifact', buildStatus: 'concept', origin: 'Flavor origin: where this item came from or how players earn it.',
+            placementNodeIds: ['S2'], linkedMechanicNodeIds: ['S3'], linkedMechanicIds: [],
+            sensorHooks: 'NFC / QR / GPS / button interaction notes. Example: NFC scan confirms pickup and sets item_obtained.',
+            noSoloSolve: true,
+            mechanicMeaning: 'Explain why the physical mechanic matches the item theme: access, trust, proof, sacrifice, status, memory, etc.',
+            attachedTemplateNotes: 'Suggested: No-Solo Enforcer, Facilitator Note, Value, Lifespan, Spend / Use Rule, or a relevant Pip Deck concept.',
+            persistsAcrossTasks: true,
+            color: '#E0A23C',
+          },
+          S2: {
+            id: 'S2', kind: 'storyLocation', title: 'Placement Location', x: 420, y: 70,
+            body: 'Story Location where the item is placed, discovered, hidden, traded, or activated.',
+            color: '#43BF87',
+          },
+          S3: {
+            id: 'S3', kind: 'quest', title: 'Linked Mechanic', x: 420, y: 250,
+            body: 'Placeholder for a mechanic reference such as Lockpicking Minigame Event, access gate, decoding ritual, or exchange rule.',
+            color: '#A87BF0',
+          },
+          S4: {
+            id: 'S4', kind: 'quest', title: 'Sensor Hook', x: 760, y: 70,
+            body: 'Sensor interaction placeholder: NFC, QR, GPS, pressure, button, phone macro, or GM-confirmed state.',
+            color: '#3EC6D6',
+          },
+          S5: {
+            id: 'S5', kind: 'quest', title: 'No-Solo-Solve Rule', x: 760, y: 250,
+            body: 'Use when the item should require multiple players, separated information, synchronized timing, or a role split.',
+            color: '#F08CB4',
+          },
         },
         edges: [
-          { from: 'S1', to: 'S2', label: 'first clue', color: null },
-          { from: 'S2', to: 'S3', label: 'suspicion grows', color: null },
-          { from: 'S3', to: 'S4', label: 'the turn', color: null },
+          { from: 'S1', to: 'S2', label: 'Placement port', color: null },
+          { from: 'S1', to: 'S3', label: 'Linked mechanic port', color: null },
+          { from: 'S1', to: 'S4', label: 'Sensor hook port', color: null },
+          { from: 'S1', to: 'S5', label: 'enforce when relevant', color: null },
         ],
+        frames: {
+          F1: { id: 'F1', label: 'Item node graph', x: 35, y: 40, w: 1060, h: 410, color: '#E0A23C' },
+        },
       },
-      'LIB-STORY-COLDCASE': {
-        id: 'LIB-STORY-COLDCASE', name: 'Cold Case',
-        description: 'Investigation arc from a cold open through rumor and testimony to an accusation.',
-        estMinutes: 25,
+      'LIB-STORY-TURTLE-COLLECTION': {
+        id: 'LIB-STORY-TURTLE-COLLECTION',
+        name: 'Ninja Turtle Costume Collection',
+        description: 'Story-side reusable structure for one team collecting five turtle costume Story Items. This stays narrative-only; GPS, MacroDroid, speaker, and MP3 behavior live in the mechanics template.',
+        estMinutes: 45,
         nodes: {
-          S1: { id: 'S1', primitiveId: 'LIB-NAR-004', kind: 'story', title: 'Cold Open', x: 40, y: 100, body: 'The briefing that hides the real stakes.', color: null },
-          S2: { id: 'S2', primitiveId: 'LIB-NAR-006', kind: 'story', title: 'The Rumor', x: 340, y: 40, body: 'A rumor points players toward the truth.', color: null },
-          S3: { id: 'S3', primitiveId: 'LIB-NAR-005', kind: 'story', title: 'Testimony', x: 640, y: 100, body: 'An NPC gives the key testimony — for a price.', color: null },
-          S4: { id: 'S4', primitiveId: 'LIB-NAR-002', kind: 'story', title: 'Accusation', x: 940, y: 40, body: 'The twist that names the culprit.', color: null },
+          S1: {
+            id: 'S1', kind: 'concept', conceptKind: 'structureConcept', conceptId: null,
+            title: 'Turtle Costume Collection', x: 70, y: 120,
+            body: 'Duplicate this container once per team. It tracks the five costume Story Items and the story moment when the set is complete.',
+            color: '#43BF87', collapsed: true, conceptAnswers: {},
+            sub: {
+              nodes: {
+                P1: { id: 'P1', kind: 'item', title: 'Mask / Headband', x: 40, y: 80, body: 'Team identity costume piece. Story Item only.', color: '#5CA8F5', itemType: 'Wearable', origin: 'Found, earned, or awarded during play.', persistsAcrossTasks: true },
+                P2: { id: 'P2', kind: 'item', title: 'Arm Sweat Catchers', x: 330, y: 80, body: 'Wearable costume piece. Story Item only.', color: '#E0A23C', itemType: 'Wearable', origin: 'Found, earned, or awarded during play.', persistsAcrossTasks: true },
+                P3: { id: 'P3', kind: 'item', title: 'Leg Sweat Catchers', x: 40, y: 260, body: 'Wearable costume piece. Story Item only.', color: '#A87BF0', itemType: 'Wearable', origin: 'Found, earned, or awarded during play.', persistsAcrossTasks: true },
+                P4: { id: 'P4', kind: 'item', title: 'Weapon', x: 330, y: 260, body: 'Safe turtle-themed prop weapon. Story Item only unless a physical prop record is linked separately.', color: '#F08CB4', itemType: 'Wearable', origin: 'Found, earned, or awarded during play.', persistsAcrossTasks: true },
+                P5: { id: 'P5', kind: 'item', title: 'Shell', x: 620, y: 170, body: 'Special Story Item. Pair this with the NinjaTurtleShellReaction mechanics template when GPS/MP3 behavior is needed.', color: '#43BF87', itemType: 'Wearable', origin: 'Found, earned, or awarded during play; physically contains the GPS tracker.', persistsAcrossTasks: true },
+                P6: { id: 'P6', kind: 'quest', title: 'Collection Tracker 0/5', x: 910, y: 90, body: 'Track which of the five costume pieces have been collected by this team.', color: '#8B7BF5' },
+                P7: { id: 'P7', kind: 'event', title: 'Costume Set Complete', x: 910, y: 290, body: 'Story beat triggered when the team has the required costume set.', color: '#E8D25C' },
+              },
+              edges: [
+                { from: 'P1', to: 'P6', label: 'counts toward', color: null },
+                { from: 'P2', to: 'P6', label: 'counts toward', color: null },
+                { from: 'P3', to: 'P6', label: 'counts toward', color: null },
+                { from: 'P4', to: 'P6', label: 'counts toward', color: null },
+                { from: 'P5', to: 'P6', label: 'active shell piece', color: null },
+                { from: 'P6', to: 'P7', label: '5/5 collected', color: null },
+              ],
+              frames: {
+                F1: { id: 'F1', label: 'Five Story Items', x: 20, y: 35, w: 820, h: 390, color: '#43BF87' },
+                F2: { id: 'F2', label: 'Collection state', x: 870, y: 50, w: 330, h: 370, color: '#8B7BF5' },
+              },
+            },
+          },
+          S2: { id: 'S2', kind: 'event', title: 'Turtle Assembly Moment', x: 520, y: 130, body: 'Optional story event for bringing completed turtle teams together. Keep the mechanical GPS/audio template separate.', color: '#E8D25C' },
         },
         edges: [
-          { from: 'S1', to: 'S2', label: 'a lead', color: null },
-          { from: 'S2', to: 'S3', label: 'follow up', color: null },
-          { from: 'S3', to: 'S4', label: 'the case breaks', color: null },
+          { from: 'S1', to: 'S2', label: 'when narratively complete', color: null },
         ],
+        frames: {
+          F1: { id: 'F1', label: 'Story-only costume collection', x: 35, y: 45, w: 430, h: 290, color: '#43BF87' },
+          F2: { id: 'F2', label: 'Optional story payoff', x: 490, y: 45, w: 410, h: 290, color: '#E8D25C' },
+        },
       },
     },
 
@@ -418,38 +1801,134 @@ export function makeLibrarySeed() {
     // mechanics counterpart to Story Structures. Same node canvas, mechanic
     // palette. Built from Mechanic Nodes.
     mechStructures: {
+      'LIB-MSTRUCT-TURTLE-COSTUME-COLLECTION': makeTurtleCostumeMechanicsStructure(),
       'LIB-MSTRUCT-DOOR': {
-        id: 'LIB-MSTRUCT-DOOR', name: 'Multi-Switch Door',
-        description: 'Cooperative gate: reach the door, hold several switches at once, a sensor confirms, a timer pressures.',
+        id: 'LIB-MSTRUCT-DOOR', name: 'Cooperative Door Challenge',
+        description: 'A current-system example: challenge core, prop interaction, sensor input, and actuator output.',
         estMinutes: 15,
         nodes: {
-          S1: { id: 'S1', primitiveId: 'LIB-MPRIM-WAYPT', kind: 'location', title: 'Reach the door', x: 40, y: 120, body: 'Team gathers at the sealed door.', color: null },
-          S2: { id: 'S2', primitiveId: 'LIB-MPRIM-PUZZLE', kind: 'mechanic', title: 'Hold the switches', x: 340, y: 60, body: 'All switches must be held at once.', color: null },
-          S3: { id: 'S3', primitiveId: 'LIB-MPRIM-SENSOR', kind: 'sensor', title: 'Door sensor', x: 640, y: 120, body: 'Sensor confirms the door opened.', color: null },
-          S4: { id: 'S4', primitiveId: 'LIB-MPRIM-TIMER', kind: 'mechanic', title: 'Reset timer', x: 940, y: 60, body: 'Door re-locks if the timer expires.', color: null },
+          S1: { id: 'S1', primitiveId: 'LIB-MPRIM-CHALLENGE-CORE', kind: 'mechanic', mechKind: 'challengeCore', title: 'Door Challenge Core', x: 40, y: 120, body: 'Players coordinate to open the sealed door.', color: null, goal: 'Open the door through coordinated action.', cooperationStyle: 'Synchronous', physicalTrackSubnodeIds: [], cognitiveTrackSubnodeIds: [], noteColor: '#A87BF0' },
+          S2: { id: 'S2', primitiveId: 'LIB-MPRIM-PROP-INTERACTION', kind: 'objective', mechKind: 'propInteraction', title: 'Hold the Switches', x: 360, y: 60, body: 'Players hold separate switches at the same time.', color: null, interactionType: 'Unlock', successCondition: 'All required switches are held together.', failureCondition: '', resetProcedure: '', connectTo: { itemIds: [], sensorIds: [], nodeIds: [], ideas: [] }, noteColor: '#E0A23C', attachedSubnodeIds: [] },
+          S3: { id: 'S3', primitiveId: 'LIB-MPRIM-SENSOR-NODE', kind: 'sensor', mechKind: 'sensorNode', title: 'Door Sensor', x: 700, y: 120, body: 'Detects whether the switches are correctly held.', color: null, sensorType: 'Button', inputRequired: 'All switch inputs active at the same time.', triggerCondition: '', nodeColor: '#3EC6D6' },
+          S4: { id: 'S4', primitiveId: 'LIB-MPRIM-ACTUATOR-NODE', kind: 'mechanic', mechKind: 'actuatorNode', title: 'Door Opens', x: 1020, y: 120, body: 'Signals that the door opens.', color: null, actuatorType: 'Lock', outputDuration: '', outputIntensity: '', outputRhythm: '', resetBehavior: '', nodeColor: '#5CA8F5' },
         },
         edges: [
           { from: 'S1', to: 'S2', label: 'assemble', color: null },
           { from: 'S2', to: 'S3', label: 'all held', color: null },
-          { from: 'S3', to: 'S4', label: 'ON fired', color: null },
+          { from: 'S3', to: 'S4', label: 'confirmed', color: null },
         ],
       },
-      'LIB-MSTRUCT-CHASE': {
-        id: 'LIB-MSTRUCT-CHASE', name: 'Handoff Under Pursuit',
-        description: 'An item handoff completed while a physical challenge (pursuit) is running.',
-        estMinutes: 12,
+      'LIB-MSTRUCT-TURTLE-SHELL-REACTION': {
+        id: 'LIB-MSTRUCT-TURTLE-SHELL-REACTION',
+        name: 'NinjaTurtleShellReaction',
+        description: 'Mechanics-only reusable structure for one team shell: GPS zone dwell trigger, frequency control, MacroDroid phone bridge, and MP3 speaker output. Story tone and character meaning belong in Story Structures.',
+        estMinutes: 10,
         nodes: {
-          S1: { id: 'S1', primitiveId: 'LIB-MPRIM-WAYPT', kind: 'location', title: 'Rendezvous', x: 40, y: 100, body: 'Runners meet at the drop.', color: null },
-          S2: { id: 'S2', primitiveId: 'LIB-MPRIM-HANDOFF', kind: 'objective', title: 'The Handoff', x: 340, y: 40, body: 'Pass the item, hand to hand.', color: null },
-          S3: { id: 'S3', primitiveId: 'LIB-MPRIM-PHYS', kind: 'enemy', title: 'Break contact', x: 640, y: 100, body: 'Evade the pursuit crew to escape.', color: null },
+          S1: {
+            id: 'S1', primitiveId: 'LIB-MPRIM-TASK-TEMPLATE', kind: 'mechanic', mechKind: 'taskTemplate',
+            title: 'NinjaTurtleShellReaction', x: 70, y: 110,
+            body: 'Main reusable mechanics container. Instantiate once per team shell, then set zone, delay, trigger limits, and MP3 file.',
+            color: '#8B7BF5',
+            estMinutes: 5, minPlayers: 1, maxPlayers: 1, recommendedCrew: 'One crew member or phone macro owner to verify GPS and speaker behavior.',
+            difficultyPressure: 'Low', reusableAsLibraryTemplate: true,
+            sub: {
+              nodes: {
+                D1: { id: 'D1', kind: 'item', title: 'Mask / Headband', x: 50, y: 70, body: 'Costume Story Item. No active mechanic attached.', color: '#5CA8F5', itemType: 'Wearable', origin: 'Team costume collection.', persistsAcrossTasks: true },
+                D2: { id: 'D2', kind: 'item', title: 'Arm Sweat Catchers', x: 300, y: 70, body: 'Costume Story Item. No active mechanic attached.', color: '#E0A23C', itemType: 'Wearable', origin: 'Team costume collection.', persistsAcrossTasks: true },
+                D3: { id: 'D3', kind: 'item', title: 'Leg Sweat Catchers', x: 50, y: 240, body: 'Costume Story Item. No active mechanic attached.', color: '#A87BF0', itemType: 'Wearable', origin: 'Team costume collection.', persistsAcrossTasks: true },
+                D4: { id: 'D4', kind: 'item', title: 'Weapon', x: 300, y: 240, body: 'Costume Story Item. No active mechanic attached.', color: '#F08CB4', itemType: 'Wearable', origin: 'Team costume collection.', persistsAcrossTasks: true },
+                D5: { id: 'D5', kind: 'item', title: 'Shell', x: 570, y: 150, body: 'Only active costume piece. Physically contains the GPS tracker.', color: '#43BF87', itemType: 'Wearable', origin: 'Team costume collection; carries GPS tracker hardware.', persistsAcrossTasks: true },
+                D6: {
+                  id: 'D6', primitiveId: 'LIB-MPRIM-CHALLENGE-CORE', kind: 'mechanic', mechKind: 'challengeCore',
+                  title: 'Shell Reaction Flow', x: 850, y: 150,
+                  body: 'Coordinates the mechanics-only GPS reaction chain for this shell instance.',
+                  color: '#A87BF0',
+                  goal: 'When the Shell enters a defined GPS zone and remains there for the dwell time, play the selected MP3 reaction.',
+                  cooperationStyle: 'Solo',
+                  physicalTrackSubnodeIds: ['D5', 'D7', 'D8', 'D10', 'D11'],
+                  cognitiveTrackSubnodeIds: [],
+                  noteColor: '#8B7BF5',
+                },
+                D7: {
+                  id: 'D7', primitiveId: 'LIB-MPRIM-SENSOR-NODE', kind: 'sensor', mechKind: 'sensorNode',
+                  title: 'Shell GPS Tracker', x: 1160, y: 60,
+                  body: 'GPS tracker inside the Shell. The trigger is based only on Shell location and dwell time.',
+                  color: '#3EC6D6',
+                  sensorType: 'GPS Zone',
+                  zoneReference: 'Select GPS zone / geofence record',
+                  inputRequired: 'Shell tracker enters the configured GPS zone.',
+                  triggerCondition: 'Shell remains inside the configured GPS zone. No extra costume-state condition is required.',
+                  frequencyLimitEnabled: true,
+                  frequencyTriggerCount: 3,
+                  frequencyTimePeriod: '10 minutes',
+                  cooldownEnabled: true,
+                  cooldownDuration: '2 minutes',
+                  manualOverrideFallback: 'Crew can manually confirm the Shell is in the zone and trigger the MP3 reaction if GPS fails.',
+                  reliability: '3',
+                  nodeColor: '#3EC6D6',
+                },
+                D8: {
+                  id: 'D8', primitiveId: 'LIB-MSUB-triggerDelay', kind: 'mechanicSubnode', subnodeKind: 'triggerDelay',
+                  title: 'Dwell Delay', x: 1480, y: 60,
+                  body: 'Requires the Shell to remain in the zone for X seconds before triggering audio.',
+                  color: '#5CA8F5', icon: 'clock', category: 'gameplayModifiers', attachesTo: ['sensorNode', 'actuatorNode', '*'],
+                  fields: {
+                    purpose: 'Adds a delay before the sensor or actuator activates after the trigger condition is met.',
+                    delayDuration: '30 seconds',
+                    delayType: 'Fixed',
+                  },
+                },
+                D10: {
+                  id: 'D10', primitiveId: 'LIB-ITM-MACRODROID-PHONE', kind: 'objective', physicalKind: 'item', itemId: 'LIB-ITM-MACRODROID-PHONE',
+                  title: 'MacroDroid Phone Bridge', x: 1810, y: 150,
+                  body: 'Phone receives or evaluates the GPS trigger and runs the macro that plays the selected MP3.',
+                  color: '#3EC6D6',
+                  refs: { itemIds: ['LIB-ITM-MACRODROID-PHONE'], sensorIds: [], mechanicIds: [] },
+                },
+                D11: {
+                  id: 'D11', primitiveId: 'LIB-MPRIM-ACTUATOR-NODE', kind: 'mechanic', mechKind: 'actuatorNode',
+                  title: 'Play MP3 Reaction', x: 2140, y: 150,
+                  body: 'Audio actuator: play one MP3 file through the paired speaker.',
+                  color: '#5CA8F5',
+                  actuatorType: 'Sound',
+                  audioFileRef: 'reaction.mp3',
+                  frequencyLimitEnabled: true,
+                  frequencyTriggerCount: 3,
+                  frequencyTimePeriod: '10 minutes',
+                  cooldownEnabled: true,
+                  cooldownDuration: '2 minutes',
+                  outputDuration: 'Length of selected MP3',
+                  outputIntensity: 'Speaker volume set for the play area.',
+                  outputRhythm: 'Single MP3 playback. No random voice categories or narrative line selection.',
+                  resetBehavior: 'Ready for the next trigger after the built-in cooldown.',
+                  manualOverrideFallback: 'Crew can play the same MP3 manually from the phone or backup speaker if the actuator chain fails.',
+                  nodeColor: '#5CA8F5',
+                },
+              },
+              edges: [
+                { from: 'D1', to: 'D6', label: 'costume piece', color: null },
+                { from: 'D2', to: 'D6', label: 'costume piece', color: null },
+                { from: 'D3', to: 'D6', label: 'costume piece', color: null },
+                { from: 'D4', to: 'D6', label: 'costume piece', color: null },
+                { from: 'D5', to: 'D7', label: 'contains GPS', color: null },
+                { from: 'D7', to: 'D8', label: 'zone entered', color: null },
+                { from: 'D8', to: 'D10', label: 'after dwell time / allowed trigger', color: null },
+                { from: 'D10', to: 'D11', label: 'play MP3', color: null },
+              ],
+              frames: {
+                F1: { id: 'F1', label: 'Costume Story Items', x: 20, y: 30, w: 800, h: 390, color: '#43BF87' },
+                F2: { id: 'F2', label: 'Shell GPS trigger logic', x: 1080, y: 30, w: 720, h: 420, color: '#3EC6D6' },
+                F3: { id: 'F3', label: 'Phone bridge and MP3 output', x: 1780, y: 80, w: 610, h: 310, color: '#5CA8F5' },
+              },
+            },
+          },
         },
-        edges: [
-          { from: 'S1', to: 'S2', label: 'in position', color: null },
-          { from: 'S2', to: 'S3', label: 'item passed', color: null },
-        ],
+        edges: [],
+        frames: {
+          F1: { id: 'F1', label: 'Reusable mechanics container', x: 35, y: 55, w: 430, h: 260, color: '#8B7BF5' },
+        },
       },
     },
-
     // ADDITIONAL NODE TEMPLATES ("concepts"): Pip-Decks-style containers. The
     // two premades ship filled; "Create new …" versions start completely empty.
     // The library template always keeps its canonical name — substitutions
@@ -510,14 +1989,54 @@ export function makeLibrarySeed() {
 export function makeEmptyProject(name = 'Untitled game') {
   return {
     rev: SEED_REV,
-    // hero: per-game backdrop image shown behind the workspace, with
-    // adjustable opacity and placement ('app' whole workspace | 'content'
-    // behind the main content area). File menu → Set game backdrop…
-    meta: { name, prefix: 'GAME', createdAt: Date.now(), hero: { image: null, opacity: 0.25, placement: 'app' }, timeline: { startMin: 540, endMin: 1020 } },
+    // Per-game backdrop images are controlled separately for the application
+    // header and the main content/canvas area.
+    meta: {
+      name, prefix: 'GAME', createdAt: Date.now(),
+      backdrops: {
+        header: { image: null, opacity: 0.34 },
+        content: { image: null, opacity: 0.25 },
+      },
+      timeline: { startMin: 540, endMin: 1020 }, timelineStep: 30, gmRuleIds: [],
+      characterCardTemplate: cloneCharacterCardTemplateForSettings(),
+    },
     items: {}, locations: {}, sensors: {}, mechanics: {}, facts: {}, nodes: {}, edges: [],
-    subnodes: {}, frames: {},
-    taskNodes: {}, taskEdges: [], alignments: [], storyTrack: {}, teams: {}, players: {},
+    subnodes: {}, frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {},
+    masterNodes: {}, masterEdges: [], masterFrames: {}, masterNumberMarkers: {}, masterTitleMarkers: {},
+    storyDynamicsGraph: cloneDefaultStoryDynamicsGraph(),
+    taskNodes: {}, taskEdges: [], taskFrames: {}, taskNumberMarkers: {}, taskTitleMarkers: {},
+    storyboardNodes: {}, storyboardEdges: [], storyboardFrames: {}, storyboardNumberMarkers: {}, storyboardTitleMarkers: {},
+    alignments: [], storyTrack: {}, teams: {}, players: {},
   };
+}
+
+function defaultMasterStory() {
+  return {
+    nodes: {
+      'ACT-1': { id: 'ACT-1', kind: 'masterAct', title: 'Act 1 - The Briefing', x: 60, y: 60, body: 'Players receive the crash-site mission and enter Sector 7.', phaseNotes: 'Discovery phase: teams learn who thinks fast, who organizes, who takes risks, and who naturally follows.', color: null },
+      'ACT-2': { id: 'ACT-2', kind: 'masterAct', title: 'Act 2 - The Key', x: 360, y: 60, body: 'The teams search the warehouse and recover the Cipher-Key.', phaseNotes: 'Role pressure phase: practical leaders, scouts, solvers, and cautious players start becoming visible.', color: null },
+      'ACT-3': { id: 'ACT-3', kind: 'masterAct', title: 'Act 3 - The Decode', x: 660, y: 60, body: 'The Dataslate reveals the route and the deeper Chimera secret.', phaseNotes: 'Cooperation phase: teams must combine clues and notice whether specialists share control or hoard it.', color: null },
+      'ACT-4': { id: 'ACT-4', kind: 'masterAct', title: 'Act 4 - The Turn', x: 960, y: 60, body: 'The false-flag intercept reframes who the teams can trust.', phaseNotes: 'Stress phase: trust, suspicion, and group hierarchy become explicit under uncertainty.', color: null },
+      'ACT-5': { id: 'ACT-5', kind: 'masterAct', title: 'Act 5 - Extraction', x: 1260, y: 60, body: 'The teams call the beacon and escape before the operation collapses.', phaseNotes: 'Resolution phase: teams commit to a shared plan and reveal whether their earlier roles still hold.', color: null },
+    },
+    edges: [
+      { from: 'ACT-1', to: 'ACT-2', label: 'mission begins', color: null },
+      { from: 'ACT-2', to: 'ACT-3', label: 'key enables decode', color: null },
+      { from: 'ACT-3', to: 'ACT-4', label: 'truth surfaces', color: null },
+      { from: 'ACT-4', to: 'ACT-5', label: 'final push', color: null },
+    ],
+  };
+}
+
+function storyboardFromTaskGraph(taskNodes = {}, taskEdges = []) {
+  const nodes = {};
+  for (const n of Object.values(taskNodes || {})) {
+    if (n.kind !== 'task' && n.kind !== 'travel') continue;
+    const { sub, ...item } = n;
+    nodes[n.id] = { ...item };
+  }
+  const edges = (taskEdges || []).filter((e) => nodes[e.from] && nodes[e.to]);
+  return { nodes, edges };
 }
 
 // Additive project migration: preserve the open game across schema bumps by
@@ -530,14 +2049,77 @@ export function migrateProject(saved) {
   for (const key of Object.keys(base)) {
     if (merged[key] === undefined) merged[key] = base[key];
   }
+  for (const key of ['storyDynamicsNodes', 'storyDynamicsEdges', 'storyDynamicsFrames', 'storyDynamicsNumberMarkers', 'storyDynamicsTitleMarkers']) {
+    delete merged[key];
+  }
+  if (!saved.masterNodes) {
+    const master = defaultMasterStory();
+    merged.masterNodes = master.nodes;
+    merged.masterEdges = master.edges;
+    const legacyAlign = { 'N-BRIEF': 'ACT-1', 'N-KEY': 'ACT-2', 'N-DECRYPT': 'ACT-3', 'N-TWIST': 'ACT-4', 'N-END': 'ACT-5' };
+    merged.alignments = (merged.alignments || [])
+      .map((a) => ({ ...a, story: legacyAlign[a.story] || a.story }))
+      .filter((a) => merged.masterNodes[a.story]);
+  }
+  if (!saved.storyboardNodes) {
+    const storyboard = storyboardFromTaskGraph(saved.taskNodes || {}, saved.taskEdges || []);
+    merged.storyboardNodes = storyboard.nodes;
+    merged.storyboardEdges = storyboard.edges;
+    merged.storyboardFrames = {};
+  }
+  if (!merged.meta.backdrops) {
+    const hero = merged.meta.hero || {};
+    const image = hero.image || null;
+    const opacity = hero.opacity ?? 0.25;
+    merged.meta = {
+      ...merged.meta,
+      backdrops: {
+        header: { image: hero.placement === 'content' ? null : image, opacity: hero.placement === 'content' ? 0.34 : opacity },
+        content: { image, opacity },
+      },
+    };
+  } else {
+    merged.meta = {
+      ...merged.meta,
+      backdrops: {
+        header: { image: null, opacity: 0.34, ...(merged.meta.backdrops.header || {}) },
+        content: { image: null, opacity: 0.25, ...(merged.meta.backdrops.content || {}) },
+      },
+    };
+  }
+  if (!Array.isArray(merged.meta.gmRuleIds)) {
+    merged.meta = { ...merged.meta, gmRuleIds: ['LIB-GMR-001', 'LIB-GMR-002', 'LIB-GMR-003'] };
+  }
+  if (!merged.meta.characterCardTemplate) {
+    merged.meta = { ...merged.meta, characterCardTemplate: cloneCharacterCardTemplateForSettings() };
+  } else {
+    merged.meta = {
+      ...merged.meta,
+      characterCardTemplate: {
+        questions: sanitizeCharacterQuestions(merged.meta.characterCardTemplate.questions || DEFAULT_CHARACTER_CARD_TEMPLATE.questions),
+        typeGroups: sanitizeCharacterTypeGroups(merged.meta.characterCardTemplate.typeGroups || DEFAULT_CHARACTER_CARD_TEMPLATE.typeGroups),
+      },
+    };
+  }
   return merged;
 }
 
 // Demo game: Operation Chimera, built from the library templates above.
 export function makeProjectSeed() {
+  const master = defaultMasterStory();
+  const dynamics = cloneDefaultStoryDynamicsGraph();
   return {
     rev: SEED_REV,
-    meta: { name: 'Operation Chimera', prefix: 'CHM', createdAt: Date.now(), hero: { image: null, opacity: 0.25, placement: 'app' }, timeline: { startMin: 540, endMin: 1020 } },
+    meta: {
+      name: 'Operation Chimera', prefix: 'CHM', createdAt: Date.now(),
+      backdrops: {
+        header: { image: null, opacity: 0.34 },
+        content: { image: null, opacity: 0.25 },
+      },
+      timeline: { startMin: 540, endMin: 1020 }, timelineStep: 30,
+      gmRuleIds: ['LIB-GMR-001', 'LIB-GMR-002', 'LIB-GMR-003'],
+      characterCardTemplate: cloneCharacterCardTemplateForSettings(),
+    },
 
     // Sensor hardware INSTANCES: template + game state (status, placement,
     // assignment, battery).
@@ -722,11 +2304,16 @@ export function makeProjectSeed() {
       { from: 'N-GATE', to: 'N-TWIST', label: 'act break', kindColor: 'event' },
       { from: 'N-TWIST', to: 'N-END', label: 'the turn', kindColor: 'event', factId: 'F-TRAITOR', expect: 'set' },
     ],
-    // Weaver alignments: story beats ↔ the physical tasks they are tied to.
+    // MASTER STORY: a short macro act-track separate from the detailed
+    // Narrative Weaver graph. It gives the game its theater-like backbone.
+    masterNodes: master.nodes,
+    masterEdges: master.edges,
+    storyDynamicsGraph: dynamics,
+    // Weaver alignments: macro story acts ↔ the physical tasks they are tied to.
     alignments: [
-      { story: 'N-BRIEF', task: 'TSK-1' },
-      { story: 'N-KEY', task: 'TSK-2' },
-      { story: 'N-END', task: 'TSK-4' },
+      { story: 'ACT-1', task: 'TSK-1' },
+      { story: 'ACT-2', task: 'TSK-2' },
+      { story: 'ACT-5', task: 'TSK-4' },
     ],
     // Weaver left-panel layout for the macro story track (nodeId → {x,y}).
     storyTrack: {
@@ -739,6 +2326,7 @@ export function makeProjectSeed() {
     // spec where to stand, how many tries, props, powers, effects.
     taskNodes: {
       'TSK-1': { id: 'TSK-1', kind: 'task', title: 'Assemble at Sector 7', x: 40, y: 200, startMin: 540, durationMin: 30, body: 'All teams reach the warehouse floor and check in.', color: null },
+      'TRV-1': { id: 'TRV-1', kind: 'travel', title: 'Travel to locker corridor', x: 200, y: 260, startMin: 570, durationMin: 15, marginAfterMin: 10, body: 'Move from briefing zone to bay 12. Some teams may walk, jog, detour, or get briefly lost.', color: null },
       'TSK-2': { id: 'TSK-2', kind: 'task', title: 'Retrieve the Cipher-Key', x: 360, y: 200, startMin: 600, durationMin: 45, body: 'Recover the brass key from the locker corridor.', color: null,
         sub: {
           nodes: {
@@ -748,6 +2336,7 @@ export function makeProjectSeed() {
           },
           edges: [{ from: 'D1', to: 'D2', label: 'on arrival', color: null }, { from: 'D2', to: 'D3', label: 'on success', color: null }],
         } },
+      'TRV-2': { id: 'TRV-2', kind: 'travel', title: 'Cross to comms bench', x: 540, y: 260, startMin: 650, durationMin: 20, marginAfterMin: 15, body: 'Route choice between warehouse lanes and the comms bench. Delay covers crowds, wrong turns, and waiting for a clear path.', color: null },
       'TSK-3': { id: 'TSK-3', kind: 'task', title: 'Decode the Dataslate', x: 680, y: 90, startMin: 780, durationMin: 60, body: 'Solve the cipher at the comms bench.', color: null },
       'TSK-4': { id: 'TSK-4', kind: 'task', title: 'Score the extraction beacon', x: 680, y: 320, startMin: 900, durationMin: 45, body: 'Land the beacon in the extraction crate to call exfil.', color: null,
         sub: {
@@ -772,6 +2361,34 @@ export function makeProjectSeed() {
       { from: 'TSK-2', to: 'TSK-4', label: 'or skip straight to exfil', color: null },
       { from: 'TSK-3', to: 'TSK-4', label: 'decoded', color: null },
     ],
+
+    taskFrames: {},
+    taskNumberMarkers: {},
+    taskTitleMarkers: {},
+
+    // MASTER STORYBOARD TIMELINE: stable task/travel schedule bars used by
+    // Master Story only. These are deliberately detached from Mechanics Weaver
+    // schematics, so editing mechanic nodes cannot move/delete the storyboard.
+    storyboardNodes: {
+      'TSK-1': { id: 'TSK-1', kind: 'task', title: 'Assemble at Sector 7', x: 40, y: 200, startMin: 540, durationMin: 30, body: 'All teams reach the warehouse floor and check in.', color: null },
+      'TRV-1': { id: 'TRV-1', kind: 'travel', title: 'Travel to locker corridor', x: 200, y: 260, startMin: 570, durationMin: 15, marginAfterMin: 10, body: 'Move from briefing zone to bay 12. Some teams may walk, jog, detour, or get briefly lost.', color: null },
+      'TSK-2': { id: 'TSK-2', kind: 'task', title: 'Retrieve the Cipher-Key', x: 360, y: 200, startMin: 600, durationMin: 45, body: 'Recover the brass key from the locker corridor.', color: null },
+      'TRV-2': { id: 'TRV-2', kind: 'travel', title: 'Cross to comms bench', x: 540, y: 260, startMin: 650, durationMin: 20, marginAfterMin: 15, body: 'Route choice between warehouse lanes and the comms bench. Delay covers crowds, wrong turns, and waiting for a clear path.', color: null },
+      'TSK-3': { id: 'TSK-3', kind: 'task', title: 'Decode the Dataslate', x: 680, y: 90, startMin: 780, durationMin: 60, body: 'Solve the cipher at the comms bench.', color: null },
+      'TSK-4': { id: 'TSK-4', kind: 'task', title: 'Score the extraction beacon', x: 680, y: 320, startMin: 900, durationMin: 45, body: 'Land the beacon in the extraction crate to call exfil.', color: null },
+    },
+    storyboardEdges: [
+      { from: 'TSK-1', to: 'TSK-2', label: 'assembled', color: null },
+      { from: 'TSK-2', to: 'TSK-3', label: 'key in hand -> decode', color: null },
+      { from: 'TSK-2', to: 'TSK-4', label: 'or skip straight to exfil', color: null },
+      { from: 'TSK-3', to: 'TSK-4', label: 'decoded', color: null },
+    ],
+    storyboardFrames: {},
+    masterFrames: {},
+    storyboardNumberMarkers: {},
+    masterNumberMarkers: {},
+    storyboardTitleMarkers: {},
+    masterTitleMarkers: {},
 
     teams: {
       'T-RAVEN': { id: 'T-RAVEN', name: 'Team Raven', color: '#5CA8F5', focus: 'Infiltration specialists · returning crew' },

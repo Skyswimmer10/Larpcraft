@@ -10,9 +10,9 @@ export const ENTITY_COLORS = {
   // Narrative v2 typed nodes.
   beat: '#5CA8F5', reveal: '#F08CB4', branch: '#E0A23C', fact: '#3EC6D6', converge: '#A87BF0', timed: '#E8D25C', recovery: '#E86464',
   // Tasks + task-detail node types.
-  task: '#5BC0BE', placement: '#43BF87', rule: '#E0A23C', prop: '#3EC6D6', power: '#A87BF0', effect: '#F08CB4',
+  task: '#5BC0BE', travel: '#E0A23C', placement: '#43BF87', rule: '#E0A23C', prop: '#3EC6D6', power: '#A87BF0', effect: '#F08CB4',
   // Narrative Weaver base nodes + concept containers.
-  event: '#5CA8F5', character: '#E0A23C', storyLocation: '#43BF87', quest: '#A87BF0', concept: '#E8D25C',
+  event: '#5CA8F5', character: '#E0A23C', storyLocation: '#43BF87', quest: '#A87BF0', concept: '#E8D25C', framework: '#E8D25C',
 };
 
 export const AVAILABILITY = {
