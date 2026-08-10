@@ -10,6 +10,15 @@ npm test         # reducer/selector tests (vitest)
 npm run build    # static build in dist/
 ```
 
+## Use On Another Computer
+
+Open `https://larpcraft-piedzivojuma-gars-projects.vercel.app` and sign in to
+the Vercel team when prompted. On the source computer, choose **File > Save
+complete workspace**. In the hosted app, choose **File > Open complete
+workspace**. The workspace file carries the active game and master library,
+including reusable nodes, concepts, frameworks, templates, structures, and
+embedded images.
+
 ## Architecture
 
 - **Two distinct stores** (`src/state/store.jsx`), each its own context pair and

@@ -30,6 +30,9 @@ describe('items csv schema', () => {
     const s = makeSeed();
     const row = CSV_SCHEMAS.items.toRows(s).find((r) => r.id === 'CHM-A-007');
     expect(row.mechanicIds).toBe('LIB-MECH-DECRYPT;LIB-MECH-COMMS');
+    expect(row.mechanicNames).toContain('Decryption puzzle');
+    expect(row.locationName).toBe('Sector 7 Warehouse');
+    expect(row.sensorReqNames).toContain('Dataslate dock');
     const partial = CSV_SCHEMAS.items.fromRow(row, s, () => {});
     expect(partial.mechanicIds).toEqual(['LIB-MECH-DECRYPT', 'LIB-MECH-COMMS']);
     expect(partial.sensorReqs).toEqual(s.items['CHM-A-007'].sensorReqs);
@@ -73,6 +76,12 @@ describe('import merge via reducer', () => {
 
   it('players with unknown teams are skipped by the schema', () => {
     const s = makeSeed();
+    const row = CSV_SCHEMAS.players.toRows(s).find((p) => p.id === 'P-ELZA');
+    expect(row.teamName).toBe('Team Raven');
+    expect(row.totalPoints).toBeUndefined();
+    const blank = CSV_SCHEMAS.players.blank('P-N-999');
+    expect(blank.totalPoints).toBe(0);
+    expect(blank.achievements).toBe('');
     const bad = CSV_SCHEMAS.players.fromRow({ id: 'P-X', name: 'Ghost', teamId: 'T-NOPE' }, s, () => {});
     expect(bad).toBeNull();
   });
@@ -82,6 +91,8 @@ describe('import merge via reducer', () => {
     const rows = CSV_SCHEMAS.nodes.toRows(s);
     const brief = rows.find((r) => r.id === 'N-BRIEF');
     expect(brief.connectsTo).toBe('N-S7');
+    expect(brief.kindName).toBe('Event');
+    expect(brief.connectsToTitles).toContain('Sector 7 Warehouse');
     // simulate importing a new node connected to two existing ones
     const row = { id: 'N-NEW', kind: 'objective', title: 'Extra step', x: '50', y: '60', connectsTo: 'N-GATE;N-PATROL' };
     const partial = CSV_SCHEMAS.nodes.fromRow(row, s, () => {});

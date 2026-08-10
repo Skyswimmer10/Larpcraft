@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useDispatch } from '../state/store.jsx';
 import { Thumb } from './bits.jsx';
+import ImageCropDialog from './ImageCropDialog.jsx';
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif'];
 const MODEL_EXT = /\.(glb|gltf|obj|fbx|stl)$/i;
@@ -18,7 +19,7 @@ function classify(file) {
 // the entity's primary thumbnail (gallery card / location reference image) —
 // pure state update, no refresh. Pass dispatchOverride to target the library
 // store instead of the active project.
-export default function ImageUploader({ coll, entity, dispatchOverride, field = 'image', onImage, label = 'Add image' }) {
+export default function ImageUploader({ coll, entity, dispatchOverride, field = 'image', onImage, label = 'Add image', allowCrop = false }) {
   const projDispatch = useDispatch();
   const dispatch = dispatchOverride ?? projDispatch;
   const image = entity[field];
@@ -26,6 +27,7 @@ export default function ImageUploader({ coll, entity, dispatchOverride, field = 
   const inputRef = useRef(null);
   const [drag, setDrag] = useState(false);
   const [error, setError] = useState(null);
+  const [pendingCrop, setPendingCrop] = useState(null);
 
   function handleFiles(files) {
     const file = files?.[0];
@@ -41,7 +43,11 @@ export default function ImageUploader({ coll, entity, dispatchOverride, field = 
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => setImage({ kind, name: file.name, dataUrl: reader.result });
+    reader.onload = () => {
+      const nextImage = { kind, name: file.name, dataUrl: reader.result };
+      if (allowCrop && kind === 'photo' && file.type !== 'image/gif') setPendingCrop(nextImage);
+      else setImage(nextImage);
+    };
     reader.onerror = () => setError(`Couldn't read "${file.name}". Try again.`);
     reader.readAsDataURL(file);
   }
@@ -75,6 +81,14 @@ export default function ImageUploader({ coll, entity, dispatchOverride, field = 
         </div>
       )}
       {error && <div className="uperror">{error}</div>}
+      {pendingCrop && (
+        <ImageCropDialog
+          source={pendingCrop}
+          onCancel={() => setPendingCrop(null)}
+          onKeepOriginal={(nextImage) => { setImage(nextImage); setPendingCrop(null); }}
+          onCrop={(nextImage) => { setImage(nextImage); setPendingCrop(null); }}
+        />
+      )}
     </div>
   );
 }

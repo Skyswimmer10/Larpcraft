@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { reducer, resolveNode, itemsAssignedToTeam, availableItems } from './reducer.js';
-import { makeProjectSeed, makeLibrarySeed } from '../data/seed.js';
+import { makeProjectSeed, makeLibrarySeed, migrateProject } from '../data/seed.js';
 
 const seed = () => makeProjectSeed();
 const lib = makeLibrarySeed();
@@ -88,10 +88,15 @@ describe('entity deletion and element categories', () => {
     let libState = makeLibrarySeed();
     libState = reducer(libState, { type: 'ADD_ENTITY', coll: 'narrativeCategories', entity: { id: 'prophecy', label: 'Prophecy', color: '#3EC6D6', icon: 'flag' } });
     expect(libState.narrativeCategories.prophecy.label).toBe('Prophecy');
-    // reassign a rumor to the new category, then delete the old one (UI flow)
-    libState = reducer(libState, { type: 'UPDATE_ENTITY', coll: 'narrative', id: 'LIB-NAR-006', patch: { category: 'prophecy' } });
+    libState = reducer(libState, {
+      type: 'ADD_ENTITY',
+      coll: 'narrative',
+      entity: { id: 'LIB-NAR-TEST', nodeClass: 'base', nodeKind: 'event', name: 'Rumor seed', category: 'rumor', color: '#43BF87', icon: 'zap', body: 'One sentence.', tags: [] },
+    });
+    // reassign a saved reusable node template to the new category, then delete the old one.
+    libState = reducer(libState, { type: 'UPDATE_ENTITY', coll: 'narrative', id: 'LIB-NAR-TEST', patch: { category: 'prophecy' } });
     libState = reducer(libState, { type: 'DELETE_ENTITY', coll: 'narrativeCategories', id: 'rumor' });
-    expect(libState.narrative['LIB-NAR-006'].category).toBe('prophecy');
+    expect(libState.narrative['LIB-NAR-TEST'].category).toBe('prophecy');
     expect(libState.narrativeCategories.rumor).toBeUndefined();
   });
 });
@@ -117,6 +122,18 @@ describe('scenario graph editing', () => {
     expect(s.edges.length).toBe(before);
   });
 
+  it('rewires an existing relationship when it is reconnected to different sides', () => {
+    let s = reducer(seed(), { type: 'ADD_EDGE', from: 'N-BRIEF', to: 'N-S7', fromSide: 'left', toSide: 'right' });
+    expect(s.edges.find((e) => e.from === 'N-BRIEF' && e.to === 'N-S7')).toMatchObject({ fromSide: 'left', toSide: 'right' });
+    expect(s.edges.filter((e) => e.from === 'N-BRIEF' && e.to === 'N-S7')).toHaveLength(1);
+  });
+
+  it('allows framework nodes to connect through the normal relationship system', () => {
+    let s = reducer(seed(), { type: 'ADD_ENTITY', coll: 'frameworks', entity: { id: 'FW-X', kind: 'framework', title: 'Reference', x: 500, y: 100 } });
+    s = reducer(s, { type: 'ADD_EDGE', from: 'FW-X', to: 'N-BRIEF', fromSide: 'bottom', toSide: 'left' });
+    expect(s.edges.find((e) => e.from === 'FW-X' && e.to === 'N-BRIEF')).toMatchObject({ fromSide: 'bottom', toSide: 'left' });
+  });
+
   it('removes a connection', () => {
     const before = seed().edges.length;
     const s = reducer(seed(), { type: 'REMOVE_EDGE', from: 'N-BRIEF', to: 'N-S7' });
@@ -135,24 +152,53 @@ describe('scenario graph editing', () => {
     expect(s.edges.find((e) => e.from === 'N-KEY' && e.to === 'N-GATE').label).toBe('WHEN both keys held');
   });
 
+  it('ADD_EDGE and UPDATE_EDGE preserve chosen connection sides', () => {
+    let s = reducer(seed(), { type: 'ADD_EDGE', from: 'N-GATE', to: 'N-S7', fromSide: 'bottom', toSide: 'top' });
+    expect(s.edges.find((e) => e.from === 'N-GATE' && e.to === 'N-S7')).toMatchObject({ fromSide: 'bottom', toSide: 'top' });
+    s = reducer(s, { type: 'UPDATE_EDGE', from: 'N-GATE', to: 'N-S7', patch: { fromSide: 'left', toSide: 'right' } });
+    expect(s.edges.find((e) => e.from === 'N-GATE' && e.to === 'N-S7')).toMatchObject({ fromSide: 'left', toSide: 'right' });
+  });
+
+  it('allows a title marker to receive a relationship and removes it with the title', () => {
+    let s = seed();
+    const titleId = 'TTL-TEST';
+    s = reducer(s, { type: 'ADD_ENTITY', coll: 'titleMarkers', entity: { id: titleId, text: 'Chapter One', x: 400, y: 100, fontSize: 28 } });
+    s = reducer(s, { type: 'ADD_EDGE', from: 'N-BRIEF', to: titleId, fromSide: 'right', toSide: 'left' });
+    expect(s.edges.find((e) => e.from === 'N-BRIEF' && e.to === titleId)).toMatchObject({ toSide: 'left' });
+    s = reducer(s, { type: 'DELETE_ENTITY', coll: 'titleMarkers', id: titleId });
+    expect(s.edges.some((e) => e.to === titleId)).toBe(false);
+  });
+
+  it('CLEAR_NARRATIVE_CANVAS removes all visible narrative canvas entities and relationships', () => {
+    const s = reducer(seed(), { type: 'CLEAR_NARRATIVE_CANVAS' });
+    expect(s.nodes).toEqual({});
+    expect(s.subnodes).toEqual({});
+    expect(s.frameworks).toEqual({});
+    expect(s.frames).toEqual({});
+    expect(s.numberMarkers).toEqual({});
+    expect(s.titleMarkers).toEqual({});
+    expect(s.edges).toEqual([]);
+    expect(s.alignments).toEqual([]);
+  });
+
   it('Weaver alignments add, dedupe, remove, and clean up on node delete', () => {
-    let s = reducer(seed(), { type: 'ADD_ALIGN', story: 'N-BRIEF', task: 'N-S7' });
+    let s = reducer(seed(), { type: 'ADD_ALIGN', story: 'ACT-3', task: 'TSK-3' });
     const n = s.alignments.length;
-    s = reducer(s, { type: 'ADD_ALIGN', story: 'N-BRIEF', task: 'N-S7' }); // dup ignored
+    s = reducer(s, { type: 'ADD_ALIGN', story: 'ACT-3', task: 'TSK-3' }); // dup ignored
     expect(s.alignments.length).toBe(n);
-    s = reducer(s, { type: 'REMOVE_ALIGN', story: 'N-BRIEF', task: 'N-S7' });
-    expect(s.alignments.some((a) => a.story === 'N-BRIEF' && a.task === 'N-S7')).toBe(false);
+    s = reducer(s, { type: 'REMOVE_ALIGN', story: 'ACT-3', task: 'TSK-3' });
+    expect(s.alignments.some((a) => a.story === 'ACT-3' && a.task === 'TSK-3')).toBe(false);
     // deleting an aligned story node drops alignments referencing it
     // (seed aligns N-KEY↔TSK-2)
     const before = s.alignments.length;
-    s = reducer(s, { type: 'DELETE_NODE', nodeId: 'N-KEY' });
+    s = reducer(s, { type: 'GRAPH_DELETE_NODE', scope: { coll: 'masterNodes' }, id: 'ACT-2' });
     expect(s.alignments.length).toBe(before - 1);
-    expect(s.alignments.some((a) => a.story === 'N-KEY')).toBe(false);
+    expect(s.alignments.some((a) => a.story === 'ACT-2')).toBe(false);
   });
 
   it('the demo game ships seeded story↔task alignments', () => {
     const s = seed();
-    expect(s.alignments).toEqual(expect.arrayContaining([{ story: 'N-BRIEF', task: 'TSK-1' }]));
+    expect(s.alignments).toEqual(expect.arrayContaining([{ story: 'ACT-1', task: 'TSK-1' }]));
   });
 
   it('SET_STORY_POS records a story beat position on the Weaver track', () => {
@@ -164,22 +210,46 @@ describe('scenario graph editing', () => {
     const s = reducer(seed(), { type: 'UPDATE_ENTITY', coll: 'nodes', id: 'N-KEY', patch: { startMin: 720, durationMin: 30 } });
     expect(s.nodes['N-KEY'].startMin).toBe(720);
     expect(s.meta.timeline).toEqual({ startMin: 540, endMin: 1020 });
+    expect(s.meta.timelineStep).toBe(30);
   });
 
-  it('SET_META stores the per-game hero backdrop; SET_IMAGE respects field', () => {
-    let s = reducer(seed(), { type: 'SET_META', patch: { hero: { image: { kind: 'photo', name: 'bg.jpg', dataUrl: 'data:x' }, opacity: 0.4 } } });
-    expect(s.meta.hero.opacity).toBe(0.4);
+  it('SET_META stores separate per-game backdrops; SET_IMAGE respects field', () => {
+    const image = { kind: 'photo', name: 'bg.jpg', dataUrl: 'data:x' };
+    let s = reducer(seed(), {
+      type: 'SET_META',
+      patch: {
+        timelineStep: 5,
+        backdrops: {
+          header: { image, opacity: 0.4 },
+          content: { image: null, opacity: 0.2 },
+        },
+      },
+    });
+    expect(s.meta.backdrops.header.image).toEqual(image);
+    expect(s.meta.backdrops.header.opacity).toBe(0.4);
+    expect(s.meta.backdrops.content.image).toBeNull();
+    expect(s.meta.timelineStep).toBe(5);
     expect(s.meta.name).toBe('Operation Chimera'); // merge, not replace
     s = reducer(s, { type: 'SET_IMAGE', coll: 'locations', id: 'LOC-S7', field: 'schematic', image: { kind: 'photo', name: 'plan.png', dataUrl: 'data:y' } });
     expect(s.locations['LOC-S7'].schematic.name).toBe('plan.png');
     expect(s.locations['LOC-S7'].image).toBeNull(); // cover untouched
   });
 
-  it('hero backdrop placement toggles between app and content', () => {
-    expect(seed().meta.hero.placement).toBe('app');
-    const s = reducer(seed(), { type: 'SET_META', patch: { hero: { image: { dataUrl: 'data:x' }, opacity: 0.3, placement: 'content' } } });
-    expect(s.meta.hero.placement).toBe('content');
-    expect(s.meta.hero.opacity).toBe(0.3);
+  it('migrates legacy hero backdrops into explicit header and content slots', () => {
+    const oldImage = { kind: 'photo', name: 'old-bg.jpg', dataUrl: 'data:old' };
+    const oldSave = {
+      ...seed(),
+      meta: {
+        ...seed().meta,
+        hero: { image: oldImage, opacity: 0.3, placement: 'content' },
+        backdrops: undefined,
+      },
+    };
+    const migrated = migrateProject(oldSave);
+    expect(migrated.meta.backdrops.header.image).toBeNull();
+    expect(migrated.meta.backdrops.header.opacity).toBe(0.34);
+    expect(migrated.meta.backdrops.content.image).toEqual(oldImage);
+    expect(migrated.meta.backdrops.content.opacity).toBe(0.3);
   });
 
   it('node drag position and color pick persist via UPDATE_ENTITY', () => {

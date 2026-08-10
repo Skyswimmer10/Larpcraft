@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { useGame, useDispatch } from '../state/store.jsx';
 import { playersOfTeam, itemsAssignedToPlayer, itemsAssignedToTeam, availableItems, sensorsAssignedToPlayer } from '../state/reducer.js';
 import { Pill, ENTITY_COLORS } from '../components/bits.jsx';
@@ -6,6 +6,48 @@ import CsvButtons from '../components/CsvButtons.jsx';
 import { CSV_SCHEMAS, genId } from '../data/csvSchemas.js';
 
 const TEAM_COLORS = ['#5CA8F5', '#E0A23C', '#A87BF0', '#43BF87', '#E86464', '#3EC6D6'];
+const MAX_LOGO_BYTES = 8 * 1024 * 1024;
+
+function PlayerAvatar({ player, team }) {
+  if (player.image?.dataUrl) return <img className="playeravatar" src={player.image.dataUrl} alt="" />;
+  return <span className="av" style={{ background: team.color }}>{player.initials}</span>;
+}
+
+function TeamLogo({ team, dispatch }) {
+  const inputRef = useRef(null);
+  const [error, setError] = useState(null);
+  const initial = team.name.split(' ').pop()?.[0] || '?';
+
+  const handleFile = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('Use an image file.'); return; }
+    if (file.size > MAX_LOGO_BYTES) { setError('Logo image must be under 8 MB.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setError(null);
+      dispatch({ type: 'SET_IMAGE', coll: 'teams', id: team.id, image: { kind: 'photo', name: file.name, dataUrl: reader.result } });
+    };
+    reader.onerror = () => setError('Could not read logo image.');
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="teamlogo-wrap">
+      <button className="teamlogo" onClick={() => inputRef.current?.click()} title={team.image ? 'Replace team logo' : 'Add team logo'}>
+        {team.image?.dataUrl
+          ? <img src={team.image.dataUrl} alt="" />
+          : <span style={{ background: team.color }}>{initial}</span>}
+      </button>
+      <input ref={inputRef} hidden type="file" accept="image/*"
+        onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ''; }} />
+      <div className="teamlogo-actions">
+        <button className="linkbtn" onClick={() => inputRef.current?.click()}>{team.image ? 'Replace logo' : 'Add logo'}</button>
+        {team.image && <button className="linkbtn" onClick={() => dispatch({ type: 'SET_IMAGE', coll: 'teams', id: team.id, image: null })}>Remove</button>}
+      </div>
+      {error && <small className="bad">{error}</small>}
+    </div>
+  );
+}
 
 // Teams & Rosters: issue physical items and sensor hardware to player roles.
 // Assigning dispatches ASSIGN_ITEM, which also flips the item to 'in-use' in
@@ -24,7 +66,7 @@ export default function Teams({ selection, onSelect }) {
   const addTeam = () => {
     const id = genId(s.teams, 'T-N-');
     const color = TEAM_COLORS[Object.keys(s.teams).length % TEAM_COLORS.length];
-    dispatch({ type: 'ADD_ENTITY', coll: 'teams', entity: { id, name: 'New team', color, focus: '' } });
+    dispatch({ type: 'ADD_ENTITY', coll: 'teams', entity: { id, name: 'New team', color, focus: '', image: null } });
   };
 
   return (
@@ -47,7 +89,7 @@ export default function Teams({ selection, onSelect }) {
           return (
             <div className="team" key={team.id}>
               <div className="th">
-                <span className="emb" style={{ background: team.color }}>{team.name.split(' ').pop()[0]}</span>
+                <TeamLogo team={team} dispatch={dispatch} />
                 <div><b>{team.name}</b><small>{team.focus}</small></div>
                 <span className="kitcount mono">{teamKit.length} items issued</span>
                 <button className="btn ghost small" onClick={() => addPlayer(team.id)}>+ Add player</button>
@@ -60,7 +102,7 @@ export default function Teams({ selection, onSelect }) {
                   return (
                     <div className="pl" key={p.id}>
                       <button className="plmain" onClick={() => onSelect({ kind: 'player', id: p.id })}>
-                        <span className="av" style={{ background: team.color }}>{p.initials}</span>
+                        <PlayerAvatar player={p} team={team} />
                         <b>{p.name}</b>
                         {p.flags.map((f) => <span key={f} className={`flag ${f.toLowerCase()}`}>{f}</span>)}
                         <span className="role">{p.role}</span>

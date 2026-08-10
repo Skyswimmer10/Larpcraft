@@ -1,0 +1,5840 @@
+{
+  "rev": 16,
+  "mechanics": {
+    "LIB-MECH-LOCK": {
+      "id": "LIB-MECH-LOCK",
+      "name": "Lockpicking minigame",
+      "summary": "Physical pick set on a practice lock; fails raise the alarm.",
+      "params": [
+        {
+          "key": "fails",
+          "label": "Fail limit",
+          "value": "3"
+        },
+        {
+          "key": "locks",
+          "label": "Locks to pick",
+          "value": "1"
+        }
+      ]
+    },
+    "LIB-MECH-DECRYPT": {
+      "id": "LIB-MECH-DECRYPT",
+      "name": "Decryption puzzle",
+      "summary": "Button-box cipher wheel; hint unlocks after failed tries.",
+      "params": [
+        {
+          "key": "hintAfter",
+          "label": "Hint after tries",
+          "value": "3"
+        },
+        {
+          "key": "digits",
+          "label": "Cipher digits",
+          "value": "4"
+        }
+      ]
+    },
+    "LIB-MECH-COMMS": {
+      "id": "LIB-MECH-COMMS",
+      "name": "Comms link",
+      "summary": "Radio protocol between team units and GM console.",
+      "params": [
+        {
+          "key": "channels",
+          "label": "Channels",
+          "value": "1"
+        }
+      ]
+    },
+    "LIB-MECH-ACCESS": {
+      "id": "LIB-MECH-ACCESS",
+      "name": "Access control",
+      "summary": "One switch equals one action; all switches open the gate.",
+      "params": [
+        {
+          "key": "switches",
+          "label": "Switches required",
+          "value": "1"
+        }
+      ]
+    },
+    "LIB-MECH-REVIVE": {
+      "id": "LIB-MECH-REVIVE",
+      "name": "Downed-player revive",
+      "summary": "Medkit card ritual at a safe zone.",
+      "params": [
+        {
+          "key": "seconds",
+          "label": "Revive seconds",
+          "value": "90"
+        }
+      ]
+    },
+    "LIB-MECH-UV": {
+      "id": "LIB-MECH-UV",
+      "name": "Hidden-ink clues",
+      "summary": "UV-reactive markings on props and walls.",
+      "params": [
+        {
+          "key": "clues",
+          "label": "Clue count",
+          "value": "3"
+        }
+      ]
+    }
+  },
+  "sensors": {
+    "LIB-SEN-NFC": {
+      "id": "LIB-SEN-NFC",
+      "kind": "NFC reader",
+      "label": "NFC reader (ESP32 dock)"
+    },
+    "LIB-SEN-BTN": {
+      "id": "LIB-SEN-BTN",
+      "kind": "Button box",
+      "label": "4-button cipher box"
+    },
+    "LIB-SEN-MOT": {
+      "id": "LIB-SEN-MOT",
+      "kind": "Motion sensor",
+      "label": "PIR motion node"
+    },
+    "LIB-SEN-PRX": {
+      "id": "LIB-SEN-PRX",
+      "kind": "Proximity sensor",
+      "label": "Gate proximity loop"
+    },
+    "LIB-SEN-RF": {
+      "id": "LIB-SEN-RF",
+      "kind": "RF beacon",
+      "label": "LoRa beacon RX"
+    }
+  },
+  "items": {
+    "LIB-ITM-001": {
+      "id": "LIB-ITM-001",
+      "name": "Cipher-Key",
+      "type": "artifact",
+      "description": "An ancient-looking brass key used for unlocking a sealed room.",
+      "propNotes": "Heavy brass key, detailed engravings. Cast a spare per game.",
+      "loreNotes": "Rumored to be made from meteoritic iron.",
+      "mechanicIds": [
+        "LIB-MECH-LOCK"
+      ],
+      "sensorReqs": [
+        {
+          "sensorId": "LIB-SEN-NFC",
+          "note": "confirms pickup"
+        }
+      ],
+      "image": null
+    },
+    "LIB-ITM-002": {
+      "id": "LIB-ITM-002",
+      "name": "Encrypted Dataslate",
+      "type": "artifact",
+      "description": "A weathered military dataslate containing corrupted data. Needs to be decoded.",
+      "propNotes": "Plastic + metal case, low-res OLED, four buttons, 2×AA.",
+      "loreNotes": "Recovered from a crash site.",
+      "mechanicIds": [
+        "LIB-MECH-DECRYPT",
+        "LIB-MECH-COMMS"
+      ],
+      "sensorReqs": [
+        {
+          "sensorId": "LIB-SEN-NFC",
+          "note": "dock detects slate"
+        },
+        {
+          "sensorId": "LIB-SEN-BTN",
+          "note": "cipher input"
+        }
+      ],
+      "image": null
+    },
+    "LIB-ITM-003": {
+      "id": "LIB-ITM-003",
+      "name": "Serum Vial",
+      "type": "gadget",
+      "description": "A glowing vial required for the antidote ritual.",
+      "propNotes": "Glow vial, UV-reactive fluid.",
+      "loreNotes": "",
+      "mechanicIds": [
+        "LIB-MECH-REVIVE"
+      ],
+      "sensorReqs": [],
+      "image": null
+    },
+    "LIB-ITM-004": {
+      "id": "LIB-ITM-004",
+      "name": "Old-school Key Card",
+      "type": "artifact",
+      "description": "An embossed magstripe card that opens sector gates.",
+      "propNotes": "Embossed magstripe card, weathered edges.",
+      "loreNotes": "",
+      "mechanicIds": [
+        "LIB-MECH-ACCESS"
+      ],
+      "sensorReqs": [
+        {
+          "sensorId": "LIB-SEN-PRX",
+          "note": "gate unlock check"
+        }
+      ],
+      "image": null
+    },
+    "LIB-ITM-005": {
+      "id": "LIB-ITM-005",
+      "name": "Comms Unit",
+      "type": "gadget",
+      "description": "Team radio tuned to the operation frequency.",
+      "propNotes": "Repainted walkie, weathered.",
+      "loreNotes": "",
+      "mechanicIds": [
+        "LIB-MECH-COMMS"
+      ],
+      "sensorReqs": [],
+      "image": null
+    },
+    "LIB-ITM-006": {
+      "id": "LIB-ITM-006",
+      "name": "Signal Beacon",
+      "type": "gadget",
+      "description": "Extraction call-in beacon for finales.",
+      "propNotes": "3D-printed shell, ESP32 + LED ring.",
+      "loreNotes": "",
+      "mechanicIds": [],
+      "sensorReqs": [
+        {
+          "sensorId": "LIB-SEN-RF",
+          "note": "GM console receiver"
+        }
+      ],
+      "image": null
+    },
+    "LIB-ITM-007": {
+      "id": "LIB-ITM-007",
+      "name": "UV Torch",
+      "type": "gadget",
+      "description": "Reveals hidden ink markings.",
+      "propNotes": "Consumer UV flashlight.",
+      "loreNotes": "",
+      "mechanicIds": [
+        "LIB-MECH-UV"
+      ],
+      "sensorReqs": [],
+      "image": null
+    },
+    "LIB-ITM-008": {
+      "id": "LIB-ITM-008",
+      "name": "Medkit Prop",
+      "type": "consumable",
+      "description": "Revive kit: bandage cards + ritual instructions.",
+      "propNotes": "Surplus pouch, 12 bandage cards.",
+      "loreNotes": "",
+      "mechanicIds": [
+        "LIB-MECH-REVIVE"
+      ],
+      "sensorReqs": [],
+      "image": null
+    },
+    "LIB-ITM-MACRODROID-PHONE": {
+      "id": "LIB-ITM-MACRODROID-PHONE",
+      "name": "MacroDroid Phone Bridge",
+      "type": "gadget",
+      "description": "Android phone running MacroDroid to receive the GPS trigger and play the assigned MP3 through a speaker.",
+      "propNotes": "Phone with MacroDroid macro, charged battery, paired speaker, local MP3 files, and mobile data/GPS enabled.",
+      "loreNotes": "",
+      "mechanicIds": [],
+      "sensorReqs": [],
+      "image": null
+    }
+  },
+  "locations": {
+    "LIB-LOC-001": {
+      "id": "LIB-LOC-001",
+      "name": "Warehouse hall",
+      "notes": "Large indoor space, patrol routes, locker corridor.",
+      "safety": "Mark fire exits; no running on mezzanines.",
+      "image": null
+    },
+    "LIB-LOC-002": {
+      "id": "LIB-LOC-002",
+      "name": "Gated checkpoint",
+      "notes": "Lockable gate between zones; good act boundary.",
+      "safety": "Crew operates the gate, never players.",
+      "image": null
+    },
+    "LIB-LOC-003": {
+      "id": "LIB-LOC-003",
+      "name": "Puzzle bench",
+      "notes": "Table station for decryption / crafting mechanics.",
+      "safety": "Tape down cable runs.",
+      "image": null
+    },
+    "LIB-LOC-004": {
+      "id": "LIB-LOC-004",
+      "name": "Safe zone / med bay",
+      "notes": "Out-of-game rest area + revive station.",
+      "safety": "Always out-of-game; real first aid kit here.",
+      "image": null
+    }
+  },
+  "narrative": {},
+  "mechPrimitives": {
+    "LIB-MPRIM-TASK-TEMPLATE": {
+      "id": "LIB-MPRIM-TASK-TEMPLATE",
+      "name": "Task Template",
+      "mechKind": "taskTemplate",
+      "baseKind": "mechanic",
+      "color": "#8B7BF5",
+      "icon": "layers",
+      "inputs": [
+        "start"
+      ],
+      "outputs": [
+        "complete",
+        "branch"
+      ],
+      "defaultBody": "Reusable collapsed container for a complete task graph. Expand to edit the internal mechanics.",
+      "estMinutes": 20,
+      "minPlayers": 3,
+      "maxPlayers": 7,
+      "crew": 0,
+      "recommendedCrew": "",
+      "refs": {},
+      "collapseDepth": 1,
+      "difficultyPressure": "Medium",
+      "reusableAsLibraryTemplate": true
+    },
+    "LIB-MPRIM-CHALLENGE-CORE": {
+      "id": "LIB-MPRIM-CHALLENGE-CORE",
+      "name": "Challenge Core",
+      "mechKind": "challengeCore",
+      "baseKind": "mechanic",
+      "color": "#A87BF0",
+      "icon": "cog",
+      "inputs": [
+        "start"
+      ],
+      "outputs": [
+        "complete",
+        "branch"
+      ],
+      "defaultBody": "Central task controller: goal, physical/cognitive tracks, and cooperation style. Add subnodes for pressure, outcomes, fail-safes, and advanced rules.",
+      "estMinutes": 15,
+      "crew": 1,
+      "refs": {},
+      "collapseDepth": 0,
+      "goal": "",
+      "cooperationStyle": "Parallel",
+      "physicalTrackSubnodeIds": [],
+      "cognitiveTrackSubnodeIds": [],
+      "noteColor": "#A87BF0"
+    },
+    "LIB-MPRIM-PHYSICAL-RESTRICTION": {
+      "id": "LIB-MPRIM-PHYSICAL-RESTRICTION",
+      "name": "Physical Restriction",
+      "mechKind": "physicalRestriction",
+      "baseKind": "state",
+      "color": "#E86464",
+      "icon": "cross",
+      "inputs": [
+        "apply"
+      ],
+      "outputs": [
+        "restricted",
+        "released"
+      ],
+      "defaultBody": "Applies a body, movement, communication, or carrying limitation with explicit safety and stop rules.",
+      "estMinutes": 1,
+      "crew": 1,
+      "refs": {},
+      "collapseDepth": 0,
+      "restrictionType": "Blindfold",
+      "connectTo": {
+        "nodeIds": []
+      },
+      "safetyRule": "",
+      "stopCondition": "",
+      "noteColor": "#E86464",
+      "attachedSubnodeIds": []
+    },
+    "LIB-MPRIM-PROP-INTERACTION": {
+      "id": "LIB-MPRIM-PROP-INTERACTION",
+      "name": "Prop Interaction",
+      "mechKind": "propInteraction",
+      "baseKind": "objective",
+      "color": "#E0A23C",
+      "icon": "swap",
+      "inputs": [
+        "in"
+      ],
+      "outputs": [
+        "success",
+        "fail",
+        "reset"
+      ],
+      "defaultBody": "Defines how players manipulate existing physical item/artifact records: carry, balance, sort, throw, assemble, unlock, or trade.",
+      "estMinutes": 8,
+      "crew": 0,
+      "refs": {},
+      "collapseDepth": 0,
+      "interactionType": "Balance",
+      "successCondition": "",
+      "failureCondition": "",
+      "resetProcedure": "",
+      "connectTo": {
+        "itemIds": [],
+        "sensorIds": [],
+        "nodeIds": [],
+        "ideas": []
+      },
+      "noteColor": "#E0A23C",
+      "attachedSubnodeIds": []
+    },
+    "LIB-MPRIM-SENSOR-NODE": {
+      "id": "LIB-MPRIM-SENSOR-NODE",
+      "name": "Sensor Node",
+      "mechKind": "sensorNode",
+      "baseKind": "sensor",
+      "color": "#3EC6D6",
+      "icon": "zap",
+      "inputs": [
+        "watch"
+      ],
+      "outputs": [
+        "triggered"
+      ],
+      "defaultBody": "Gameplay sensor: what it detects, what input activates it, and when it should trigger in the game.",
+      "estMinutes": 1,
+      "crew": 0,
+      "refs": {},
+      "collapseDepth": 0,
+      "sensorType": "Pressure",
+      "zoneReference": "",
+      "inputRequired": "",
+      "triggerCondition": "",
+      "nodeColor": "#3EC6D6",
+      "manualOverrideFallback": "",
+      "reliability": "3",
+      "frequencyLimitEnabled": false,
+      "frequencyTriggerCount": 1,
+      "frequencyTimePeriod": "1 minute",
+      "cooldownEnabled": false,
+      "cooldownDuration": "30 seconds"
+    },
+    "LIB-MPRIM-ACTUATOR-NODE": {
+      "id": "LIB-MPRIM-ACTUATOR-NODE",
+      "name": "Actuator Node",
+      "mechKind": "actuatorNode",
+      "baseKind": "mechanic",
+      "color": "#5CA8F5",
+      "icon": "flag",
+      "inputs": [
+        "activate"
+      ],
+      "outputs": [
+        "effect"
+      ],
+      "defaultBody": "Gameplay output: what happens in the world when this actuator fires.",
+      "estMinutes": 1,
+      "crew": 0,
+      "refs": {},
+      "collapseDepth": 0,
+      "actuatorType": "Light",
+      "audioFileRef": "",
+      "outputDuration": "",
+      "outputIntensity": "",
+      "outputRhythm": "",
+      "resetBehavior": "",
+      "nodeColor": "#5CA8F5",
+      "manualOverrideFallback": "",
+      "frequencyLimitEnabled": false,
+      "frequencyTriggerCount": 1,
+      "frequencyTimePeriod": "1 minute",
+      "cooldownEnabled": false,
+      "cooldownDuration": "30 seconds"
+    },
+    "LIB-MPRIM-CHARACTER-STATE": {
+      "id": "LIB-MPRIM-CHARACTER-STATE",
+      "name": "Character State",
+      "mechKind": "characterState",
+      "baseKind": "state",
+      "color": "#F08CB4",
+      "icon": "user",
+      "inputs": [
+        "observe"
+      ],
+      "outputs": [
+        "respond",
+        "change"
+      ],
+      "defaultBody": "Pre-programmed character/NPC state for dialogue trees and AI agent behavior.",
+      "estMinutes": 1,
+      "crew": 0,
+      "refs": {},
+      "collapseDepth": 0,
+      "emotionalState": "Neutral",
+      "behavioralNotes": "",
+      "nodeColor": "#F08CB4",
+      "attachedSubnodeIds": [],
+      "deprecated": true,
+      "hiddenFromPalette": true,
+      "migrationHint": "Character State has moved to Narrative Subnodes. Use the narrative Character State subnode for future story/dialogue behavior."
+    },
+    "LIB-MPRIM-SENSOR": {
+      "id": "LIB-MPRIM-SENSOR",
+      "name": "Sensor Trigger",
+      "baseKind": "sensor",
+      "color": "#3EC6D6",
+      "icon": "zap",
+      "inputs": [
+        "arm"
+      ],
+      "outputs": [
+        "fired"
+      ],
+      "defaultBody": "This node is deprecated. Its functionality has been merged into the Sensor node.",
+      "estMinutes": 1,
+      "crew": 0,
+      "deprecated": true,
+      "hiddenFromPalette": true,
+      "migrationHint": "Use Sensor Node instead. This node is deprecated. Its functionality has been merged into the Sensor node."
+    },
+    "LIB-MPRIM-PROGRESS-STATE": {
+      "id": "LIB-MPRIM-PROGRESS-STATE",
+      "name": "Progress State",
+      "baseKind": "mechanic",
+      "color": "#A87BF0",
+      "icon": "pin",
+      "inputs": [
+        "advance"
+      ],
+      "outputs": [
+        "milestone"
+      ],
+      "defaultBody": "Tracks a game milestone or phase change that other mechanics can react to.",
+      "estMinutes": 1,
+      "crew": 0,
+      "mechKind": "progressState",
+      "category": "supporting",
+      "currentProgress": 1,
+      "visualStyle": "Segmented bar"
+    }
+  },
+  "mechSubnodes": {
+    "LIB-MSUB-progressiveFeedback": {
+      "id": "LIB-MSUB-progressiveFeedback",
+      "kind": "progressiveFeedback",
+      "name": "Progressive Feedback Mod",
+      "purpose": "Forces the designer to define how success in one part of the task makes the next part easier or more obvious. Creates a positive feedback loop so players feel progress.",
+      "color": "#58C7A6",
+      "icon": "zap",
+      "category": "gameplayModifiers",
+      "reusable": false,
+      "attachesTo": [
+        "challengeCore",
+        "taskTemplate"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "feedbackType": [],
+        "triggerCondition": "",
+        "effectDescription": "",
+        "strengthIntensity": "Subtle",
+        "canStack": false
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-failSafeScaffolding": {
+      "id": "LIB-MSUB-failSafeScaffolding",
+      "kind": "failSafeScaffolding",
+      "name": "Fail-Safe + Scaffolding Mod",
+      "purpose": "Provides structured ways to recover from failure or near-failure. Prevents players from feeling like total failures when they were close to succeeding.",
+      "color": "#E8D25C",
+      "icon": "layers",
+      "category": "gameplayModifiers",
+      "reusable": false,
+      "attachesTo": [
+        "challengeCore",
+        "taskTemplate"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "hintLevelCount": 1,
+        "hintTrigger": "Time passed",
+        "easierAlternativeEnabled": false,
+        "easierAlternativePath": "",
+        "partialCreditRule": "",
+        "skipEnabled": false,
+        "skipCondition": "",
+        "gracePeriodMinutes": 0
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-escalatingPressure": {
+      "id": "LIB-MSUB-escalatingPressure",
+      "kind": "escalatingPressure",
+      "name": "Escalating Pressure Mod",
+      "purpose": "Creates growing urgency and difficulty during the task. Pressure can increase through time, physical demand, environmental changes, or other escalating factors.",
+      "color": "#E86464",
+      "icon": "clock",
+      "category": "gameplayModifiers",
+      "reusable": false,
+      "attachesTo": [
+        "challengeCore",
+        "taskTemplate"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "pressureType": [],
+        "baseDurationMinutes": 1,
+        "escalationTrigger": "",
+        "escalationEffect": "",
+        "canBePaused": false
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-cooperativeEthosRole": {
+      "id": "LIB-MSUB-cooperativeEthosRole",
+      "kind": "cooperativeEthosRole",
+      "name": "Cooperative Ethos / Role Mod",
+      "purpose": "Defines how cooperation should emerge in the task, either through differentiated roles or synchronized team actions, and sets the expected social tone of play.",
+      "color": "#A87BF0",
+      "icon": "user",
+      "category": "gameplayModifiers",
+      "reusable": false,
+      "attachesTo": [
+        "challengeCore",
+        "taskTemplate"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "cooperationStyle": "Differentiated roles",
+        "roleSuggestions": "",
+        "ethosTone": "Calm trust",
+        "ethosToneGuidance": "",
+        "teamDiscussionPrompt": ""
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-noSoloEnforcer": {
+      "id": "LIB-MSUB-noSoloEnforcer",
+      "kind": "noSoloEnforcer",
+      "name": "No-Solo Enforcer",
+      "purpose": "Structurally prevents a single player from completing the task alone by enforcing physical, spatial, or timing requirements.",
+      "color": "#F08CB4",
+      "icon": "cross",
+      "category": "gameplayModifiers",
+      "reusable": false,
+      "attachesTo": [
+        "challengeCore",
+        "taskTemplate"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "enforcementType": [],
+        "minimumPlayers": 1
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-arbitration": {
+      "id": "LIB-MSUB-arbitration",
+      "kind": "arbitration",
+      "name": "Arbitration Mod",
+      "purpose": "Handles situations where real-world conditions create uncertainty or variance. Provides tolerance and fallback rules.",
+      "color": "#5CA8F5",
+      "icon": "flag",
+      "category": "gameplayModifiers",
+      "reusable": false,
+      "attachesTo": [
+        "challengeCore",
+        "taskTemplate",
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "varianceHandling": "Strict",
+        "toleranceDescription": "",
+        "partialCreditRule": "",
+        "facilitatorOverride": false,
+        "logging": false
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-teamDiscussionPrompt": {
+      "id": "LIB-MSUB-teamDiscussionPrompt",
+      "kind": "teamDiscussionPrompt",
+      "name": "Team Discussion Prompt",
+      "purpose": "Allows the designer to insert a specific question or prompt that the team should discuss before, during, or after a task. This subnode is reusable across many different tasks.",
+      "color": "#43BF87",
+      "icon": "book",
+      "category": "gameplayModifiers",
+      "reusable": true,
+      "attachesTo": [
+        "challengeCore",
+        "taskTemplate",
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "discussionPrompt": "",
+        "whenToUse": "Before task",
+        "facilitatorNote": ""
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-facilitatorNote": {
+      "id": "LIB-MSUB-facilitatorNote",
+      "kind": "facilitatorNote",
+      "name": "Facilitator Note",
+      "purpose": "A simple, reusable note that can be attached to any task or subnode. It contains guidance for the person running the game.",
+      "color": "#8B92A6",
+      "icon": "pin",
+      "category": "supporting",
+      "reusable": true,
+      "attachesTo": [
+        "challengeCore",
+        "taskTemplate",
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "facilitatorGuidance": ""
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-triggerDelay": {
+      "id": "LIB-MSUB-triggerDelay",
+      "kind": "triggerDelay",
+      "name": "Trigger Delay",
+      "purpose": "Adds a delay before the sensor or actuator activates after the trigger condition is met.",
+      "color": "#5CA8F5",
+      "icon": "clock",
+      "category": "gameplayModifiers",
+      "reusable": true,
+      "attachesTo": [
+        "sensorNode",
+        "actuatorNode",
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "purpose": "Adds a delay before the sensor or actuator activates after the trigger condition is met.",
+        "delayDuration": "",
+        "delayType": "Fixed"
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-frequencyControl": {
+      "id": "LIB-MSUB-frequencyControl",
+      "kind": "frequencyControl",
+      "name": "Frequency Control",
+      "purpose": "Deprecated. Frequency limiting now lives inside Sensor and Actuator nodes.",
+      "color": "#E8D25C",
+      "icon": "clock",
+      "category": "gameplayModifiers",
+      "reusable": true,
+      "attachesTo": [
+        "sensorNode",
+        "actuatorNode",
+        "taskTemplate",
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "purpose": "Limits how often a sensor, actuator, or reaction can trigger during a task or session.",
+        "maxTriggersPerSession": "",
+        "cooldown": "",
+        "resetRule": ""
+      },
+      "deprecated": true,
+      "hiddenFromPalette": true
+    },
+    "LIB-MSUB-multipleOutputLogic": {
+      "id": "LIB-MSUB-multipleOutputLogic",
+      "kind": "multipleOutputLogic",
+      "name": "Multi-Output Resolver",
+      "purpose": "Defines different outputs based on different input conditions.",
+      "color": "#A87BF0",
+      "icon": "swap",
+      "category": "gameplayModifiers",
+      "reusable": true,
+      "attachesTo": [
+        "sensorNode",
+        "actuatorNode",
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "purpose": "Defines different outputs based on different input conditions.",
+        "inputConditions": "",
+        "correspondingOutputs": "",
+        "defaultOutput": ""
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-conditionalActivation": {
+      "id": "LIB-MSUB-conditionalActivation",
+      "kind": "conditionalActivation",
+      "name": "Conditional Activation",
+      "purpose": "Requires additional conditions to be met before the sensor or actuator can activate.",
+      "color": "#E0A23C",
+      "icon": "flag",
+      "category": "gameplayModifiers",
+      "reusable": true,
+      "attachesTo": [
+        "sensorNode",
+        "actuatorNode",
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "purpose": "Requires additional conditions to be met before the sensor or actuator can activate.",
+        "requiredConditions": "",
+        "logicType": "AND"
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-value": {
+      "id": "LIB-MSUB-value",
+      "kind": "value",
+      "name": "Value",
+      "purpose": "Defines numeric or tradable value of an item or resource.",
+      "color": "#E8D25C",
+      "icon": "pin",
+      "category": "gameplayModifiers",
+      "reusable": true,
+      "attachesTo": [
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "purpose": "Defines numeric or tradable value of an item or resource.",
+        "initialValue": "",
+        "currentValue": "",
+        "maxValue": ""
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-lifespan": {
+      "id": "LIB-MSUB-lifespan",
+      "kind": "lifespan",
+      "name": "Lifespan",
+      "purpose": "Defines how long this item or resource persists.",
+      "color": "#43BF87",
+      "icon": "clock",
+      "category": "gameplayModifiers",
+      "reusable": true,
+      "attachesTo": [
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "purpose": "Defines how long this item or resource persists.",
+        "lifespanType": "Task only",
+        "description": ""
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-spendUseRule": {
+      "id": "LIB-MSUB-spendUseRule",
+      "kind": "spendUseRule",
+      "name": "Spend / Use Rule",
+      "purpose": "Defines how this item or resource can be spent or used.",
+      "color": "#E0A23C",
+      "icon": "swap",
+      "category": "gameplayModifiers",
+      "reusable": true,
+      "attachesTo": [
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "purpose": "Defines how this item or resource can be spent or used.",
+        "usageRules": "",
+        "limitations": ""
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-spectrumOfYesOutcomes": {
+      "id": "LIB-MSUB-spectrumOfYesOutcomes",
+      "kind": "spectrumOfYesOutcomes",
+      "name": "Spectrum of Yes Outcomes",
+      "purpose": "Defines the graduated outcome levels for the task, from best to worst.",
+      "color": "#8B7BF5",
+      "icon": "layers",
+      "category": "gameplayModifiers",
+      "reusable": true,
+      "attachesTo": [
+        "challengeCore",
+        "taskTemplate",
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "purpose": "Defines the graduated outcome levels for the task, from best to worst.",
+        "outcomeLevels": "Yes and\nYes\nYes but\nNo but\nNo\nNo and",
+        "yesAndDescription": "",
+        "yesDescription": "",
+        "yesButDescription": "",
+        "noButDescription": "",
+        "noDescription": "",
+        "noAndDescription": "",
+        "defaultSelection": [
+          "Yes and",
+          "Yes",
+          "Yes but",
+          "No but",
+          "No",
+          "No and"
+        ]
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-readinessStatus": {
+      "id": "LIB-MSUB-readinessStatus",
+      "kind": "readinessStatus",
+      "name": "Readiness Status",
+      "purpose": "Shows the current development or readiness state of the attached element.",
+      "color": "#6FD9A7",
+      "icon": "flag",
+      "category": "supporting",
+      "reusable": true,
+      "attachesTo": [
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "purpose": "Shows the current development or readiness state of the attached element.",
+        "status": "Draft",
+        "notes": ""
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-player": {
+      "id": "LIB-MSUB-player",
+      "kind": "player",
+      "name": "Player",
+      "purpose": "Selects one or more players from the game player database.",
+      "color": "#5CA8F5",
+      "icon": "user",
+      "category": "supporting",
+      "reusable": true,
+      "attachesTo": [
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "playerIds": []
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-team": {
+      "id": "LIB-MSUB-team",
+      "kind": "team",
+      "name": "Team",
+      "purpose": "Selects one or more teams from the game team database.",
+      "color": "#E0A23C",
+      "icon": "layers",
+      "category": "supporting",
+      "reusable": true,
+      "attachesTo": [
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "teamIds": []
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-comment": {
+      "id": "LIB-MSUB-comment",
+      "kind": "comment",
+      "name": "Comment",
+      "purpose": "Freeform comment or designer note attached to any element.",
+      "color": "#E8D25C",
+      "icon": "book",
+      "category": "supporting",
+      "reusable": true,
+      "attachesTo": [
+        "*"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "purpose": "Freeform comment or designer note attached to any element.",
+        "commentText": "",
+        "authorDate": ""
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    },
+    "LIB-MSUB-coreMechanicModifier": {
+      "id": "LIB-MSUB-coreMechanicModifier",
+      "kind": "coreMechanicModifier",
+      "name": "Core Mechanic Modifier",
+      "purpose": "Allows the designer to deliberately change one core aspect of the task to create a meaningfully different experience or difficulty level.",
+      "color": "#E0A23C",
+      "icon": "cog",
+      "category": "gameplayModifiers",
+      "reusable": false,
+      "attachesTo": [
+        "challengeCore",
+        "taskTemplate"
+      ],
+      "collapseDepth": 0,
+      "fields": {
+        "variationCategory": "Timing",
+        "variationDescription": "",
+        "canBeCombined": false
+      },
+      "deprecated": false,
+      "hiddenFromPalette": false
+    }
+  },
+  "itemTypes": {
+    "artifact": {
+      "id": "artifact",
+      "label": "Artifact",
+      "color": "#E0A23C"
+    },
+    "gadget": {
+      "id": "gadget",
+      "label": "Gadget",
+      "color": "#3EC6D6"
+    },
+    "consumable": {
+      "id": "consumable",
+      "label": "Consumable",
+      "color": "#E88F8F"
+    },
+    "key": {
+      "id": "key",
+      "label": "Key",
+      "color": "#E8D25C"
+    },
+    "clue": {
+      "id": "clue",
+      "label": "Clue",
+      "color": "#5CA8F5"
+    },
+    "status": {
+      "id": "status",
+      "label": "Status",
+      "color": "#A87BF0"
+    },
+    "tool": {
+      "id": "tool",
+      "label": "Tool",
+      "color": "#43BF87"
+    },
+    "wearable": {
+      "id": "wearable",
+      "label": "Wearable",
+      "color": "#F08CB4"
+    }
+  },
+  "narrativeCategories": {
+    "story-beat": {
+      "id": "story-beat",
+      "label": "Story beat",
+      "color": "#5CA8F5",
+      "icon": "flag"
+    },
+    "plot-hook": {
+      "id": "plot-hook",
+      "label": "Plot hook",
+      "color": "#F08CB4",
+      "icon": "alert"
+    },
+    "briefing-script": {
+      "id": "briefing-script",
+      "label": "Briefing script",
+      "color": "#5CA8F5",
+      "icon": "flag"
+    },
+    "npc-bio": {
+      "id": "npc-bio",
+      "label": "NPC bio",
+      "color": "#E0A23C",
+      "icon": "swap"
+    },
+    "rumor": {
+      "id": "rumor",
+      "label": "Rumor",
+      "color": "#43BF87",
+      "icon": "zap"
+    },
+    "lore": {
+      "id": "lore",
+      "label": "Lore fragment",
+      "color": "#A87BF0",
+      "icon": "cog"
+    },
+    "supporting-notes": {
+      "id": "supporting-notes",
+      "label": "Supporting Notes",
+      "color": "#8B92A6",
+      "icon": "book"
+    }
+  },
+  "mechanicRestrictionTypes": {
+    "RST-BLINDFOLD": {
+      "id": "RST-BLINDFOLD",
+      "label": "Blindfold",
+      "custom": false
+    },
+    "RST-BIND-ONE-HAND": {
+      "id": "RST-BIND-ONE-HAND",
+      "label": "Binding one hand",
+      "custom": false
+    },
+    "RST-SILENCE": {
+      "id": "RST-SILENCE",
+      "label": "Silence",
+      "custom": false
+    },
+    "RST-CARRY-LOAD": {
+      "id": "RST-CARRY-LOAD",
+      "label": "Carry load",
+      "custom": false
+    },
+    "RST-MOBILITY-LIMIT": {
+      "id": "RST-MOBILITY-LIMIT",
+      "label": "Mobility limit",
+      "custom": false
+    }
+  },
+  "mechanicInteractionTypes": {
+    "PIT-BALANCE": {
+      "id": "PIT-BALANCE",
+      "label": "Balance",
+      "custom": false
+    },
+    "PIT-CARRY": {
+      "id": "PIT-CARRY",
+      "label": "Carry",
+      "custom": false
+    },
+    "PIT-SORT": {
+      "id": "PIT-SORT",
+      "label": "Sort",
+      "custom": false
+    },
+    "PIT-THROW": {
+      "id": "PIT-THROW",
+      "label": "Throw",
+      "custom": false
+    },
+    "PIT-ASSEMBLE": {
+      "id": "PIT-ASSEMBLE",
+      "label": "Assemble",
+      "custom": false
+    },
+    "PIT-UNLOCK": {
+      "id": "PIT-UNLOCK",
+      "label": "Unlock",
+      "custom": false
+    },
+    "PIT-TRADE": {
+      "id": "PIT-TRADE",
+      "label": "Trade",
+      "custom": false
+    }
+  },
+  "mechanicSensorTypes": {
+    "SNT-PRESSURE": {
+      "id": "SNT-PRESSURE",
+      "label": "Pressure",
+      "custom": false
+    },
+    "SNT-NFC": {
+      "id": "SNT-NFC",
+      "label": "NFC",
+      "custom": false
+    },
+    "SNT-MOTION": {
+      "id": "SNT-MOTION",
+      "label": "Motion",
+      "custom": false
+    },
+    "SNT-GPS-ZONE": {
+      "id": "SNT-GPS-ZONE",
+      "label": "GPS Zone",
+      "custom": false
+    },
+    "SNT-BUTTON": {
+      "id": "SNT-BUTTON",
+      "label": "Button",
+      "custom": false
+    }
+  },
+  "mechanicActuatorTypes": {
+    "ACT-LIGHT": {
+      "id": "ACT-LIGHT",
+      "label": "Light",
+      "custom": false
+    },
+    "ACT-SOUND": {
+      "id": "ACT-SOUND",
+      "label": "Sound",
+      "custom": false
+    },
+    "ACT-MOVEMENT": {
+      "id": "ACT-MOVEMENT",
+      "label": "Movement",
+      "custom": false
+    },
+    "ACT-LOCK": {
+      "id": "ACT-LOCK",
+      "label": "Lock",
+      "custom": false
+    },
+    "ACT-DISPLAY": {
+      "id": "ACT-DISPLAY",
+      "label": "Display",
+      "custom": false
+    },
+    "ACT-MESSAGE": {
+      "id": "ACT-MESSAGE",
+      "label": "Message",
+      "custom": false
+    }
+  },
+  "mechanicCharacterEmotionTypes": {
+    "CEM-NEUTRAL": {
+      "id": "CEM-NEUTRAL",
+      "label": "Neutral",
+      "custom": false
+    },
+    "CEM-SAD": {
+      "id": "CEM-SAD",
+      "label": "Sad",
+      "custom": false
+    },
+    "CEM-ANGRY": {
+      "id": "CEM-ANGRY",
+      "label": "Angry",
+      "custom": false
+    },
+    "CEM-JOYFUL": {
+      "id": "CEM-JOYFUL",
+      "label": "Joyful",
+      "custom": false
+    },
+    "CEM-CONFUSED": {
+      "id": "CEM-CONFUSED",
+      "label": "Confused",
+      "custom": false
+    },
+    "CEM-HOSTILE": {
+      "id": "CEM-HOSTILE",
+      "label": "Hostile",
+      "custom": false
+    },
+    "CEM-ALLIED": {
+      "id": "CEM-ALLIED",
+      "label": "Allied",
+      "custom": false
+    }
+  },
+  "gmRules": {
+    "LIB-GMR-001": {
+      "id": "LIB-GMR-001",
+      "title": "Distributed Cooperation",
+      "principle": "Core cooperative stages should distribute essential information, access, or timing across multiple players so success comes from combining actions, not from one player directing everyone else.",
+      "implementation": "When generating a cooperative stage, give different players different pieces of the solution. One player might see a symbol, another might hear a sound cue, another might reach a physical sensor, and another might control timing. Start with information-splitting, then add physical separation or simultaneous triggers when the stage needs stronger cooperation. Use time pressure carefully, mainly for advanced or high-energy stages. The stage should still allow players to communicate, coordinate, and feel shared success rather than simply obeying one dominant player.",
+      "rationale": "This prevents the alpha-player problem while supporting real group cohesion. Players are not just standing near each other; they each hold something the group needs. This creates participation, communication, trust, and replayable variation without requiring new hardware for every stage.",
+      "aiRule": "Before finalizing a cooperative stage, check whether one player can complete it alone by holding all information, reaching all sensors, and controlling all timing. If yes, split one required element across players: information first, physical access second, timing pressure third. Ensure the split creates meaningful cooperation, not just artificial inconvenience."
+    },
+    "LIB-GMR-002": {
+      "id": "LIB-GMR-002",
+      "title": "Fail Forward",
+      "principle": "A failed objective should redirect the story, never dead-end it. Every failure state must hand players a new, playable situation — a harder path, a consequence, or a lead — so momentum and morale survive setbacks.",
+      "implementation": "For each stage, author the failure branch as deliberately as the success branch. A failed puzzle might trigger an alarm that reroutes enemies, spend a resource, or unlock a slower manual bypass. Avoid outcomes that force players to stand idle or leave the game. Prefer consequences that change the board (new enemy behaviour, a locked route, a time penalty) over consequences that simply say \"no\".",
+      "rationale": "Real-life games cannot pause and retry cleanly; a hard dead-end strands players physically and kills a session. Fail-forward design keeps everyone in motion, turns mistakes into story, and lets weaker teams still reach an ending.",
+      "aiRule": "For every stage with a fail state, verify a defined next action exists on failure. If failure leads to \"nothing happens\" or \"wait and try again\", replace it with a consequence that changes the game state or opens an alternate route before finalizing."
+    },
+    "LIB-GMR-003": {
+      "id": "LIB-GMR-003",
+      "title": "Safety Breaks Fiction",
+      "principle": "Player safety and consent always override the fiction. Any real-world hazard, medical need, or a player invoking a stop signal immediately pauses the in-game situation, no matter how dramatic the moment.",
+      "implementation": "Every stage must define a safe-word / stop-signal response and a nearest out-of-game safe zone. Physical challenges declare their real limits (no grappling, no stairs, no blindfold near hazards) up front. Crew are briefed that enforcing safety is never \"breaking immersion\" — it is part of the job. Mark exits, hazards and med locations on the location map.",
+      "rationale": "A single injury or ignored consent breach ends trust in the whole event. Encoding safety as a first-class rule keeps the game repeatable, insurable, and welcoming to new and vulnerable players.",
+      "aiRule": "Before finalizing any stage involving physical action, restricted senses, or time pressure, confirm it names a stop-signal behaviour and a safe zone. If either is missing, add it and flag the stage for a crew safety review."
+    }
+  },
+  "stories": {
+    "LIB-STORY-ITEM-NODE-GRAPH": {
+      "id": "LIB-STORY-ITEM-NODE-GRAPH",
+      "name": "Item Node Graph Template",
+      "description": "Reusable inspector-first Item graph: minimal canvas card, full item detail in inspector, placement ports, linked mechanics, sensor hooks, and No-Solo-Solve support.",
+      "estMinutes": 5,
+      "nodes": {
+        "S1": {
+          "id": "S1",
+          "kind": "item",
+          "title": "Item Name",
+          "shortTitle": "Item",
+          "x": 14,
+          "y": 151,
+          "body": "Player-facing lore/flavor goes here. Keep it evocative, not mechanical.",
+          "playerDescription": "Player-facing lore/flavor goes here. Keep it evocative, not mechanical.",
+          "facilitatorDescription": "Practical real-world details: prop material, dimensions, storage, reset procedure, durability, safety, and crew handling.",
+          "imageRef": "Describe or reference the intended image/prop photo.",
+          "itemType": "Artifact",
+          "buildStatus": "concept",
+          "origin": "Flavor origin: where this item came from or how players earn it.",
+          "placementNodeIds": [
+            "S2"
+          ],
+          "linkedMechanicNodeIds": [
+            "S3"
+          ],
+          "linkedMechanicIds": [],
+          "sensorHooks": "NFC / QR / GPS / button interaction notes. Example: NFC scan confirms pickup and sets item_obtained.",
+          "noSoloSolve": true,
+          "mechanicMeaning": "Explain why the physical mechanic matches the item theme: access, trust, proof, sacrifice, status, memory, etc.",
+          "attachedTemplateNotes": "Suggested: No-Solo Enforcer, Facilitator Note, Value, Lifespan, Spend / Use Rule, or a relevant Pip Deck concept.",
+          "persistsAcrossTasks": true,
+          "color": "#E0A23C"
+        },
+        "S2": {
+          "id": "S2",
+          "kind": "storyLocation",
+          "title": "Placement Location",
+          "x": 442,
+          "y": 8,
+          "body": "Story Location where the item is placed, discovered, hidden, traded, or activated.",
+          "color": "#43BF87"
+        },
+        "S3": {
+          "id": "S3",
+          "kind": "quest",
+          "title": "Linked Mechanic",
+          "x": 411,
+          "y": 314,
+          "body": "Placeholder for a mechanic reference such as Lockpicking Minigame Event, access gate, decoding ritual, or exchange rule.",
+          "color": "#A87BF0"
+        },
+        "S4": {
+          "id": "S4",
+          "kind": "quest",
+          "title": "Sensor Hook",
+          "x": 760,
+          "y": 70,
+          "body": "Sensor interaction placeholder: NFC, QR, GPS, pressure, button, phone macro, or GM-confirmed state.",
+          "color": "#3EC6D6"
+        },
+        "S5": {
+          "id": "S5",
+          "kind": "quest",
+          "title": "No-Solo-Solve Rule",
+          "x": 760,
+          "y": 250,
+          "body": "Use when the item should require multiple players, separated information, synchronized timing, or a role split.",
+          "color": "#F08CB4"
+        }
+      },
+      "edges": [
+        {
+          "from": "S1",
+          "to": "S2",
+          "label": "Placement port",
+          "color": null
+        },
+        {
+          "from": "S1",
+          "to": "S3",
+          "label": "Linked mechanic port",
+          "color": null
+        },
+        {
+          "from": "S1",
+          "to": "S4",
+          "label": "Sensor hook port",
+          "color": null
+        },
+        {
+          "from": "S1",
+          "to": "S5",
+          "label": "enforce when relevant",
+          "color": null
+        }
+      ],
+      "frames": {
+        "F1": {
+          "id": "F1",
+          "label": "Item node graph",
+          "x": 35,
+          "y": 40,
+          "w": 1060,
+          "h": 410,
+          "color": "#E0A23C"
+        }
+      }
+    },
+    "LIB-STORY-TURTLE-COLLECTION": {
+      "id": "LIB-STORY-TURTLE-COLLECTION",
+      "name": "Ninja Turtle Costume Collection",
+      "description": "Story-side reusable structure for one team collecting five turtle costume Story Items. This stays narrative-only; GPS, MacroDroid, speaker, and MP3 behavior live in the mechanics template.",
+      "estMinutes": 45,
+      "nodes": {
+        "S1": {
+          "id": "S1",
+          "kind": "concept",
+          "conceptKind": "structureConcept",
+          "conceptId": null,
+          "title": "Turtle Costume Collection",
+          "x": 70,
+          "y": 120,
+          "body": "Duplicate this container once per team. It tracks the five costume Story Items and the story moment when the set is complete.",
+          "color": "#43BF87",
+          "collapsed": true,
+          "conceptAnswers": {},
+          "sub": {
+            "nodes": {
+              "P1": {
+                "id": "P1",
+                "kind": "item",
+                "title": "Mask / Headband",
+                "x": 40,
+                "y": 80,
+                "body": "Team identity costume piece. Story Item only.",
+                "color": "#5CA8F5",
+                "itemType": "Wearable",
+                "origin": "Found, earned, or awarded during play.",
+                "persistsAcrossTasks": true
+              },
+              "P2": {
+                "id": "P2",
+                "kind": "item",
+                "title": "Arm Sweat Catchers",
+                "x": 330,
+                "y": 80,
+                "body": "Wearable costume piece. Story Item only.",
+                "color": "#E0A23C",
+                "itemType": "Wearable",
+                "origin": "Found, earned, or awarded during play.",
+                "persistsAcrossTasks": true
+              },
+              "P3": {
+                "id": "P3",
+                "kind": "item",
+                "title": "Leg Sweat Catchers",
+                "x": 40,
+                "y": 260,
+                "body": "Wearable costume piece. Story Item only.",
+                "color": "#A87BF0",
+                "itemType": "Wearable",
+                "origin": "Found, earned, or awarded during play.",
+                "persistsAcrossTasks": true
+              },
+              "P4": {
+                "id": "P4",
+                "kind": "item",
+                "title": "Weapon",
+                "x": 330,
+                "y": 260,
+                "body": "Safe turtle-themed prop weapon. Story Item only unless a physical prop record is linked separately.",
+                "color": "#F08CB4",
+                "itemType": "Wearable",
+                "origin": "Found, earned, or awarded during play.",
+                "persistsAcrossTasks": true
+              },
+              "P5": {
+                "id": "P5",
+                "kind": "item",
+                "title": "Shell",
+                "x": 620,
+                "y": 170,
+                "body": "Special Story Item. Pair this with the NinjaTurtleShellReaction mechanics template when GPS/MP3 behavior is needed.",
+                "color": "#43BF87",
+                "itemType": "Wearable",
+                "origin": "Found, earned, or awarded during play; physically contains the GPS tracker.",
+                "persistsAcrossTasks": true
+              },
+              "P6": {
+                "id": "P6",
+                "kind": "quest",
+                "title": "Collection Tracker 0/5",
+                "x": 910,
+                "y": 90,
+                "body": "Track which of the five costume pieces have been collected by this team.",
+                "color": "#8B7BF5"
+              },
+              "P7": {
+                "id": "P7",
+                "kind": "event",
+                "title": "Costume Set Complete",
+                "x": 910,
+                "y": 290,
+                "body": "Story beat triggered when the team has the required costume set.",
+                "color": "#E8D25C"
+              }
+            },
+            "edges": [
+              {
+                "from": "P1",
+                "to": "P6",
+                "label": "counts toward",
+                "color": null
+              },
+              {
+                "from": "P2",
+                "to": "P6",
+                "label": "counts toward",
+                "color": null
+              },
+              {
+                "from": "P3",
+                "to": "P6",
+                "label": "counts toward",
+                "color": null
+              },
+              {
+                "from": "P4",
+                "to": "P6",
+                "label": "counts toward",
+                "color": null
+              },
+              {
+                "from": "P5",
+                "to": "P6",
+                "label": "active shell piece",
+                "color": null
+              },
+              {
+                "from": "P6",
+                "to": "P7",
+                "label": "5/5 collected",
+                "color": null
+              }
+            ],
+            "frames": {
+              "F1": {
+                "id": "F1",
+                "label": "Five Story Items",
+                "x": 20,
+                "y": 35,
+                "w": 820,
+                "h": 390,
+                "color": "#43BF87"
+              },
+              "F2": {
+                "id": "F2",
+                "label": "Collection state",
+                "x": 870,
+                "y": 50,
+                "w": 330,
+                "h": 370,
+                "color": "#8B7BF5"
+              }
+            }
+          }
+        },
+        "S2": {
+          "id": "S2",
+          "kind": "event",
+          "title": "Turtle Assembly Moment",
+          "x": 520,
+          "y": 130,
+          "body": "Optional story event for bringing completed turtle teams together. Keep the mechanical GPS/audio template separate.",
+          "color": "#E8D25C"
+        }
+      },
+      "edges": [
+        {
+          "from": "S1",
+          "to": "S2",
+          "label": "when narratively complete",
+          "color": null
+        }
+      ],
+      "frames": {
+        "F1": {
+          "id": "F1",
+          "label": "Story-only costume collection",
+          "x": 35,
+          "y": 45,
+          "w": 430,
+          "h": 290,
+          "color": "#43BF87"
+        },
+        "F2": {
+          "id": "F2",
+          "label": "Optional story payoff",
+          "x": 490,
+          "y": 45,
+          "w": 410,
+          "h": 290,
+          "color": "#E8D25C"
+        }
+      }
+    }
+  },
+  "mechStructures": {
+    "LIB-MSTRUCT-DOOR": {
+      "id": "LIB-MSTRUCT-DOOR",
+      "name": "Cooperative Door Challenge",
+      "description": "A current-system example: challenge core, prop interaction, sensor input, and actuator output.",
+      "estMinutes": 15,
+      "nodes": {
+        "S1": {
+          "id": "S1",
+          "primitiveId": "LIB-MPRIM-CHALLENGE-CORE",
+          "kind": "mechanic",
+          "mechKind": "challengeCore",
+          "title": "Door Challenge Core",
+          "x": 40,
+          "y": 120,
+          "body": "Players coordinate to open the sealed door.",
+          "color": null,
+          "goal": "Open the door through coordinated action.",
+          "cooperationStyle": "Synchronous",
+          "physicalTrackSubnodeIds": [],
+          "cognitiveTrackSubnodeIds": [],
+          "noteColor": "#A87BF0"
+        },
+        "S2": {
+          "id": "S2",
+          "primitiveId": "LIB-MPRIM-PROP-INTERACTION",
+          "kind": "objective",
+          "mechKind": "propInteraction",
+          "title": "Hold the Switches",
+          "x": 360,
+          "y": 60,
+          "body": "Players hold separate switches at the same time.",
+          "color": null,
+          "interactionType": "Unlock",
+          "successCondition": "All required switches are held together.",
+          "failureCondition": "",
+          "resetProcedure": "",
+          "connectTo": {
+            "itemIds": [],
+            "sensorIds": [],
+            "nodeIds": [],
+            "ideas": []
+          },
+          "noteColor": "#E0A23C",
+          "attachedSubnodeIds": []
+        },
+        "S3": {
+          "id": "S3",
+          "primitiveId": "LIB-MPRIM-SENSOR-NODE",
+          "kind": "sensor",
+          "mechKind": "sensorNode",
+          "title": "Door Sensor",
+          "x": 700,
+          "y": 120,
+          "body": "Detects whether the switches are correctly held.",
+          "color": null,
+          "sensorType": "Button",
+          "inputRequired": "All switch inputs active at the same time.",
+          "triggerCondition": "",
+          "nodeColor": "#3EC6D6",
+          "manualOverrideFallback": "",
+          "reliability": "3",
+          "frequencyLimitEnabled": false,
+          "frequencyTriggerCount": 1,
+          "frequencyTimePeriod": "1 minute",
+          "cooldownEnabled": false,
+          "cooldownDuration": "30 seconds"
+        },
+        "S4": {
+          "id": "S4",
+          "primitiveId": "LIB-MPRIM-ACTUATOR-NODE",
+          "kind": "mechanic",
+          "mechKind": "actuatorNode",
+          "title": "Door Opens",
+          "x": 1020,
+          "y": 120,
+          "body": "Signals that the door opens.",
+          "color": null,
+          "actuatorType": "Lock",
+          "outputDuration": "",
+          "outputIntensity": "",
+          "outputRhythm": "",
+          "resetBehavior": "",
+          "nodeColor": "#5CA8F5",
+          "audioFileRef": "",
+          "manualOverrideFallback": "",
+          "frequencyLimitEnabled": false,
+          "frequencyTriggerCount": 1,
+          "frequencyTimePeriod": "1 minute",
+          "cooldownEnabled": false,
+          "cooldownDuration": "30 seconds"
+        }
+      },
+      "edges": [
+        {
+          "from": "S1",
+          "to": "S2",
+          "label": "assemble",
+          "color": null
+        },
+        {
+          "from": "S2",
+          "to": "S3",
+          "label": "all held",
+          "color": null
+        },
+        {
+          "from": "S3",
+          "to": "S4",
+          "label": "confirmed",
+          "color": null
+        }
+      ]
+    },
+    "LIB-MSTRUCT-TURTLE-SHELL-REACTION": {
+      "id": "LIB-MSTRUCT-TURTLE-SHELL-REACTION",
+      "name": "NinjaTurtleShellReaction",
+      "description": "Mechanics-only reusable structure for one team shell: GPS zone dwell trigger, frequency control, MacroDroid phone bridge, and MP3 speaker output. Story tone and character meaning belong in Story Structures.",
+      "estMinutes": 10,
+      "nodes": {
+        "S1": {
+          "id": "S1",
+          "primitiveId": "LIB-MPRIM-TASK-TEMPLATE",
+          "kind": "mechanic",
+          "mechKind": "taskTemplate",
+          "title": "NinjaTurtleShellReaction",
+          "x": 70,
+          "y": 110,
+          "body": "Main reusable mechanics container. Instantiate once per team shell, then set zone, delay, trigger limits, and MP3 file.",
+          "color": "#8B7BF5",
+          "estMinutes": 5,
+          "minPlayers": 1,
+          "maxPlayers": 1,
+          "recommendedCrew": "One crew member or phone macro owner to verify GPS and speaker behavior.",
+          "difficultyPressure": "Low",
+          "reusableAsLibraryTemplate": true,
+          "sub": {
+            "nodes": {
+              "D1": {
+                "id": "D1",
+                "kind": "item",
+                "title": "Mask / Headband",
+                "x": 50,
+                "y": 70,
+                "body": "Costume Story Item. No active mechanic attached.",
+                "color": "#5CA8F5",
+                "itemType": "Wearable",
+                "origin": "Team costume collection.",
+                "persistsAcrossTasks": true
+              },
+              "D2": {
+                "id": "D2",
+                "kind": "item",
+                "title": "Arm Sweat Catchers",
+                "x": 300,
+                "y": 70,
+                "body": "Costume Story Item. No active mechanic attached.",
+                "color": "#E0A23C",
+                "itemType": "Wearable",
+                "origin": "Team costume collection.",
+                "persistsAcrossTasks": true
+              },
+              "D3": {
+                "id": "D3",
+                "kind": "item",
+                "title": "Leg Sweat Catchers",
+                "x": 50,
+                "y": 240,
+                "body": "Costume Story Item. No active mechanic attached.",
+                "color": "#A87BF0",
+                "itemType": "Wearable",
+                "origin": "Team costume collection.",
+                "persistsAcrossTasks": true
+              },
+              "D4": {
+                "id": "D4",
+                "kind": "item",
+                "title": "Weapon",
+                "x": 300,
+                "y": 240,
+                "body": "Costume Story Item. No active mechanic attached.",
+                "color": "#F08CB4",
+                "itemType": "Wearable",
+                "origin": "Team costume collection.",
+                "persistsAcrossTasks": true
+              },
+              "D5": {
+                "id": "D5",
+                "kind": "item",
+                "title": "Shell",
+                "x": 570,
+                "y": 150,
+                "body": "Only active costume piece. Physically contains the GPS tracker.",
+                "color": "#43BF87",
+                "itemType": "Wearable",
+                "origin": "Team costume collection; carries GPS tracker hardware.",
+                "persistsAcrossTasks": true
+              },
+              "D6": {
+                "id": "D6",
+                "primitiveId": "LIB-MPRIM-CHALLENGE-CORE",
+                "kind": "mechanic",
+                "mechKind": "challengeCore",
+                "title": "Shell Reaction Flow",
+                "x": 782,
+                "y": 523,
+                "body": "Coordinates the mechanics-only GPS reaction chain for this shell instance.",
+                "color": "#A87BF0",
+                "goal": "When the Shell enters a defined GPS zone and remains there for the dwell time, play the selected MP3 reaction.",
+                "cooperationStyle": "Solo",
+                "physicalTrackSubnodeIds": [
+                  "D5",
+                  "D7",
+                  "D8",
+                  "D9",
+                  "D10",
+                  "D11"
+                ],
+                "cognitiveTrackSubnodeIds": [],
+                "noteColor": "#8B7BF5"
+              },
+              "D7": {
+                "id": "D7",
+                "primitiveId": "LIB-MPRIM-SENSOR-NODE",
+                "kind": "sensor",
+                "mechKind": "sensorNode",
+                "title": "Shell GPS Tracker",
+                "x": 1097,
+                "y": 111,
+                "body": "GPS tracker inside the Shell. The trigger is based only on Shell location and dwell time.",
+                "color": "#3EC6D6",
+                "sensorType": "GPS Zone",
+                "zoneReference": "Select GPS zone / geofence record",
+                "inputRequired": "Shell tracker enters the configured GPS zone.",
+                "triggerCondition": "Shell remains inside the configured GPS zone. No extra costume-state condition is required.",
+                "nodeColor": "#3EC6D6"
+              },
+              "D8": {
+                "id": "D8",
+                "primitiveId": "LIB-MSUB-triggerDelay",
+                "kind": "mechanicSubnode",
+                "subnodeKind": "triggerDelay",
+                "title": "Dwell Delay",
+                "x": 1480,
+                "y": 60,
+                "body": "Requires the Shell to remain in the zone for X seconds before triggering audio.",
+                "color": "#5CA8F5",
+                "icon": "clock",
+                "category": "gameplayModifiers",
+                "attachesTo": [
+                  "sensorNode",
+                  "actuatorNode",
+                  "*"
+                ],
+                "fields": {
+                  "purpose": "Adds a delay before the sensor or actuator activates after the trigger condition is met.",
+                  "delayDuration": "30 seconds",
+                  "delayType": "Fixed"
+                }
+              },
+              "D9": {
+                "id": "D9",
+                "primitiveId": "LIB-MSUB-frequencyControl",
+                "kind": "mechanicSubnode",
+                "subnodeKind": "frequencyControl",
+                "title": "Frequency Control",
+                "x": 1480,
+                "y": 250,
+                "body": "Limits how often the MP3 reaction can fire.",
+                "color": "#E8D25C",
+                "icon": "clock",
+                "category": "gameplayModifiers",
+                "attachesTo": [
+                  "sensorNode",
+                  "actuatorNode",
+                  "taskTemplate",
+                  "*"
+                ],
+                "fields": {
+                  "purpose": "Limits how often a sensor, actuator, or reaction can trigger during a task or session.",
+                  "maxTriggersPerSession": "3",
+                  "cooldown": "At least 120 seconds between triggers for this shell instance.",
+                  "resetRule": "Reset at the start of a new session or by manual GM/crew reset."
+                }
+              },
+              "D10": {
+                "id": "D10",
+                "primitiveId": "LIB-ITM-MACRODROID-PHONE",
+                "kind": "objective",
+                "physicalKind": "item",
+                "itemId": "LIB-ITM-MACRODROID-PHONE",
+                "title": "MacroDroid Phone Bridge",
+                "x": 1886,
+                "y": 151,
+                "body": "Phone receives or evaluates the GPS trigger and runs the macro that plays the selected MP3.",
+                "color": "#3EC6D6",
+                "refs": {
+                  "itemIds": [
+                    "LIB-ITM-MACRODROID-PHONE"
+                  ],
+                  "sensorIds": [],
+                  "mechanicIds": []
+                }
+              },
+              "D11": {
+                "id": "D11",
+                "primitiveId": "LIB-MPRIM-ACTUATOR-NODE",
+                "kind": "mechanic",
+                "mechKind": "actuatorNode",
+                "title": "Play MP3 Reaction",
+                "x": 2140,
+                "y": 150,
+                "body": "Audio actuator: play one MP3 file through the paired speaker.",
+                "color": "#5CA8F5",
+                "actuatorType": "Sound",
+                "audioFileRef": "reaction.mp3",
+                "outputDuration": "Length of selected MP3",
+                "outputIntensity": "Speaker volume set for the play area.",
+                "outputRhythm": "Single MP3 playback. No random voice categories or narrative line selection.",
+                "resetBehavior": "Ready for the next trigger after the Frequency Control cooldown/reset rule.",
+                "nodeColor": "#5CA8F5"
+              }
+            },
+            "edges": [
+              {
+                "from": "D1",
+                "to": "D6",
+                "label": "costume piece",
+                "color": null
+              },
+              {
+                "from": "D2",
+                "to": "D6",
+                "label": "costume piece",
+                "color": null
+              },
+              {
+                "from": "D3",
+                "to": "D6",
+                "label": "costume piece",
+                "color": null
+              },
+              {
+                "from": "D4",
+                "to": "D6",
+                "label": "costume piece",
+                "color": null
+              },
+              {
+                "from": "D5",
+                "to": "D7",
+                "label": "contains GPS",
+                "color": null
+              },
+              {
+                "from": "D7",
+                "to": "D8",
+                "label": "zone entered",
+                "color": null
+              },
+              {
+                "from": "D8",
+                "to": "D9",
+                "label": "after dwell time",
+                "color": null
+              },
+              {
+                "from": "D9",
+                "to": "D10",
+                "label": "allowed trigger",
+                "color": null
+              },
+              {
+                "from": "D10",
+                "to": "D11",
+                "label": "play MP3",
+                "color": null
+              }
+            ],
+            "frames": {
+              "F1": {
+                "id": "F1",
+                "label": "Costume Story Items",
+                "x": 20,
+                "y": 30,
+                "w": 800,
+                "h": 390,
+                "color": "#43BF87"
+              },
+              "F2": {
+                "id": "F2",
+                "label": "Shell GPS trigger logic",
+                "x": 1080,
+                "y": 30,
+                "w": 720,
+                "h": 420,
+                "color": "#3EC6D6"
+              },
+              "F3": {
+                "id": "F3",
+                "label": "Phone bridge and MP3 output",
+                "x": 1824,
+                "y": 85,
+                "w": 610,
+                "h": 310,
+                "color": "#5CA8F5"
+              }
+            }
+          }
+        }
+      },
+      "edges": [],
+      "frames": {
+        "F1": {
+          "id": "F1",
+          "label": "Reusable mechanics container",
+          "x": 35,
+          "y": 55,
+          "w": 430,
+          "h": 260,
+          "color": "#8B7BF5"
+        }
+      }
+    }
+  },
+  "concepts": {
+    "LIB-CPT-DRAGON": {
+      "id": "LIB-CPT-DRAGON",
+      "category": "storyConcept",
+      "name": "Dragon & the City",
+      "premade": true,
+      "description": "Explain your project as if it is an epic adventure get people excited about your plan of action there is a dragon outside of city walls your world is no longer safe what should you do escape find a safer place to live and defend strengthen the walls of the city attack take on dragon before he gets stronger each options has risks and rewards just like your project",
+      "questions": [
+        {
+          "key": "dragon",
+          "label": "Who or what is the Dragon — the looming threat?"
+        },
+        {
+          "key": "city",
+          "label": "What is the City — the thing worth protecting?"
+        },
+        {
+          "key": "wants",
+          "label": "What does the Dragon want, and why now?"
+        },
+        {
+          "key": "weakness",
+          "label": "What is the Dragon’s weakness — or its price?"
+        },
+        {
+          "key": "defenders",
+          "label": "Who stands for the City, and what must they give up?"
+        },
+        {
+          "key": "stakes",
+          "label": "What happens to the City if the Dragon wins?"
+        }
+      ],
+      "example": {
+        "dragon": "The creditor syndicate calling in the district’s debts.",
+        "city": "The riverside market street where every player faction trades.",
+        "wants": "The deeds to the street — tonight, before the festival crowd arrives.",
+        "weakness": "Its enforcers won’t act in front of witnesses.",
+        "defenders": "The stallholders’ council; they must give up their secret ledger.",
+        "stakes": "The market is bought out and the community scattered."
+      },
+      "nodes": {
+        "S002": {
+          "id": "S002",
+          "kind": "conceptTitle",
+          "title": "Escape",
+          "x": 1415,
+          "y": 105,
+          "body": "",
+          "color": null
+        },
+        "S003": {
+          "id": "S003",
+          "kind": "conceptTitle",
+          "title": "Defend",
+          "x": 1431,
+          "y": 429,
+          "body": "",
+          "color": null
+        },
+        "S005": {
+          "id": "S005",
+          "kind": "conceptTitle",
+          "title": "Attack",
+          "x": 1419,
+          "y": 763,
+          "body": "",
+          "color": null
+        },
+        "S006": {
+          "id": "S006",
+          "kind": "conceptChoice",
+          "title": "What to do",
+          "x": 1073,
+          "y": 368,
+          "body": "",
+          "color": null
+        },
+        "S007": {
+          "id": "S007",
+          "kind": "character",
+          "title": "What is your dragon",
+          "x": 201,
+          "y": 666,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrtp9mur-r82vbo",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrtp9mur-7ebo01",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrtp9mur-wtwrog",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrtp9mur-85beaa",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrtp9mur-k4h2ut",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrtp9mur-qqt1jz",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrtp9mur-ixa8ze",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrtp9mur-jjgd1t",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrtp9mur-8bu83l",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrtp9mur-pj7eug",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrtp9mur-k3b11d",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrtp9mur-7r394r",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrtp9mur-v0p4cc",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrtp9mur-5sfedx",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrtp9mur-g5w1in",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrtp9mur-sy8dv9",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrtp9mur-4bo833",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrtp9mur-1b1hy2",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "What is your dragon",
+          "w": 148,
+          "h": 74
+        },
+        "S008": {
+          "id": "S008",
+          "kind": "character",
+          "title": "What is your city",
+          "x": 209,
+          "y": 200,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrtp9n61-2mmx3i",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrtp9n61-kgclh2",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrtp9n61-bblzy5",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrtp9n61-ymhgez",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrtp9n61-sw1zbr",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrtp9n61-jfs8zu",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrtp9n61-vega4q",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrtp9n61-bu01kf",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrtp9n61-8vlf2z",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrtp9n61-n1wm6j",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrtp9n61-kcq66x",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrtp9n61-j523hy",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrtp9n61-ftkmaw",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrtp9n61-e8grp0",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrtp9n61-nyt9v8",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrtp9n61-bckaoa",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrtp9n61-d6enxy",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrtp9n61-pwxhch",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "What is your city",
+          "w": 148,
+          "h": 74
+        },
+        "S009": {
+          "id": "S009",
+          "kind": "conceptQuestion",
+          "title": "What is good and valuable in the status quo",
+          "x": 406,
+          "y": 75,
+          "body": "",
+          "color": null,
+          "w": 159,
+          "h": 89
+        },
+        "S010": {
+          "id": "S010",
+          "kind": "conceptQuestion",
+          "title": "What is wrong unfair or wasteful",
+          "x": 404,
+          "y": 194,
+          "body": "",
+          "color": null,
+          "w": 156,
+          "h": 89
+        },
+        "S011": {
+          "id": "S011",
+          "kind": "conceptQuestion",
+          "title": "Where is the threat coming from",
+          "x": 403,
+          "y": 534,
+          "body": "",
+          "color": null,
+          "w": 183,
+          "h": 89
+        },
+        "S012": {
+          "id": "S012",
+          "kind": "conceptQuestion",
+          "title": "How has it been allowed to get this bad",
+          "x": 403,
+          "y": 671,
+          "body": "",
+          "color": null,
+          "w": 183,
+          "h": 89
+        },
+        "S013": {
+          "id": "S013",
+          "kind": "conceptQuestion",
+          "title": "What's the cost of abandoning the city",
+          "x": 1828,
+          "y": 179,
+          "body": "",
+          "color": null
+        },
+        "S014": {
+          "id": "S014",
+          "kind": "conceptQuestion",
+          "title": "Where would you go",
+          "x": 1835,
+          "y": 8,
+          "body": "",
+          "color": null
+        },
+        "S015": {
+          "id": "S015",
+          "kind": "conceptQuestion",
+          "title": "Is there an opportunity here",
+          "x": 397,
+          "y": 808,
+          "body": "",
+          "color": null,
+          "w": 183,
+          "h": 74
+        },
+        "S016": {
+          "id": "S016",
+          "kind": "conceptQuestion",
+          "title": "What's the reward and if it's worth the risk",
+          "x": 1833,
+          "y": 828,
+          "body": "",
+          "color": null
+        },
+        "S017": {
+          "id": "S017",
+          "kind": "conceptQuestion",
+          "title": "Walls protect but do they also restrict what is the cost of staying put",
+          "x": 1825,
+          "y": 501,
+          "body": "",
+          "color": null
+        },
+        "S018": {
+          "id": "S018",
+          "kind": "conceptQuestion",
+          "title": "What should you take with you",
+          "x": 1836,
+          "y": 88,
+          "body": "",
+          "color": null
+        },
+        "S019": {
+          "id": "S019",
+          "kind": "conceptQuestion",
+          "title": "Who is in charge who do you need to persuade to act",
+          "x": 405,
+          "y": 299,
+          "body": "",
+          "color": null,
+          "w": 153,
+          "h": 89
+        },
+        "S020": {
+          "id": "S020",
+          "kind": "conceptQuestion",
+          "title": "What is worth defending in the Old City",
+          "x": 1820,
+          "y": 331,
+          "body": "",
+          "color": null
+        },
+        "S021": {
+          "id": "S021",
+          "kind": "conceptQuestion",
+          "title": "What's your best line of attack",
+          "x": 1830,
+          "y": 666,
+          "body": "",
+          "color": null
+        },
+        "S022": {
+          "id": "S022",
+          "kind": "conceptQuestion",
+          "title": "How can you strengthen your walls",
+          "x": 1825,
+          "y": 415,
+          "body": "",
+          "color": null
+        },
+        "S023": {
+          "id": "S023",
+          "kind": "conceptQuestion",
+          "title": "What are your chances of winning",
+          "x": 1835,
+          "y": 741,
+          "body": "",
+          "color": null
+        }
+      },
+      "edges": [
+        {
+          "from": "S006",
+          "to": "S002",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S006",
+          "to": "S003",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S006",
+          "to": "S005",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S008",
+          "to": "S009",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S008",
+          "to": "S010",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S008",
+          "to": "S019",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S002",
+          "to": "S014",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S002",
+          "to": "S018",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S002",
+          "to": "S013",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S003",
+          "to": "S020",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S003",
+          "to": "S022",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S003",
+          "to": "S017",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S005",
+          "to": "S021",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S005",
+          "to": "S023",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S005",
+          "to": "S016",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S007",
+          "to": "S011",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S007",
+          "to": "S015",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S007",
+          "to": "S012",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        }
+      ],
+      "numberMarkers": {
+        "NUM-001": {
+          "id": "NUM-001",
+          "value": 1,
+          "x": 187,
+          "y": 178,
+          "color": "#E8D25C",
+          "scale": 0.774
+        },
+        "NUM-002": {
+          "id": "NUM-002",
+          "value": 2,
+          "x": 188,
+          "y": 632,
+          "color": "#E8D25C",
+          "scale": 0.774
+        },
+        "NUM-003": {
+          "id": "NUM-003",
+          "value": 3,
+          "x": 1024,
+          "y": 357,
+          "color": "#E8D25C"
+        }
+      },
+      "frames": {
+        "FR-001": {
+          "id": "FR-001",
+          "label": "Frame",
+          "x": 907,
+          "y": -42,
+          "w": 1440,
+          "h": 1030,
+          "color": "#8B92A6"
+        },
+        "FR-002": {
+          "id": "FR-002",
+          "label": "Frame",
+          "x": 168,
+          "y": 27,
+          "w": 545,
+          "h": 953,
+          "color": "#8B92A6"
+        }
+      },
+      "subnodes": {},
+      "frameworks": {},
+      "titleMarkers": {}
+    },
+    "LIB-CPT-HERO": {
+      "id": "LIB-CPT-HERO",
+      "category": "characterConcept",
+      "name": "Hero & Guide",
+      "premade": true,
+      "description": "A protagonist paired with a mentor figure who gives a gift — at a cost. Bind a player (or team) to the Hero role and an NPC actor to the Guide.",
+      "questions": [
+        {
+          "key": "hero",
+          "label": "Who is the Hero — whose story is this?"
+        },
+        {
+          "key": "guide",
+          "label": "Who is the Guide, and why do they help?"
+        },
+        {
+          "key": "gift",
+          "label": "What gift, lesson or tool does the Guide give?"
+        },
+        {
+          "key": "cost",
+          "label": "What does the Guide withhold — or what does their help cost?"
+        }
+      ],
+      "example": {
+        "hero": "The newest courier on the crew — the players’ own team.",
+        "guide": "Quartermaster Mank, who has seen this dragon before.",
+        "gift": "The old route map through the flooded tunnels.",
+        "cost": "He never says what happened to the last crew he gave it to."
+      },
+      "nodes": {
+        "S1": {
+          "id": "S1",
+          "kind": "character",
+          "title": "The Hero",
+          "x": 40,
+          "y": 60,
+          "body": "Whose story is this? Bind to a player team.",
+          "color": null
+        },
+        "S2": {
+          "id": "S2",
+          "kind": "character",
+          "title": "The Guide",
+          "x": 40,
+          "y": 260,
+          "body": "The mentor. Cast an NPC actor; author intent + key lines, not scripts.",
+          "color": null
+        },
+        "S3": {
+          "id": "S3",
+          "kind": "event",
+          "title": "The Gift",
+          "x": 340,
+          "y": 160,
+          "body": "The Guide hands over the tool, lesson or map — and names no price.",
+          "color": null
+        },
+        "S4": {
+          "id": "S4",
+          "kind": "event",
+          "title": "The Price Revealed",
+          "x": 640,
+          "y": 160,
+          "body": "What the help really cost. Attach a Relationship / Status Change.",
+          "color": null
+        }
+      },
+      "edges": [
+        {
+          "from": "S2",
+          "to": "S3",
+          "label": "offers",
+          "color": null
+        },
+        {
+          "from": "S1",
+          "to": "S3",
+          "label": "accepts",
+          "color": null
+        },
+        {
+          "from": "S3",
+          "to": "S4",
+          "label": "later",
+          "color": null
+        }
+      ]
+    },
+    "LIB-CPT-N003": {
+      "id": "LIB-CPT-N003",
+      "category": "storyConcept",
+      "name": "Universal stories",
+      "description": "build your story on solid foundations use elements that everyone will recognize humans are wonderfully diverse but if you have more in common than sets us apart every society anywhere in the world and at any point in history share certain basic habits and ways of thinking these universal traits come up time and time again in stories we tell they are reliable building blocks for your story too",
+      "conceptType": "unset",
+      "status": "seed",
+      "primaryFunction": "unset",
+      "storyPosition": "setup",
+      "onePromise": "Find common ground",
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {
+        "S001": {
+          "id": "S001",
+          "kind": "conceptChoice",
+          "title": "Free will we see ourselves and other people as free willed individuals making deliberate choices",
+          "x": 822,
+          "y": 8,
+          "body": "",
+          "color": null,
+          "w": 417,
+          "h": 74
+        },
+        "S002": {
+          "id": "S002",
+          "kind": "conceptChoice",
+          "title": "Conflict and cooperation everyone is capable of both we can choose either",
+          "x": 821,
+          "y": 100,
+          "body": "",
+          "color": null,
+          "w": 412,
+          "h": 74
+        },
+        "S003": {
+          "id": "S003",
+          "kind": "conceptChoice",
+          "title": "Inconsistencies we all have gaps between what we do say and think",
+          "x": 824,
+          "y": 186,
+          "body": "",
+          "color": null,
+          "w": 406,
+          "h": 79
+        },
+        "S004": {
+          "id": "S004",
+          "kind": "conceptChoice",
+          "title": "Fear and bravery we all understand that fears can be overcome",
+          "x": 822,
+          "y": 275,
+          "body": "",
+          "color": null,
+          "w": 399,
+          "h": 74
+        },
+        "S005": {
+          "id": "S005",
+          "kind": "conceptChoice",
+          "title": "Right and wrong we all understand the difference we expect fairness and judgment from our peers",
+          "x": 824,
+          "y": 370,
+          "body": "",
+          "color": null,
+          "w": 407,
+          "h": 74
+        },
+        "S006": {
+          "id": "S006",
+          "kind": "conceptChoice",
+          "title": "Rites of passage all cultures have childhood adolescent and adult phases of life perhaps you are in helping your user or customer grow up in some way",
+          "x": 821,
+          "y": 466,
+          "body": "",
+          "color": null,
+          "w": 409,
+          "h": 92
+        },
+        "S007": {
+          "id": "S007",
+          "kind": "conceptQuestion",
+          "title": " Types of Universal stories",
+          "x": 352,
+          "y": 252,
+          "body": "",
+          "color": null
+        }
+      },
+      "edges": [
+        {
+          "from": "S007",
+          "to": "S001",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S007",
+          "to": "S002",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S007",
+          "to": "S003",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S007",
+          "to": "S004",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S007",
+          "to": "S005",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S007",
+          "to": "S006",
+          "label": "",
+          "color": null
+        }
+      ],
+      "frameworks": {},
+      "frames": {}
+    },
+    "LIB-CPT-N004": {
+      "id": "LIB-CPT-N004",
+      "category": "storyConcept",
+      "name": "Curious tales",
+      "description": "Tell me what grabs your attention and you're halfway grabbing my attention too you have no control over your own curiosity some things fascinate you others don't what's intriguing for you to might seem weird to me but I am interested in what makes you tick so curious tales are a great way to tell to give me insight into what drives you forward",
+      "conceptType": "unset",
+      "status": "seed",
+      "onePromise": "",
+      "conceptQuestions": [
+        {
+          "id": "cq-mrrkqvex-vcxyi3",
+          "prompt": "What's new unusual and potentially useful",
+          "choices": []
+        },
+        {
+          "id": "cq-mrrksnyw-d1ka9q",
+          "prompt": "Curiosity equals anomaly plus potential benefit",
+          "choices": [
+            {
+              "id": "cc-mrrkszwy-mgj9v0",
+              "label": "Interesting"
+            }
+          ]
+        }
+      ],
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {},
+      "edges": [],
+      "frameworks": {},
+      "frames": {}
+    },
+    "LIB-CPT-N005": {
+      "id": "LIB-CPT-N005",
+      "category": "storyConcept",
+      "name": "Three great conflicts",
+      "description": "Show how your work helps people with life's great battles conflict drives your story forward because we want to know how it resolves",
+      "conceptType": "unset",
+      "status": "seed",
+      "onePromise": "They raise the stakes",
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {
+        "S002": {
+          "id": "S002",
+          "kind": "conceptQuestion",
+          "title": "Where are the points of conflict between Dream and nightmare?\n",
+          "x": 687,
+          "y": 731,
+          "body": "",
+          "color": null
+        },
+        "S005": {
+          "id": "S005",
+          "kind": "character",
+          "title": "SELF",
+          "x": 1009,
+          "y": 364,
+          "body": "We are our own worst enemy struggling to do what we know is right",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrrt8be1-i3wlrd",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrt8be1-qbitmc",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrt8be1-hvc0pz",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrt8be1-rcwrej",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrt8be1-yjts8l",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrrt8be1-y87wqa",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrrt8be1-hd29mj",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrrt8be1-0n8vjv",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrrt8be1-t0xyq3",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrrt8be1-w73v9n",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrrt8be1-m0umgn",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrrt8be1-r1he5e",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrrt8be1-odyyx7",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrrt8be1-gpmd40",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrrt8be1-ysc3nb",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrrt8be1-zdxyes",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrrt8be1-oquvou",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrrt8be1-y18ubc",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "SELF",
+          "description": "We are our own worst enemy struggling to do what we know is right"
+        },
+        "S009": {
+          "id": "S009",
+          "kind": "conceptQuestion",
+          "title": "What would the dream version of your project look like",
+          "x": 105,
+          "y": 717,
+          "body": "",
+          "color": null
+        },
+        "S010": {
+          "id": "S010",
+          "kind": "conceptQuestion",
+          "title": "What's the nightmare version?",
+          "x": 405,
+          "y": 728,
+          "body": "",
+          "color": null
+        },
+        "S011": {
+          "id": "S011",
+          "kind": "conceptQuestion",
+          "title": "How could this conflict resolve",
+          "x": 976,
+          "y": 710,
+          "body": "",
+          "color": null
+        },
+        "S012": {
+          "id": "S012",
+          "kind": "conceptQuestion",
+          "title": "Which is the greatest conflict that you or your user must fight this should be at the heart of your story",
+          "x": 1288,
+          "y": 685,
+          "body": "",
+          "color": null
+        },
+        "CHM-S-013": {
+          "id": "CHM-S-013",
+          "kind": "character",
+          "title": "Society",
+          "body": "Fighting other people over resources goals or values",
+          "color": null,
+          "x": 1041,
+          "y": 46,
+          "name": "Society",
+          "description": "Fighting other people over resources goals or values"
+        },
+        "CHM-S-014": {
+          "id": "CHM-S-014",
+          "kind": "character",
+          "title": "Nature",
+          "body": "Fighting monstrous animals disease weather accidents acts of God",
+          "color": null,
+          "x": 1015,
+          "y": 202,
+          "name": "Nature",
+          "description": "Fighting monstrous animals disease weather accidents acts of God"
+        },
+        "CHM-S-015": {
+          "id": "CHM-S-015",
+          "kind": "character",
+          "title": "Hero",
+          "x": 104,
+          "y": 181,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrrtv910-d9wlu6",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrtv910-p5bd02",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrtv910-q6xiqd",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrtv910-eczgk9",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrtv910-ae75ls",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrrtv910-x0qw1c",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrrtv910-bc4kgy",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrrtv910-mp6gyi",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrrtv910-tfwtea",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrrtv910-97xgy6",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrrtv910-z0hvx8",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrrtv910-c2olw5",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrrtv910-22pf67",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrrtv910-78tqex",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrrtv910-zyswgd",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrrtv910-0cb56b",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrrtv910-zbqqt5",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrrtv910-vy4054",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "Hero"
+        },
+        "CHM-S-011": {
+          "id": "CHM-S-011",
+          "kind": "conceptQuestion",
+          "title": "People are hostile competitive and unkind\n",
+          "x": 529,
+          "y": 51,
+          "body": "Others will be nice",
+          "color": null,
+          "w": 330,
+          "h": 108
+        },
+        "CHM-S-012": {
+          "id": "CHM-S-012",
+          "kind": "conceptQuestion",
+          "title": "Life is cruel random and heartless",
+          "x": 580,
+          "y": 210,
+          "body": "Life will be fair",
+          "color": null
+        },
+        "CHM-S-016": {
+          "id": "CHM-S-016",
+          "kind": "conceptQuestion",
+          "title": "I am proud lazy selfish and flawed",
+          "x": 553,
+          "y": 363,
+          "body": "I will be perfect",
+          "color": null,
+          "w": 323,
+          "h": 116
+        }
+      },
+      "edges": [
+        {
+          "from": "CHM-S-015",
+          "to": "CHM-S-011",
+          "label": "",
+          "color": "#E0A23C"
+        },
+        {
+          "from": "CHM-S-011",
+          "to": "CHM-S-013",
+          "label": "",
+          "color": "#5CA8F5"
+        },
+        {
+          "from": "CHM-S-015",
+          "to": "CHM-S-016",
+          "label": "",
+          "color": "#E0A23C"
+        },
+        {
+          "from": "CHM-S-016",
+          "to": "S005",
+          "label": "",
+          "color": "#5CA8F5"
+        },
+        {
+          "from": "CHM-S-015",
+          "to": "CHM-S-012",
+          "label": "",
+          "color": "#E0A23C"
+        },
+        {
+          "from": "CHM-S-012",
+          "to": "CHM-S-014",
+          "label": "",
+          "color": "#5CA8F5"
+        }
+      ],
+      "frames": {
+        "ARR-001": {
+          "id": "ARR-001",
+          "label": "Arrow",
+          "shape": "arrow",
+          "x": 45,
+          "y": 35,
+          "w": 200,
+          "h": 78,
+          "color": "#5CA8F5"
+        }
+      }
+    },
+    "LIB-CPT-N006": {
+      "id": "LIB-CPT-N006",
+      "category": "storyConcept",
+      "name": "Good and evil",
+      "description": "tap into strong feeling of right and wrong in your audience bring a moral conflict into your story in a simple story you set a battle between right and versus wrong with you on the side of the angels but you can also show tough choices when two rides collide or we must choose of the lesser of evils we love this kind of complex storytelling which is why breaking bad wants so many awards",
+      "conceptType": "unset",
+      "status": "seed",
+      "onePromise": "Make story matter",
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {
+        "S001": {
+          "id": "S001",
+          "kind": "conceptQuestion",
+          "title": "Which side does your project take in any of those battles",
+          "x": 426,
+          "y": 34,
+          "body": "",
+          "color": null,
+          "w": 460,
+          "h": 93
+        },
+        "S002": {
+          "id": "S002",
+          "kind": "conceptQuestion",
+          "title": "Does your project try to balance one competing good against another or help us choose the lesser of two evils",
+          "x": 349,
+          "y": 329,
+          "body": "",
+          "color": null,
+          "w": 429,
+          "h": 76
+        },
+        "S003": {
+          "id": "S003",
+          "kind": "character",
+          "title": "Lesser evil",
+          "x": 755,
+          "y": 462,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrrvso31-yafsk6",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvso31-1kj28n",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvso31-bpctky",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvso31-7amz10",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvso31-ib570c",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrrvso31-1zevb1",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrrvso31-o3e8go",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrrvso31-9wo6kn",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrrvso31-tx8t2m",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrrvso31-w24bhn",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrrvso31-cqvv7y",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrrvso31-fs89s4",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrrvso31-aqzasf",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrrvso31-2rpogf",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrrvso31-x213xu",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrrvso31-d95uia",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrrvso31-iaxvln",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrrvso31-0gbiq5",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "Lesser evil"
+        },
+        "S004": {
+          "id": "S004",
+          "kind": "character",
+          "title": "Good",
+          "x": 242,
+          "y": 158,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrrvspll-ui81fe",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvspll-sr4bpz",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvspll-vc8tf8",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvspll-jl4emd",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvspll-h7kwja",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrrvspll-m9kxkw",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrrvspll-kawmjq",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrrvspll-pdnmjx",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrrvspll-xc7fi3",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrrvspll-28vwy5",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrrvspll-907bba",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrrvspll-tf84g8",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrrvspll-axtrra",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrrvspll-5w96ot",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrrvspll-6510ml",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrrvspll-5p7o42",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrrvspll-twhls7",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrrvspll-ehq5kl",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "Good"
+        },
+        "S005": {
+          "id": "S005",
+          "kind": "character",
+          "title": "Evil",
+          "x": 230,
+          "y": 463,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrrvspvb-qxv4cl",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvspvb-13zn3j",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvspvb-v1a5vt",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvspvb-m3rg58",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvspvb-db2oaa",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrrvspvb-7nb7yg",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrrvspvb-z68wkz",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrrvspvb-me725c",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrrvspvb-0vpxkm",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrrvspvb-qo8nuo",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrrvspvb-4dvlbt",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrrvspvb-8snc5r",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrrvspvb-db178x",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrrvspvb-1ept8h",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrrvspvb-kn8blx",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrrvspvb-1esdd0",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrrvspvb-k29dlv",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrrvspvb-4ouw5s",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "Evil"
+        },
+        "S006": {
+          "id": "S006",
+          "kind": "character",
+          "title": "Evil",
+          "x": 861,
+          "y": 152,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrrvu5m1-rm2qnq",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvu5m1-znv29y",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvu5m1-fixs2s",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvu5m1-eh91gl",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrvu5m1-7jkb5p",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrrvu5m1-f1ni6w",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrrvu5m1-s6ykpe",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrrvu5m1-i69yw8",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrrvu5m1-6187rd",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrrvu5m1-j1m2ki",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrrvu5m1-0quf8y",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrrvu5m1-905qaj",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrrvu5m1-dmd8tf",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrrvu5m1-004tm9",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrrvu5m1-ghh6jx",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrrvu5m1-cym72s",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrrvu5m1-n1yuyq",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrrvu5m1-9bopz3",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "Evil"
+        }
+      },
+      "edges": [
+        {
+          "from": "S005",
+          "to": "S003",
+          "label": "VS",
+          "color": null
+        },
+        {
+          "from": "S004",
+          "to": "S006",
+          "label": "VS",
+          "color": null
+        }
+      ],
+      "frameworks": {
+        "FW-001": {
+          "id": "FW-001",
+          "kind": "framework",
+          "frameworkId": "haidtMoralConflicts",
+          "title": "Haidt Moral Conflicts",
+          "x": 1199,
+          "y": 24,
+          "color": "#E86AA0"
+        }
+      },
+      "frames": {},
+      "numberMarkers": {},
+      "titleMarkers": {
+        "TTL-001": {
+          "id": "TTL-001",
+          "text": "SIMPLE CONFLICT STORY",
+          "x": 331,
+          "y": -7,
+          "fontSize": 25,
+          "color": "#E86464"
+        },
+        "TTL-002": {
+          "id": "TTL-002",
+          "text": "Complex conflict story",
+          "x": 268,
+          "y": 260,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        }
+      },
+      "referenceFrameworkIds": [
+        "haidtMoralConflicts"
+      ]
+    },
+    "LIB-CPT-N007": {
+      "id": "LIB-CPT-N007",
+      "category": "storyConcept",
+      "name": "Shock of the old",
+      "description": "We can get so hooked on imagining the future that we forget to look for inspiration in stories from the past never forget just how hard it is to make anything truly innovative history has some harsh lessons for us most new things fail objects or actions which survive for generations must be good at serving some hidden purpose they correspond with something deep in our nature",
+      "conceptType": "unset",
+      "status": "seed",
+      "onePromise": "Create intrigue and awe",
+      "referenceFrameworkIds": [],
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {
+        "S001": {
+          "id": "S001",
+          "kind": "conceptQuestion",
+          "title": "What obvious purpose did this have",
+          "x": 312,
+          "y": 105,
+          "body": "",
+          "color": null
+        },
+        "S002": {
+          "id": "S002",
+          "kind": "conceptQuestion",
+          "title": "What hidden purpose could it have",
+          "x": 287,
+          "y": 613,
+          "body": "",
+          "color": null
+        },
+        "S004": {
+          "id": "S004",
+          "kind": "conceptQuestion",
+          "title": "Does it have a symbolic or ritualistic power",
+          "x": 297,
+          "y": 771,
+          "body": "",
+          "color": null
+        },
+        "S005": {
+          "id": "S005",
+          "kind": "conceptQuestion",
+          "title": "Does it correspond to something deep in our nature",
+          "x": 303,
+          "y": 228,
+          "body": "",
+          "color": null
+        },
+        "S007": {
+          "id": "S007",
+          "kind": "conceptQuestion",
+          "title": "Who owns it who uses it who adapts it",
+          "x": 303,
+          "y": 460,
+          "body": "",
+          "color": null
+        },
+        "S006": {
+          "id": "S006",
+          "kind": "conceptTitle",
+          "title": "Dogs have been with us for a very long time",
+          "x": 1317,
+          "y": 327,
+          "body": "",
+          "color": null
+        },
+        "S009": {
+          "id": "S009",
+          "kind": "conceptTitle",
+          "title": "Symbolic power obedience",
+          "x": 1359,
+          "y": 835,
+          "body": "",
+          "color": null
+        },
+        "S010": {
+          "id": "S010",
+          "kind": "conceptTitle",
+          "title": "Who in the family owns a dog does a dog own us",
+          "x": 1318,
+          "y": 477,
+          "body": "",
+          "color": null
+        },
+        "S011": {
+          "id": "S011",
+          "kind": "conceptTitle",
+          "title": "Hidden purpose contact us to nature take us for walks",
+          "x": 1337,
+          "y": 696,
+          "body": "",
+          "color": null
+        },
+        "S012": {
+          "id": "S012",
+          "kind": "conceptTitle",
+          "title": "Obvious purpose guarding hunting companionship",
+          "x": 1308,
+          "y": 87,
+          "body": "",
+          "color": null
+        },
+        "S013": {
+          "id": "S013",
+          "kind": "conceptTitle",
+          "title": "Deep in our nature we are still animals at heart",
+          "x": 1312,
+          "y": 218,
+          "body": "",
+          "color": null
+        },
+        "S014": {
+          "id": "S014",
+          "kind": "conceptQuestion",
+          "title": "How does it make us feel?",
+          "x": 286,
+          "y": 921,
+          "body": "",
+          "color": null
+        },
+        "S015": {
+          "id": "S015",
+          "kind": "conceptTitle",
+          "title": "Feel responsible loved and trusted",
+          "x": 1324,
+          "y": 943,
+          "body": "",
+          "color": null
+        }
+      },
+      "edges": [
+        {
+          "from": "S001",
+          "to": "S012",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S002",
+          "to": "S011",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S004",
+          "to": "S009",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S005",
+          "to": "S013",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S007",
+          "to": "S010",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S014",
+          "to": "S015",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S005",
+          "to": "S006",
+          "label": "",
+          "color": null
+        }
+      ],
+      "frameworks": {},
+      "frames": {},
+      "numberMarkers": {
+        "NUM-001": {
+          "id": "NUM-001",
+          "value": 2,
+          "x": 1165,
+          "y": 19,
+          "color": "#E8D25C"
+        },
+        "NUM-002": {
+          "id": "NUM-002",
+          "value": 1,
+          "x": 56,
+          "y": 29,
+          "color": "#E8D25C"
+        }
+      },
+      "titleMarkers": {
+        "TTL-001": {
+          "id": "TTL-001",
+          "text": "What story is this object telling me",
+          "x": 105,
+          "y": 35,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        },
+        "TTL-002": {
+          "id": "TTL-002",
+          "text": "Can you find the deep wisdom contained in the stories of how we relate to these old objects?",
+          "x": 1203,
+          "y": -27,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        },
+        "TTL-003": {
+          "id": "TTL-003",
+          "text": "How can you relate to this wisdom the story you're trying to tell?\n",
+          "x": 2009,
+          "y": -9,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        }
+      }
+    },
+    "LIB-CPT-N008": {
+      "id": "LIB-CPT-N008",
+      "category": "storyConcept",
+      "name": "Secrets and puzzles",
+      "description": "Make your story stick in the mind Promise secret waiting to be revealed or a puzzle waiting to be solved we are social creatures always wondering what other people are thinking and doing we are curious creatures always wondering why things work put these elements together and you have powerful attention hooks that can keep your audience with you until the very end of your story",
+      "conceptType": "unset",
+      "status": "seed",
+      "onePromise": "get our attention",
+      "referenceFrameworkIds": [],
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {
+        "S001": {
+          "id": "S001",
+          "kind": "conceptQuestion",
+          "title": "What new information do you discover",
+          "x": 208,
+          "y": 353,
+          "body": "",
+          "color": null
+        },
+        "S002": {
+          "id": "S002",
+          "kind": "conceptQuestion",
+          "title": "How was it kept secret",
+          "x": 488,
+          "y": 355,
+          "body": "",
+          "color": null
+        },
+        "S003": {
+          "id": "S003",
+          "kind": "conceptQuestion",
+          "title": " How did you discover your puzzle",
+          "x": 888,
+          "y": 232,
+          "body": "",
+          "color": null,
+          "w": 236,
+          "h": 74
+        },
+        "S004": {
+          "id": "S004",
+          "kind": "conceptQuestion",
+          "title": "What price did you pay to find this new information",
+          "x": 209,
+          "y": 236,
+          "body": "",
+          "color": null
+        },
+        "S005": {
+          "id": "S005",
+          "kind": "conceptQuestion",
+          "title": "What will your audience gain by acquiring this new information",
+          "x": 488,
+          "y": 228,
+          "body": "",
+          "color": null
+        },
+        "S006": {
+          "id": "S006",
+          "kind": "conceptTitle",
+          "title": "Are a powerful form of information gap if you point out something I don't know you are highlighting an information gap which I naturally want to close if you own the missing information if it's your secret then I must pay attention to you",
+          "x": 203,
+          "y": 118,
+          "body": "",
+          "color": null,
+          "w": 529,
+          "h": 99
+        },
+        "S007": {
+          "id": "S007",
+          "kind": "conceptTitle",
+          "title": "Work because we like to think the world makes sense when you point out any kind of anomaly irony or inconsistency it becomes a glaring information gap that we want to close",
+          "x": 887,
+          "y": 127,
+          "body": "",
+          "color": null,
+          "w": 577,
+          "h": 89
+        },
+        "S008": {
+          "id": "S008",
+          "kind": "conceptQuestion",
+          "title": "Can you find a moment in your story where you discovered an",
+          "x": 908,
+          "y": 422,
+          "body": "",
+          "color": null,
+          "w": 236,
+          "h": 74
+        },
+        "S009": {
+          "id": "S009",
+          "kind": "conceptQuestion",
+          "title": "How did you make sense of it",
+          "x": 1199,
+          "y": 238,
+          "body": "",
+          "color": null,
+          "w": 236,
+          "h": 74
+        },
+        "S010": {
+          "id": "S010",
+          "kind": "conceptQuestion",
+          "title": "What will your audience gain by acquiring this new information",
+          "x": 1487,
+          "y": 236,
+          "body": "",
+          "color": null,
+          "w": 284,
+          "h": 74
+        },
+        "S011": {
+          "id": "S011",
+          "kind": "conceptTitle",
+          "title": "Anomaly this is not normal ",
+          "x": 1337,
+          "y": 333,
+          "body": "",
+          "color": null
+        },
+        "S012": {
+          "id": "S012",
+          "kind": "conceptTitle",
+          "title": "irony this is not what you expect",
+          "x": 1344,
+          "y": 428,
+          "body": "",
+          "color": null
+        },
+        "S013": {
+          "id": "S013",
+          "kind": "conceptTitle",
+          "title": " inconsistency this doesn't fit with what went before",
+          "x": 1345,
+          "y": 537,
+          "body": "",
+          "color": null
+        }
+      },
+      "edges": [
+        {
+          "from": "S006",
+          "to": "S004",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S006",
+          "to": "S005",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S006",
+          "to": "S001",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S006",
+          "to": "S002",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S008",
+          "to": "S011",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S008",
+          "to": "S012",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S008",
+          "to": "S013",
+          "label": "",
+          "color": null
+        }
+      ],
+      "frameworks": {},
+      "frames": {
+        "FR-001": {
+          "id": "FR-001",
+          "label": "Frame",
+          "x": 128,
+          "y": 95,
+          "w": 705,
+          "h": 397,
+          "color": "#8B92A6"
+        },
+        "FR-002": {
+          "id": "FR-002",
+          "label": "Frame",
+          "x": 858,
+          "y": 96,
+          "w": 952,
+          "h": 627,
+          "color": "#8B92A6"
+        }
+      },
+      "numberMarkers": {},
+      "titleMarkers": {
+        "TTL-001": {
+          "id": "TTL-001",
+          "text": "Secrets",
+          "x": 197,
+          "y": 88,
+          "fontSize": 40,
+          "color": "#E9EBF3"
+        },
+        "TTL-002": {
+          "id": "TTL-002",
+          "text": "Puzzles",
+          "x": 917,
+          "y": 100,
+          "fontSize": 40,
+          "color": "#E9EBF3"
+        }
+      }
+    },
+    "LIB-CPT-N009": {
+      "id": "LIB-CPT-N009",
+      "category": "storyConcept",
+      "name": "Rules cheats and rebels",
+      "description": "Tell us a rule then show us someone breaking it now you got our attention they'll be punished or vindicated What do Eve Pandora and Peter Rabbit have in common they were all given rules and broke them eve eats apple pandora opens a box Peter Rabbit goes into Mcgregor's garden and that's when things get interesting we all live by rules so we pray very close attention to stories about anyone who breaks them",
+      "conceptType": "unset",
+      "status": "seed",
+      "onePromise": "keep us hooked",
+      "referenceFrameworkIds": [],
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {
+        "S001": {
+          "id": "S001",
+          "kind": "conceptQuestion",
+          "title": "Who is the rule breaker in your story",
+          "x": 190,
+          "y": 8,
+          "body": "",
+          "color": null
+        },
+        "S002": {
+          "id": "S002",
+          "kind": "conceptTitle",
+          "title": "Set out all the possible rules the hero of your story could break remember that most of the rules we live by are not written down",
+          "x": 190,
+          "y": 131,
+          "body": "",
+          "color": null
+        },
+        "S003": {
+          "id": "S003",
+          "kind": "character",
+          "title": "hero",
+          "x": 479,
+          "y": 110,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrrx1pqt-ix19oo",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrx1pqt-67icp8",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrx1pqt-ow5p6z",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrx1pqt-fxgsgu",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrrx1pqt-hmelfy",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrrx1pqt-9735it",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrrx1pqt-0410tx",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrrx1pqt-xq23rn",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrrx1pqt-7uwysc",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrrx1pqt-22unu9",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrrx1pqt-o6rr3i",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrrx1pqt-40pbxa",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrrx1pqt-stf1xo",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrrx1pqt-uwmf5g",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrrx1pqt-hobqtr",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrrx1pqt-n8n9th",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrrx1pqt-lxu323",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrrx1pqt-valqe2",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "hero"
+        },
+        "S004": {
+          "id": "S004",
+          "kind": "conceptChoice",
+          "title": "Rebel",
+          "x": 749,
+          "y": 8,
+          "body": "",
+          "color": null,
+          "w": 222,
+          "h": 76
+        },
+        "S005": {
+          "id": "S005",
+          "kind": "conceptChoice",
+          "title": "Cheat",
+          "x": 781,
+          "y": 435,
+          "body": "",
+          "color": null
+        },
+        "S006": {
+          "id": "S006",
+          "kind": "conceptTitle",
+          "title": "Act selflessly at cost to themselves",
+          "x": 1111,
+          "y": 64,
+          "body": "",
+          "color": null,
+          "w": 199,
+          "h": 74
+        },
+        "S007": {
+          "id": "S007",
+          "kind": "conceptTitle",
+          "title": "break society's rules in order to obey a higher rule",
+          "x": 1082,
+          "y": 252,
+          "body": "",
+          "color": null,
+          "w": 258,
+          "h": 82
+        },
+        "S008": {
+          "id": "S008",
+          "kind": "conceptTitle",
+          "title": "Don't hide their actions",
+          "x": 1104,
+          "y": 156,
+          "body": "",
+          "color": null
+        },
+        "S009": {
+          "id": "S009",
+          "kind": "conceptTitle",
+          "title": "Act selfishly to avoid cost to themselves",
+          "x": 1065,
+          "y": 533,
+          "body": "",
+          "color": null
+        },
+        "S010": {
+          "id": "S010",
+          "kind": "conceptTitle",
+          "title": "Hide their actions",
+          "x": 1066,
+          "y": 646,
+          "body": "",
+          "color": null
+        },
+        "S011": {
+          "id": "S011",
+          "kind": "conceptTitle",
+          "title": "Break rules the rest of us have to follow ",
+          "x": 1058,
+          "y": 746,
+          "body": "",
+          "color": null,
+          "w": 236,
+          "h": 74
+        },
+        "S012": {
+          "id": "S012",
+          "kind": "conceptQuestion",
+          "title": "What happens next",
+          "x": 1402,
+          "y": 8,
+          "body": "We want rebels to be vindicated the moral of a rebel story is the rule no longer holds",
+          "color": null
+        },
+        "S013": {
+          "id": "S013",
+          "kind": "conceptQuestion",
+          "title": "What happens next",
+          "x": 1401,
+          "y": 382,
+          "body": "We want cheats to be punished the moral of a cheat story is the rule still applies",
+          "color": null
+        }
+      },
+      "edges": [
+        {
+          "from": "S003",
+          "to": "S005",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S004",
+          "to": "S006",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S004",
+          "to": "S008",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S003",
+          "to": "S004",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S005",
+          "to": "S011",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S005",
+          "to": "S009",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S005",
+          "to": "S010",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S005",
+          "to": "S013",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S004",
+          "to": "S012",
+          "label": "",
+          "color": null
+        },
+        {
+          "from": "S004",
+          "to": "S007",
+          "label": "",
+          "color": null
+        }
+      ],
+      "frameworks": {},
+      "frames": {
+        "FR-001": {
+          "id": "FR-001",
+          "label": "Frame",
+          "x": 738,
+          "y": -25,
+          "w": 613,
+          "h": 853,
+          "color": "#8B92A6"
+        }
+      },
+      "numberMarkers": {
+        "NUM-001": {
+          "id": "NUM-001",
+          "value": 1,
+          "x": 135,
+          "y": 40,
+          "color": "#E8D25C"
+        },
+        "NUM-002": {
+          "id": "NUM-002",
+          "value": 2,
+          "x": 135,
+          "y": 168,
+          "color": "#E8D25C"
+        },
+        "NUM-003": {
+          "id": "NUM-003",
+          "value": 3,
+          "x": 439,
+          "y": 107,
+          "color": "#E8D25C"
+        },
+        "NUM-004": {
+          "id": "NUM-004",
+          "value": 4,
+          "x": 1372,
+          "y": -28,
+          "color": "#E8D25C"
+        }
+      },
+      "titleMarkers": {}
+    },
+    "LIB-CPT-N010": {
+      "id": "LIB-CPT-N010",
+      "category": "storyConcept",
+      "name": "Order and chaos",
+      "description": "Show how your project can improve order on a chaotic mess or disrupt system that is too rigid every story contains three elements the known the Unknown and the Hero the Known is a world orderly safe but restricted the Unknown world is chaotic risky but full of potential the hero must explore both worlds and find the right balance between chaos and order",
+      "conceptType": "unset",
+      "status": "seed",
+      "onePromise": "",
+      "referenceFrameworkIds": [],
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {
+        "S001": {
+          "id": "S001",
+          "kind": "conceptQuestion",
+          "title": "What is positive about this world",
+          "x": 195,
+          "y": 90,
+          "body": "",
+          "color": null,
+          "w": 411,
+          "h": 74
+        },
+        "S002": {
+          "id": "S002",
+          "kind": "conceptQuestion",
+          "title": "What is negative",
+          "x": 185,
+          "y": 327,
+          "body": "",
+          "color": null,
+          "w": 400,
+          "h": 74
+        },
+        "S003": {
+          "id": "S003",
+          "kind": "conceptTitle",
+          "title": "Safety",
+          "x": 459,
+          "y": 228,
+          "body": "",
+          "color": null,
+          "w": 148,
+          "h": 74
+        },
+        "S004": {
+          "id": "S004",
+          "kind": "conceptTitle",
+          "title": "Predictability",
+          "x": 309,
+          "y": 241,
+          "body": "",
+          "color": null,
+          "w": 148,
+          "h": 74
+        },
+        "S005": {
+          "id": "S005",
+          "kind": "conceptTitle",
+          "title": "Imperfect",
+          "x": 470,
+          "y": 479,
+          "body": "",
+          "color": null,
+          "w": 148,
+          "h": 76
+        },
+        "S006": {
+          "id": "S006",
+          "kind": "conceptTitle",
+          "title": "Utility",
+          "x": 154,
+          "y": 248,
+          "body": "",
+          "color": null,
+          "w": 148,
+          "h": 74
+        },
+        "S007": {
+          "id": "S007",
+          "kind": "conceptTitle",
+          "title": "Incomplete",
+          "x": 294,
+          "y": 493,
+          "body": "",
+          "color": null,
+          "w": 148,
+          "h": 76
+        },
+        "S008": {
+          "id": "S008",
+          "kind": "conceptTitle",
+          "title": "Boring",
+          "x": 141,
+          "y": 475,
+          "body": "",
+          "color": null,
+          "w": 150,
+          "h": 76
+        },
+        "S009": {
+          "id": "S009",
+          "kind": "conceptQuestion",
+          "title": "What is negative about chaos",
+          "x": 707,
+          "y": 368,
+          "body": "",
+          "color": null,
+          "w": 411,
+          "h": 74
+        },
+        "S010": {
+          "id": "S010",
+          "kind": "conceptQuestion",
+          "title": "What is positive",
+          "x": 685,
+          "y": 118,
+          "body": "",
+          "color": null,
+          "w": 447,
+          "h": 74
+        },
+        "S011": {
+          "id": "S011",
+          "kind": "conceptTitle",
+          "title": "Opportunity",
+          "x": 983,
+          "y": 235,
+          "body": "",
+          "color": null,
+          "w": 148,
+          "h": 74
+        },
+        "S012": {
+          "id": "S012",
+          "kind": "conceptTitle",
+          "title": "Potential for renewal",
+          "x": 674,
+          "y": 241,
+          "body": "",
+          "color": null,
+          "w": 285,
+          "h": 74
+        },
+        "S015": {
+          "id": "S015",
+          "kind": "conceptTitle",
+          "title": "Unpredictability",
+          "x": 855,
+          "y": 506,
+          "body": "",
+          "color": null,
+          "w": 312,
+          "h": 74
+        },
+        "S016": {
+          "id": "S016",
+          "kind": "conceptTitle",
+          "title": "Threats",
+          "x": 677,
+          "y": 511,
+          "body": "",
+          "color": null,
+          "w": 148,
+          "h": 74
+        },
+        "S017": {
+          "id": "S017",
+          "kind": "conceptQuestion",
+          "title": "How does the unknown world create sudden change in the known world",
+          "x": 1255,
+          "y": 168,
+          "body": "",
+          "color": null
+        },
+        "S018": {
+          "id": "S018",
+          "kind": "conceptQuestion",
+          "title": "What info becomes available",
+          "x": 1247,
+          "y": 423,
+          "body": "",
+          "color": null
+        },
+        "S019": {
+          "id": "S019",
+          "kind": "conceptTitle",
+          "title": "Example: Natural disaster",
+          "x": 1612,
+          "y": 321,
+          "body": "",
+          "color": null
+        },
+        "S020": {
+          "id": "S020",
+          "kind": "conceptTitle",
+          "title": "Anomallies, new patterns",
+          "x": 1570,
+          "y": 494,
+          "body": "",
+          "color": null,
+          "w": 236,
+          "h": 81
+        },
+        "S021": {
+          "id": "S021",
+          "kind": "conceptQuestion",
+          "title": "Are you helping your client impose order into situation that is too chaotic and threatening",
+          "x": 639,
+          "y": 818,
+          "body": "",
+          "color": null
+        },
+        "S022": {
+          "id": "S022",
+          "kind": "conceptQuestion",
+          "title": "Are you injecting some much needed new life in a situation that is too stale and rigid",
+          "x": 934,
+          "y": 823,
+          "body": "",
+          "color": null
+        }
+      },
+      "edges": [
+        {
+          "from": "S006",
+          "to": "S001",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        },
+        {
+          "from": "S004",
+          "to": "S001",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        },
+        {
+          "from": "S003",
+          "to": "S001",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        },
+        {
+          "from": "S008",
+          "to": "S002",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        },
+        {
+          "from": "S007",
+          "to": "S002",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        },
+        {
+          "from": "S005",
+          "to": "S002",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        },
+        {
+          "from": "S012",
+          "to": "S010",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        },
+        {
+          "from": "S011",
+          "to": "S010",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        },
+        {
+          "from": "S009",
+          "to": "S016",
+          "label": "",
+          "color": null,
+          "fromSide": "bottom",
+          "toSide": "top"
+        },
+        {
+          "from": "S009",
+          "to": "S015",
+          "label": "",
+          "color": null,
+          "fromSide": "bottom",
+          "toSide": "top"
+        },
+        {
+          "from": "S018",
+          "to": "S017",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        },
+        {
+          "from": "S019",
+          "to": "S017",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "right"
+        },
+        {
+          "from": "S020",
+          "to": "S018",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "top"
+        }
+      ],
+      "frameworks": {},
+      "frames": {
+        "FR-001": {
+          "id": "FR-001",
+          "label": "Frame",
+          "x": 141,
+          "y": 29,
+          "w": 466,
+          "h": 591,
+          "color": "#8B92A6"
+        },
+        "FR-002": {
+          "id": "FR-002",
+          "label": "Frame",
+          "x": 659,
+          "y": 30,
+          "w": 523,
+          "h": 586,
+          "color": "#8B92A6"
+        },
+        "FR-003": {
+          "id": "FR-003",
+          "label": "Frame",
+          "x": 1220,
+          "y": 31,
+          "w": 657,
+          "h": 581,
+          "color": "#8B92A6"
+        },
+        "FR-004": {
+          "id": "FR-004",
+          "label": "Frame",
+          "x": 597,
+          "y": 686,
+          "w": 667,
+          "h": 303,
+          "color": "#8B92A6"
+        }
+      },
+      "numberMarkers": {
+        "NUM-001": {
+          "id": "NUM-001",
+          "value": 1,
+          "x": 242,
+          "y": 43,
+          "color": "#E8D25C"
+        },
+        "NUM-002": {
+          "id": "NUM-002",
+          "value": 2,
+          "x": 812,
+          "y": 50,
+          "color": "#E8D25C"
+        },
+        "NUM-003": {
+          "id": "NUM-003",
+          "value": 3,
+          "x": 1254,
+          "y": 70,
+          "color": "#E8D25C"
+        },
+        "NUM-004": {
+          "id": "NUM-004",
+          "value": 4,
+          "x": 634,
+          "y": 725,
+          "color": "#E8D25C"
+        }
+      },
+      "titleMarkers": {
+        "TTL-001": {
+          "id": "TTL-001",
+          "text": "Order",
+          "x": 270,
+          "y": 32,
+          "fontSize": 40,
+          "color": "#E9EBF3"
+        },
+        "TTL-002": {
+          "id": "TTL-002",
+          "text": "Chaos",
+          "x": 854,
+          "y": 49,
+          "fontSize": 40,
+          "color": "#E9EBF3"
+        },
+        "TTL-003": {
+          "id": "TTL-003",
+          "text": "How does chaos disrupt order?",
+          "x": 1305,
+          "y": 49,
+          "fontSize": 40,
+          "color": "#E9EBF3"
+        },
+        "TTL-004": {
+          "id": "TTL-004",
+          "text": "How does the hero respond",
+          "x": 694,
+          "y": 703,
+          "fontSize": 40,
+          "color": "#E9EBF3"
+        }
+      },
+      "subnodes": {}
+    },
+    "LIB-CPT-N011": {
+      "id": "LIB-CPT-N011",
+      "category": "storyConcept",
+      "name": "Circle of life",
+      "description": "help us recognize the characters conflicts and changes in your story relate them in a universal life stages we are born we grow up we live home we find our way in the world we create a home of our own we all share stages in life journey so we all recognize the same basic characteristics roles we adopt or people we meet along the way use these architects to tell a relatable story about your work or your",
+      "conceptType": "unset",
+      "status": "seed",
+      "onePromise": "",
+      "referenceFrameworkIds": [],
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {
+        "S001": {
+          "id": "S001",
+          "kind": "character",
+          "title": "Parent",
+          "x": 193,
+          "y": 35,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrsbc4t3-8wv270",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc4t3-9su7kx",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc4t3-23f1tx",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc4t3-my3lcf",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc4t3-j5oprb",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrsbc4t3-b7snyl",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrsbc4t3-ymhdtk",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrsbc4t3-k53g1m",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrsbc4t3-lukqdi",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrsbc4t3-swkqb5",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrsbc4t3-s2zybs",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrsbc4t3-ruyjve",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrsbc4t3-jloyit",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrsbc4t3-s69ulm",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrsbc4t3-7gzyb2",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrsbc4t3-83dzat",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrsbc4t3-blormn",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrsbc4t3-hx8ku6",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "Parent"
+        },
+        "S002": {
+          "id": "S002",
+          "kind": "character",
+          "title": "Adult",
+          "x": 1057,
+          "y": 252,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrsbc4xe-3z7pdl",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc4xe-8q566o",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc4xe-fxlhm1",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc4xe-5vjady",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc4xe-dhm7cj",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrsbc4xe-g7f112",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrsbc4xe-k8jmds",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrsbc4xe-n4zuqa",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrsbc4xe-u53kwe",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrsbc4xe-s87chm",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrsbc4xe-uxczy3",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrsbc4xe-6b8id2",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrsbc4xe-61o3rd",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrsbc4xe-iootvo",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrsbc4xe-esxcco",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrsbc4xe-vlcw8b",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrsbc4xe-f9pxco",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrsbc4xe-ni5ktc",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "Adult"
+        },
+        "S003": {
+          "id": "S003",
+          "kind": "character",
+          "title": "Child",
+          "x": 198,
+          "y": 511,
+          "body": "",
+          "color": null,
+          "questions": [
+            {
+              "id": "ccq-mrsbc51k-osspxs",
+              "prompt": "What do they want, and why right now?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc51k-yg1f7t",
+              "prompt": "What would they never do?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc51k-k1y9ot",
+              "prompt": "What do they give a team - object, information, or permission?",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc51k-njjb1x",
+              "prompt": "One sentence only this character could say.",
+              "answer": ""
+            },
+            {
+              "id": "ccq-mrsbc51k-2y8dla",
+              "prompt": "What does a team see or hear in the first ten seconds?",
+              "answer": ""
+            }
+          ],
+          "typeGroups": [
+            {
+              "id": "ccg-mrsbc51k-tv1iyy",
+              "label": "Role",
+              "options": [
+                {
+                  "id": "cco-mrsbc51k-coqe8w",
+                  "label": "Guide"
+                },
+                {
+                  "id": "cco-mrsbc51k-ubnxs0",
+                  "label": "Antagonist"
+                },
+                {
+                  "id": "cco-mrsbc51k-nq6a8a",
+                  "label": "Gatekeeper"
+                },
+                {
+                  "id": "cco-mrsbc51k-hrd9c2",
+                  "label": "Ensemble"
+                },
+                {
+                  "id": "cco-mrsbc51k-jdpw9e",
+                  "label": "Lore figure"
+                }
+              ],
+              "selectedId": null
+            },
+            {
+              "id": "ccg-mrsbc51k-pp9s9x",
+              "label": "Archetype",
+              "options": [
+                {
+                  "id": "cco-mrsbc51k-7ikfc8",
+                  "label": "Explorer"
+                },
+                {
+                  "id": "cco-mrsbc51k-4ulsdi",
+                  "label": "Sage"
+                },
+                {
+                  "id": "cco-mrsbc51k-ionsxh",
+                  "label": "Muse"
+                },
+                {
+                  "id": "cco-mrsbc51k-mwpxmr",
+                  "label": "Rebel"
+                },
+                {
+                  "id": "cco-mrsbc51k-pqtehj",
+                  "label": "Defender"
+                },
+                {
+                  "id": "cco-mrsbc51k-pxpoju",
+                  "label": "Warrior"
+                }
+              ],
+              "selectedId": null
+            }
+          ],
+          "name": "Child"
+        },
+        "S004": {
+          "id": "S004",
+          "kind": "storyLocation",
+          "title": "Home",
+          "x": 213,
+          "y": 270,
+          "body": "",
+          "color": null
+        },
+        "S005": {
+          "id": "S005",
+          "kind": "storyLocation",
+          "title": "The wide world",
+          "x": 769,
+          "y": 313,
+          "body": "",
+          "color": null
+        },
+        "S006": {
+          "id": "S006",
+          "kind": "conceptTitle",
+          "title": "Innocent playful also weak knave",
+          "x": 200,
+          "y": 586,
+          "body": "",
+          "color": null
+        },
+        "S007": {
+          "id": "S007",
+          "kind": "conceptTitle",
+          "title": "Adventurous clever also rebellious cynical",
+          "x": 1058,
+          "y": 328,
+          "body": "",
+          "color": null
+        },
+        "S008": {
+          "id": "S008",
+          "kind": "conceptTitle",
+          "title": "Wise supportive also dominant judgmental",
+          "x": 192,
+          "y": 113,
+          "body": "",
+          "color": null
+        },
+        "S009": {
+          "id": "S009",
+          "kind": "conceptTitle",
+          "title": "Conflict are you helping them with conflict between people at different life stages are you helping them navigate good and bad elements within their archetype",
+          "x": 1588,
+          "y": 128,
+          "body": "",
+          "color": null
+        },
+        "S010": {
+          "id": "S010",
+          "kind": "conceptTitle",
+          "title": "Change are you helping your user to deal with crucial rites of passage from one archetype to another do help him her to grow up in some way",
+          "x": 1588,
+          "y": 354,
+          "body": "",
+          "color": null
+        },
+        "S011": {
+          "id": "S011",
+          "kind": "conceptTitle",
+          "title": "Character Are you helping your user to fit into circle of life or fight against it for example children can be dominant parents can be adventurous",
+          "x": 1588,
+          "y": 566,
+          "body": "",
+          "color": null
+        }
+      },
+      "edges": [
+        {
+          "from": "S005",
+          "to": "S002",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "top"
+        },
+        {
+          "from": "S003",
+          "to": "S006",
+          "label": "",
+          "color": null,
+          "fromSide": "bottom",
+          "toSide": "top"
+        },
+        {
+          "from": "S002",
+          "to": "S007",
+          "label": "",
+          "color": null,
+          "fromSide": "bottom",
+          "toSide": "top"
+        },
+        {
+          "from": "S001",
+          "to": "S008",
+          "label": "",
+          "color": null,
+          "fromSide": "bottom",
+          "toSide": "top"
+        },
+        {
+          "from": "S011",
+          "to": "S010",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        },
+        {
+          "from": "S010",
+          "to": "S009",
+          "label": "",
+          "color": null,
+          "fromSide": "top",
+          "toSide": "bottom"
+        }
+      ],
+      "frameworks": {},
+      "frames": {
+        "CIR-001": {
+          "id": "CIR-001",
+          "label": "Circle",
+          "shape": "circle",
+          "x": 334,
+          "y": 57,
+          "w": 561,
+          "h": 561,
+          "color": "#5CA8F5"
+        },
+        "FR-002": {
+          "id": "FR-002",
+          "label": "Frame",
+          "x": 118,
+          "y": 22,
+          "w": 1192,
+          "h": 699,
+          "color": "#8B92A6"
+        },
+        "FR-003": {
+          "id": "FR-003",
+          "label": "Frame",
+          "x": 1431,
+          "y": -76,
+          "w": 536,
+          "h": 842,
+          "color": "#8B92A6"
+        }
+      },
+      "numberMarkers": {
+        "NUM-001": {
+          "id": "NUM-001",
+          "value": 1,
+          "x": 1542,
+          "y": 151,
+          "color": "#E8D25C"
+        },
+        "NUM-002": {
+          "id": "NUM-002",
+          "value": 2,
+          "x": 1537,
+          "y": 365,
+          "color": "#E8D25C"
+        },
+        "NUM-003": {
+          "id": "NUM-003",
+          "value": 3,
+          "x": 1533,
+          "y": 578,
+          "color": "#E8D25C"
+        }
+      },
+      "titleMarkers": {
+        "TTL-001": {
+          "id": "TTL-001",
+          "text": "Which life stage is your user at",
+          "x": 1479,
+          "y": -40,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        },
+        "TTL-002": {
+          "id": "TTL-002",
+          "text": "Which architectural role are they playing",
+          "x": 1483,
+          "y": 6,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        }
+      },
+      "subnodes": {}
+    },
+    "LIB-CPT-N012": {
+      "id": "LIB-CPT-N012",
+      "category": "storyConcept",
+      "name": "Curious tales",
+      "description": "Grabs your attention and you are halfway to grabbing my attention too you have no control over your own curiosity somethings fascinate you others don't what's intriguing for you might seem weird to me but I am interested in what makes you tick so your curious tales are a great way to give me insights into what drives you forward",
+      "conceptType": "unset",
+      "status": "seed",
+      "onePromise": "Explain what drives you",
+      "referenceFrameworkIds": [],
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {
+        "S002": {
+          "id": "S002",
+          "kind": "conceptQuestion",
+          "title": "What makes you uneasy about a certain situation",
+          "x": 1045,
+          "y": 410,
+          "body": "",
+          "color": null,
+          "w": 290,
+          "h": 94
+        },
+        "S003": {
+          "id": "S003",
+          "kind": "conceptQuestion",
+          "title": "What's new unusual and potentially useful?",
+          "x": 1740,
+          "y": 477,
+          "body": "",
+          "color": null,
+          "w": 307,
+          "h": 94
+        },
+        "S004": {
+          "id": "S004",
+          "kind": "conceptQuestion",
+          "title": "But what do you keep noticing about certain situation?",
+          "x": 1748,
+          "y": 587,
+          "body": "",
+          "color": null,
+          "w": 302,
+          "h": 94
+        },
+        "S005": {
+          "id": "S005",
+          "kind": "conceptQuestion",
+          "title": "What's new unusual and potentially harmful",
+          "x": 1040,
+          "y": 312,
+          "body": "",
+          "color": null,
+          "w": 298,
+          "h": 94
+        },
+        "S007": {
+          "id": "S007",
+          "kind": "event",
+          "title": "New event",
+          "x": 209,
+          "y": 589,
+          "body": "",
+          "color": null
+        },
+        "S009": {
+          "id": "S009",
+          "kind": "conceptChoice",
+          "title": "Envy",
+          "x": 721,
+          "y": 926,
+          "body": "You realize someone else is doing what you want to do if this is healthy motivating envy not the same as envying someone's luxury lifestyle",
+          "color": null,
+          "w": 206,
+          "h": 179
+        },
+        "S010": {
+          "id": "S010",
+          "kind": "conceptChoice",
+          "title": "Sacrifice",
+          "x": 1500,
+          "y": 930,
+          "body": "When have you given up on something valuable to follow a particular path",
+          "color": null
+        },
+        "S011": {
+          "id": "S011",
+          "kind": "conceptChoice",
+          "title": "Flow",
+          "x": 766,
+          "y": 676,
+          "body": "Time just flies when you're practicing your skills and learning something new IT is deeply satisfying",
+          "color": null
+        },
+        "S012": {
+          "id": "S012",
+          "kind": "conceptChoice",
+          "title": "Caution",
+          "x": 752,
+          "y": 405,
+          "body": "= anomaly+ Potential Threat",
+          "color": null,
+          "w": 200,
+          "h": 93
+        },
+        "S013": {
+          "id": "S013",
+          "kind": "conceptChoice",
+          "title": "Curiosity",
+          "x": 1472,
+          "y": 544,
+          "body": "= anomaly+ Potential Benefit",
+          "color": null,
+          "w": 192,
+          "h": 104
+        },
+        "S014": {
+          "id": "S014",
+          "kind": "conceptQuestion",
+          "title": "Were are you, what are you doing, what you are you with?",
+          "x": 1067,
+          "y": 627,
+          "body": "",
+          "color": null,
+          "w": 280,
+          "h": 93
+        },
+        "S015": {
+          "id": "S015",
+          "kind": "conceptQuestion",
+          "title": "What is it tell us about your goals and motivation?",
+          "x": 1065,
+          "y": 732,
+          "body": "",
+          "color": null,
+          "w": 286,
+          "h": 93
+        },
+        "S016": {
+          "id": "S016",
+          "kind": "conceptQuestion",
+          "title": "What does this tell us about your goals and motivation",
+          "x": 1019,
+          "y": 1037,
+          "body": "",
+          "color": null,
+          "w": 265,
+          "h": 76
+        },
+        "S017": {
+          "id": "S017",
+          "kind": "conceptQuestion",
+          "title": "Who do you envy and what are they doing?",
+          "x": 1013,
+          "y": 945,
+          "body": "",
+          "color": null,
+          "w": 255,
+          "h": 76
+        },
+        "S018": {
+          "id": "S018",
+          "kind": "conceptQuestion",
+          "title": "What do you choose and what did it cost",
+          "x": 1787,
+          "y": 894,
+          "body": "",
+          "color": null
+        },
+        "S019": {
+          "id": "S019",
+          "kind": "conceptQuestion",
+          "title": "What does it tell us about your goals and motivation",
+          "x": 1770,
+          "y": 981,
+          "body": "",
+          "color": null
+        }
+      },
+      "edges": [
+        {
+          "from": "S011",
+          "to": "S015",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S011",
+          "to": "S014",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S012",
+          "to": "S002",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S012",
+          "to": "S005",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S007",
+          "to": "S013",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S007",
+          "to": "S012",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S007",
+          "to": "S011",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S007",
+          "to": "S009",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S013",
+          "to": "S003",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S013",
+          "to": "S004",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S009",
+          "to": "S017",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S009",
+          "to": "S016",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S010",
+          "to": "S018",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S010",
+          "to": "S019",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        },
+        {
+          "from": "S007",
+          "to": "S010",
+          "label": "",
+          "color": null,
+          "fromSide": "right",
+          "toSide": "left"
+        }
+      ],
+      "frameworks": {},
+      "frames": {},
+      "numberMarkers": {},
+      "titleMarkers": {},
+      "subnodes": {}
+    },
+    "LIB-CPT-N013": {
+      "id": "LIB-CPT-N013",
+      "category": "structureConcept",
+      "name": "Man in a hole",
+      "description": "This is the story of your first day at school or your first job it is every fear you face and every lesson you have learned you're doing OK minding your own business suddenly something takes you out a pandemic strikes you lose your job or get divorced you pick up yourself and carry on little older and wiser anyone can fall into a hole but you can't fall out you got to climb this is where you show your strength",
+      "conceptType": "unset",
+      "status": "seed",
+      "onePromise": "show lessons learned",
+      "referenceFrameworkIds": [],
+      "premade": false,
+      "questions": [],
+      "example": {},
+      "nodes": {},
+      "edges": [],
+      "frameworks": {},
+      "frames": {
+        "ARR-001": {
+          "id": "ARR-001",
+          "label": "Arrow",
+          "shape": "arrow",
+          "x": 258,
+          "y": 191,
+          "w": 98,
+          "h": 109,
+          "color": "#5CA8F5"
+        },
+        "ARR-002": {
+          "id": "ARR-002",
+          "label": "Arrow",
+          "shape": "arrow",
+          "x": 460,
+          "y": 341,
+          "w": 130,
+          "h": -27,
+          "color": "#5CA8F5"
+        },
+        "ARR-003": {
+          "id": "ARR-003",
+          "label": "Arrow",
+          "shape": "arrow",
+          "x": 759,
+          "y": 296,
+          "w": 89,
+          "h": -184,
+          "color": "#5CA8F5"
+        }
+      },
+      "numberMarkers": {},
+      "titleMarkers": {
+        "TTL-001": {
+          "id": "TTL-001",
+          "text": "Comfort zone",
+          "x": 18,
+          "y": 115,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        },
+        "TTL-002": {
+          "id": "TTL-002",
+          "text": "Trigger",
+          "x": 207,
+          "y": 67,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        },
+        "TTL-003": {
+          "id": "TTL-003",
+          "text": "Crisis",
+          "x": 361,
+          "y": 318,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        },
+        "TTL-004": {
+          "id": "TTL-004",
+          "text": " Recovery",
+          "x": 605,
+          "y": 288,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        },
+        "TTL-005": {
+          "id": "TTL-005",
+          "text": "Better place",
+          "x": 848,
+          "y": 83,
+          "fontSize": 28,
+          "color": "#E9EBF3"
+        }
+      }
+    }
+  },
+  "bundledLibraryVersion": 1
+}
