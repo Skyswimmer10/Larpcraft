@@ -2,6 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useReducer, u
 import { reducer } from './reducer.js';
 import { makeLibrarySeed, makeProjectSeed, makeEmptyProject, migrateLibrary, migrateProject, LIB_REV, SEED_REV } from '../data/seed.js';
 import { loadKey, saveKeyDebounced, clearKey } from './storage.js';
+import deployedLibrary from '../data/deployedLibrary.json';
+import { mergeBundledLibrary } from '../lib/bundledLibrary.js';
 
 // Two distinct stores:
 //  - Library: the persistent master database (templates). Survives across games.
@@ -28,11 +30,13 @@ const UNDOABLE_ACTIONS = new Set([
   'UPDATE_EDGE',
   'REMOVE_EDGE',
   'FRAME_MOVE',
+  'FRAME_SCALE',
   'FRAME_TO_COMPOSITE',
   'COMPOSITE_TO_FRAME',
   'GRAPH_ADD_NODE',
   'GRAPH_UPDATE_NODE',
   'GRAPH_DELETE_NODE',
+  'SYNC_CHARACTER_ARCHETYPE',
   'GRAPH_ADD_EDGE',
   'GRAPH_UPDATE_EDGE',
   'GRAPH_REMOVE_EDGE',
@@ -40,6 +44,7 @@ const UNDOABLE_ACTIONS = new Set([
   'GRAPH_UPDATE_FRAME',
   'GRAPH_DELETE_FRAME',
   'GRAPH_MOVE_FRAME',
+  'GRAPH_SCALE_FRAME',
   'GRAPH_ADD_NUMBER_MARKER',
   'GRAPH_UPDATE_NUMBER_MARKER',
   'GRAPH_DELETE_NUMBER_MARKER',
@@ -77,7 +82,9 @@ const undoGroupFor = (action) => {
     case 'GRAPH_UPDATE_TITLE_MARKER': return `graph-title:${scopeKey(action.scope)}:${action.id}:${patchKey(action.patch)}`;
     case 'GRAPH_UPDATE_EDGE': return `graph-edge:${scopeKey(action.scope)}:${action.from}:${action.to}:${patchKey(action.patch)}`;
     case 'FRAME_MOVE': return `frame-move:${action.frameId}`;
+    case 'FRAME_SCALE': return `frame-scale:${action.frameId}`;
     case 'GRAPH_MOVE_FRAME': return `graph-frame-move:${scopeKey(action.scope)}:${action.id}`;
+    case 'GRAPH_SCALE_FRAME': return `graph-frame-scale:${scopeKey(action.scope)}:${action.id}`;
     case 'SET_STORY_POS': return `story-position:${action.nodeId}`;
     default: return null;
   }
@@ -131,7 +138,7 @@ export function StoreProvider({ children }) {
       try {
         // Library is migrated additively: newer schema revs backfill missing
         // collections (e.g. gmRules) instead of discarding the saved library.
-        rawLibDispatch({ type: 'RESET', seed: migrateLibrary(savedLib) });
+        rawLibDispatch({ type: 'RESET', seed: migrateLibrary(mergeBundledLibrary(deployedLibrary, savedLib)) });
         // Project is migrated additively (backfills `facts` etc.) so an open game
         // survives schema bumps instead of being reset.
         rawProjDispatch({ type: 'RESET', seed: migrateProject(savedProj) });

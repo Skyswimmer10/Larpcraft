@@ -34,16 +34,26 @@ src/mechanics/
 ## Core Node Types
 
 - Task Template: collapsed reusable container with a saved internal graph.
-- Challenge Core: clean task controller with goal, physical/cognitive track containers, cooperation mode, notes, and note color. Time pressure and Spectrum of Yes outcomes live in attachable subnodes.
+- Cooperation: focused node for selecting how players cooperate, with attachable modifiers for roles, no-solo rules, discussion, and arbitration.
 - Physical Restriction: body/movement/communication limits plus safety and stop rules.
 - Prop Interaction: physical manipulation of existing item/artifact records.
 - Sensor Node: gameplay input detection.
 - Actuator Node: gameplay output/effect behavior.
+- Action: one atomic step with Who Acts, Number of Players, and attachable modifiers.
+- Player-Facing Instruction: a separate node containing the exact instruction presented to players.
+- Action Sequence: collapsible container with a library-extensible custom sequence mode.
+- Resolution: selects one of the probability or resolution mechanisms and records a human-readable category and procedure for applying it.
 - Character State: pre-authored NPC/character behavior for dialogue trees and AI-agent responses.
+
+## Action System
+
+Action nodes stay deliberately small. Selection rules, budgets, availability, prompts, and physical resolution use one reusable Action Type Pattern subnode. Its mechanisms are organized into Action Token Systems, Action Order Systems, and Action Special System dropdowns, and each mechanism can recall saved rule settings from the library.
+
+The 23 `ACT-01` through `ACT-23` mechanisms from *Building Blocks of Tabletop Game Design* are stored as `templateKind: 'action'` records in `mechStructures`. The UI presents these as Action Templates, separately from Task Templates. Inserting one creates a collapsed Action Sequence containing an editable Action node, a Player-Facing Instruction node, and its matching modifier; it does not create 23 permanent base-node types.
 
 ## Mechanic Subnodes
 
-Mechanic subnodes are stored separately in `lib.mechSubnodes`, mirroring narrative subnodes. They are attachable modifiers rather than standalone task containers. Most attach to Challenge Core and Task Template nodes; reusable notes/prompts can attach more broadly.
+Mechanic subnodes are stored separately in `lib.mechSubnodes`, mirroring narrative subnodes. They are attachable modifiers rather than standalone task containers. Most attach to Cooperation and Task Template nodes; reusable notes/prompts can attach more broadly.
 
 - Progressive Feedback Mod: positive feedback loop from earlier success to later clarity or ease.
 - Fail-Safe + Scaffolding Mod: hints, partial credit, skip rules, and grace periods.
@@ -66,7 +76,7 @@ Each mechanic subnode inspector should follow this order:
 2. Purpose: read-only explanation of why the subnode exists.
 3. Collapse settings: depth 0-4 and collapsed-by-default.
 4. Focused fields: generated from the subnode schema, with only relevant controls visible.
-5. Attach rules: target node kinds such as `challengeCore`, `taskTemplate`, or `*`.
+5. Attach rules: target node kinds such as `cooperation`, `taskTemplate`, or `*`.
 
 The library inspector already renders these schema-driven fields. The next step is attaching copies of these library subnodes into mechanic task graphs and exposing them in Mechanics Fever as collapsible modifiers under their parent task node.
 

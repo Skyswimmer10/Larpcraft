@@ -9,10 +9,14 @@ import NarrativeLibraryBrowser from '../components/NarrativeLibraryBrowser.jsx';
 import FrameworkPreview from '../components/FrameworkPreview.jsx';
 import { genId } from '../data/csvSchemas.js';
 import {
-  BASE_NODE_TYPES, CONCEPT_INTERNAL_NODE_TYPES, ADDITIONAL_NODE_TYPES, SUBNODE_TYPES, SUBNODE_BLANK,
+  BASE_NODE_TYPES, CONCEPT_INTERNAL_NODE_TYPES, ADDITIONAL_NODE_TYPES, SUBNODE_TYPES, SUBNODE_BLANK, LINKING_NODE_TYPE,
   FACT_KINDS, NARR_NODE_TYPES, FRAMEWORK_TYPES, cloneCharacterCardTemplate,
 } from '../data/seed.js';
 import GraphEditor from '../components/GraphEditor.jsx';
+import { nextVisualMarkerValue } from '../lib/visualMarkers.js';
+import LinkingNodePreview from '../components/LinkingNodePreview.jsx';
+import { buildNarrativeLinkInsertion, createLinkingNode, LINKING_NODE_KIND, STORY_STRUCTURE_CONTAINER_KIND } from '../lib/narrativeLinks.js';
+import { remapCanvasClipboard } from '../lib/canvasClipboard.js';
 
 // The Narrative Weaver canvas: Base Nodes + collapsed Additional Nodes
 // (concepts) + Subnodes, kept deliberately calm — icons, short titles and
@@ -27,12 +31,16 @@ export const nodeColor = (n) => {
   if (n._sub) return n.color || SUBNODE_TYPES[n.kind]?.color || '#F08CB4';
   if (n.kind === 'framework') return n.color || FRAMEWORK_TYPES[n.frameworkId]?.color || '#E8D25C';
   if (n.kind === 'concept') return n.color || ADDITIONAL_NODE_TYPES[n.conceptKind]?.color || '#E8D25C';
+  if (n.kind === LINKING_NODE_KIND) return n.color || LINKING_NODE_TYPE.color;
+  if (n.kind === STORY_STRUCTURE_CONTAINER_KIND) return n.color || '#5CA8F5';
   return n.color || BASE_NODE_TYPES[n.kind]?.color || NARR_NODE_TYPES[n.kind]?.color || ENTITY_COLORS[n.kind] || '#8B92A6';
 };
 const nodeIcon = (n) => {
   if (n._sub) return SUBNODE_TYPES[n.kind]?.icon || null;
   if (n.kind === 'framework') return FRAMEWORK_TYPES[n.frameworkId]?.icon || 'target';
   if (n.kind === 'concept') return ADDITIONAL_NODE_TYPES[n.conceptKind]?.icon || 'book';
+  if (n.kind === LINKING_NODE_KIND) return LINKING_NODE_TYPE.icon;
+  if (n.kind === STORY_STRUCTURE_CONTAINER_KIND) return 'layers';
   return BASE_NODE_TYPES[n.kind]?.icon || NARR_NODE_TYPES[n.kind]?.icon || null;
 };
 
@@ -90,7 +98,7 @@ function StructureImportModal({ onClose, onImported }) {
 }
 
 */
-export default function ScenarioFlow({ selection, onSelect }) {
+export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
   const s = useGame();
   const lib = useLibrary();
   const dispatch = useDispatch();
@@ -202,6 +210,25 @@ export default function ScenarioFlow({ selection, onSelect }) {
     dispatch({ type: 'ADD_ENTITY', coll: 'subnodes', entity: sn });
     onSelect({ kind: 'subnode', id });
   };
+  const addLinkingNode = (pos = null) => {
+    const nodePos = pos || visibleCanvasPlacement({ x: 120, y: 120 }, { w: 280, h: 150 });
+    const node = createLinkingNode(s.nodes, nodePos, `${s.meta.prefix}-LINK-`);
+    dispatch({ type: 'ADD_NODE', node });
+    onSelect({ kind: 'node', id: node.id });
+  };
+  const insertLinkedTarget = (linkNode, ref) => {
+    const size = { w: linkNode.w || 280, h: linkNode.h || 150 };
+    const node = buildNarrativeLinkInsertion(
+      lib,
+      ref,
+      s.nodes,
+      { x: linkNode.x + size.w + 50, y: linkNode.y },
+      `${s.meta.prefix}-INS-`,
+    );
+    if (!node) return;
+    dispatch({ type: 'ADD_NODE', node });
+    onSelect({ kind: 'node', id: node.id });
+  };
   const addFrame = (pos = null) => {
     const id = genId(s.frames || {}, 'FR-');
     const size = { w: 420, h: 300 };
@@ -222,12 +249,17 @@ export default function ScenarioFlow({ selection, onSelect }) {
     dispatch({ type: 'ADD_ENTITY', coll: 'frames', entity: { id, label: 'Arrow', shape: 'arrow', ...arrowPos, w: 200, h: 80, color: '#5CA8F5' } });
     onSelect({ kind: 'frame', id });
   };
-  const addNumberMarker = (pos = null) => {
+  const addSpline = (pos = null) => {
+    const id = genId(s.frames || {}, 'SPL-');
+    const splinePos = pos || visibleCanvasPlacement({ x: 100, y: 150 }, { w: 220, h: 80 });
+    dispatch({ type: 'ADD_ENTITY', coll: 'frames', entity: { id, label: 'Spline', shape: 'spline', ...splinePos, w: 220, h: 80, curveX: 0, curveY: -70, color: '#5CA8F5' } });
+    onSelect({ kind: 'frame', id });
+  };
+  const addVisualMarker = (markerType = 'number', pos = null) => {
     const markers = s.numberMarkers || {};
-    const id = genId(markers, 'NUM-');
-    const values = Object.values(markers).map((m) => Number(m.value)).filter(Number.isFinite);
+    const id = genId(markers, markerType === 'letter' ? 'LTR-' : 'NUM-');
     const markerPos = pos || visibleCanvasPlacement({ x: 90, y: 90 }, { w: 34, h: 34 });
-    const entity = { id, value: values.length ? Math.max(...values) + 1 : 1, ...markerPos, color: '#E8D25C' };
+    const entity = { id, markerType, value: nextVisualMarkerValue(markers, markerType), ...markerPos, color: '#E8D25C' };
     dispatch({ type: 'ADD_ENTITY', coll: 'numberMarkers', entity });
     onSelect({ kind: 'numberMarker', id });
   };
@@ -410,10 +442,17 @@ export default function ScenarioFlow({ selection, onSelect }) {
       filterId: 'supporting',
       label: 'Supporting Notes',
       hint: 'Notes and support cards that can be attached to the story graph.',
-      items: SUB_PALETTE.filter((t) => t.category === 'supporting').map((t) => ({
+      items: [
+        {
+          id: 'linkingNode', label: LINKING_NODE_TYPE.label, blurb: LINKING_NODE_TYPE.blurb,
+          color: LINKING_NODE_TYPE.color, icon: LINKING_NODE_TYPE.icon,
+          dragPayload: 'linkingNode:new', onClick: () => addLinkingNode(),
+        },
+        ...SUB_PALETTE.filter((t) => t.category === 'supporting').map((t) => ({
         id: `sub:${t.id}`, label: t.label, blurb: t.blurb, color: t.color, icon: t.icon,
         dragPayload: `sub:${t.id}`, onClick: () => addSub(t.id),
-      })),
+        })),
+      ],
     },
     {
       id: 'templates',
@@ -490,6 +529,7 @@ export default function ScenarioFlow({ selection, onSelect }) {
     const [type, id] = payload.split(':');
     const pos = { x: Math.round(x), y: Math.round(y) };
     if (type === 'base') addBase(id, pos);
+    else if (type === 'linkingNode') addLinkingNode(pos);
     else if (type === 'sub') addSub(id, pos);
     else if (type === 'concept') addConceptKind(id, pos);
     else if (type === 'framework') addFramework(id, pos);
@@ -500,7 +540,8 @@ export default function ScenarioFlow({ selection, onSelect }) {
       const t = lib.narrative?.[id];
       if (t) addNodeTemplate(t, pos);
     } else if (type === 'frame') addFrame(pos);
-    else if (type === 'number') addNumberMarker(pos);
+    else if (type === 'number') addVisualMarker('number', pos);
+    else if (type === 'letter') addVisualMarker('letter', pos);
     else if (type === 'title') addTitleMarker(pos);
   };
 
@@ -527,9 +568,11 @@ export default function ScenarioFlow({ selection, onSelect }) {
           <div className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
             <button className="btn" onClick={() => addFrame()}>Frame</button>
             <button className="btn" onClick={() => addCircle()}>Circle</button>
-            <button className="btn" onClick={() => addNumberMarker()}>Number</button>
+            <button className="btn" onClick={() => addVisualMarker('number')}>Number</button>
+            <button className="btn" onClick={() => addVisualMarker('letter')}>Letter</button>
             <button className="btn" onClick={() => addTitleMarker()}>Title</button>
             <button className="btn" onClick={() => addArrow()}>Arrow</button>
+            <button className="btn" onClick={() => addSpline()}>Spline</button>
           </div>
           <CsvButtons coll="nodes" />
         </div>
@@ -561,13 +604,16 @@ export default function ScenarioFlow({ selection, onSelect }) {
         <FlowCanvas
           nodes={merged} edges={s.edges} selId={selId} colorOf={nodeColor}
           iconOf={nodeIcon} teamOf={teamOf} dimNode={dimNode} edgeFact={edgeFact}
-          nodeClass={(n) => (n._sub ? 'subnode' : n.kind === 'framework' ? 'framework' : n.kind === 'concept' ? `concept${n.collapsed === false ? ' expanded' : ''}` : '')}
+          nodeClass={(n) => (n._sub ? 'subnode' : n.kind === 'framework' ? 'framework' : n.kind === 'concept' || n.kind === STORY_STRUCTURE_CONTAINER_KIND ? `concept${n.collapsed === false ? ' expanded' : ''}` : n.kind === LINKING_NODE_KIND ? 'linking-node' : '')}
           attachments={attachments}
           onDetach={(subId) => dispatch({ type: 'UPDATE_ENTITY', coll: 'subnodes', id: subId, patch: { parentRef: null } })}
           frames={s.frames || {}} selFrame={selection?.kind === 'frame' ? selection.id : null}
           onFrameMove={(id, dx, dy) => dispatch({ type: 'FRAME_MOVE', frameId: id, dx, dy })}
           onFrameResize={(id, w, h) => dispatch({ type: 'UPDATE_ENTITY', coll: 'frames', id, patch: { w, h } })}
+          onFrameGeometry={(id, patch) => dispatch({ type: 'UPDATE_ENTITY', coll: 'frames', id, patch })}
+          onFrameScale={(id, transform) => dispatch({ type: 'FRAME_SCALE', frameId: id, transform })}
           onFrameSelect={(id) => onSelect({ kind: 'frame', id })}
+          onFrameDelete={(id) => { dispatch({ type: 'DELETE_ENTITY', coll: 'frames', id }); onSelect(null); }}
           numberMarkers={s.numberMarkers || {}}
           selNumberMarker={selection?.kind === 'numberMarker' ? selection.id : null}
           onNumberMarkerSelect={(id) => onSelect({ kind: 'numberMarker', id })}
@@ -575,6 +621,7 @@ export default function ScenarioFlow({ selection, onSelect }) {
             const marker = s.numberMarkers?.[id];
             if (marker) dispatch({ type: 'UPDATE_ENTITY', coll: 'numberMarkers', id, patch: { x: marker.x + dx, y: marker.y + dy } });
           }}
+          onNumberMarkerUpdate={(id, patch) => dispatch({ type: 'UPDATE_ENTITY', coll: 'numberMarkers', id, patch })}
           onNumberMarkerDelete={(id) => { dispatch({ type: 'DELETE_ENTITY', coll: 'numberMarkers', id }); onSelect(null); }}
           titleMarkers={s.titleMarkers || {}}
           selTitleMarker={selection?.kind === 'titleMarker' ? selection.id : null}
@@ -586,6 +633,7 @@ export default function ScenarioFlow({ selection, onSelect }) {
           onTitleMarkerDelete={(id) => { dispatch({ type: 'DELETE_ENTITY', coll: 'titleMarkers', id }); onSelect(null); }}
           onSelect={(id) => onSelect(merged[id]?._sub ? { kind: 'subnode', id } : merged[id]?.kind === 'framework' ? { kind: 'framework', id } : { kind: 'node', id })}
           onMove={(id, x, y) => dispatch({ type: 'UPDATE_ENTITY', coll: merged[id]?._sub ? 'subnodes' : merged[id]?.kind === 'framework' ? 'frameworks' : 'nodes', id, patch: { x, y } })}
+          onUpdateNode={(id, patch) => dispatch({ type: 'UPDATE_ENTITY', coll: merged[id]?._sub ? 'subnodes' : merged[id]?.kind === 'framework' ? 'frameworks' : 'nodes', id, patch })}
           onMoveNodes={(positions, meta) => dispatch({
             type: 'BATCH',
             undoGroup: meta?.undoGroup,
@@ -595,6 +643,21 @@ export default function ScenarioFlow({ selection, onSelect }) {
               id,
               patch,
             })),
+          })}
+          onMoveSelection={(patches, meta) => dispatch({
+            type: 'BATCH',
+            undoGroup: meta?.undoGroup,
+            actions: [
+              ...Object.entries(patches.nodes).map(([id, patch]) => ({
+                type: 'UPDATE_ENTITY',
+                coll: merged[id]?._sub ? 'subnodes' : merged[id]?.kind === 'framework' ? 'frameworks' : 'nodes',
+                id,
+                patch,
+              })),
+              ...Object.entries(patches.frames).map(([id, patch]) => ({ type: 'UPDATE_ENTITY', coll: 'frames', id, patch })),
+              ...Object.entries(patches.numberMarkers).map(([id, patch]) => ({ type: 'UPDATE_ENTITY', coll: 'numberMarkers', id, patch })),
+              ...Object.entries(patches.titleMarkers).map(([id, patch]) => ({ type: 'UPDATE_ENTITY', coll: 'titleMarkers', id, patch })),
+            ],
           })}
           onResizeNode={(id, patch) => dispatch({ type: 'UPDATE_ENTITY', coll: merged[id]?._sub ? 'subnodes' : merged[id]?.kind === 'framework' ? 'frameworks' : 'nodes', id, patch })}
           onConnect={(from, to, edgePatch = {}) => dispatch({ type: 'ADD_EDGE', from, to, color: nodeColor(merged[from]), ...edgePatch })}
@@ -616,6 +679,22 @@ export default function ScenarioFlow({ selection, onSelect }) {
             });
             onSelect(null);
           }}
+          onDeleteSelection={(selection) => {
+            dispatch({
+              type: 'BATCH',
+              actions: [
+                ...selection.nodes.map((id) => merged[id]?._sub
+                  ? { type: 'DELETE_SUBNODE', subnodeId: id }
+                  : merged[id]?.kind === 'framework'
+                    ? { type: 'DELETE_ENTITY', coll: 'frameworks', id }
+                    : { type: 'DELETE_NODE', nodeId: id }),
+                ...selection.frames.map((id) => ({ type: 'DELETE_ENTITY', coll: 'frames', id })),
+                ...selection.numberMarkers.map((id) => ({ type: 'DELETE_ENTITY', coll: 'numberMarkers', id })),
+                ...selection.titleMarkers.map((id) => ({ type: 'DELETE_ENTITY', coll: 'titleMarkers', id })),
+              ],
+            });
+            onSelect(null);
+          }}
           onClearCanvas={() => {
             dispatch({ type: 'CLEAR_NARRATIVE_CANVAS' });
             onSelect(null);
@@ -627,12 +706,23 @@ export default function ScenarioFlow({ selection, onSelect }) {
             dispatch({ type: 'ADD_NODE', node: { id, ...p, teamId: p.teamId ?? null, sets: [], locationId: null, itemId: null, mechanicIds: [], sensorIds: [], history: [] } });
             onSelect({ kind: 'node', id });
           }}
-          renderBody={(n) => (n.kind === 'item' ? null : n.body)}
-          renderExtra={(n) => {
+          onPasteNodes={(clipboard) => {
+            const pasted = remapCanvasClipboard(clipboard, s.nodes, `${s.meta.prefix}-COPY-`);
+            dispatch({
+              type: 'BATCH',
+              actions: [
+                ...Object.values(pasted.nodes).map((node) => ({ type: 'ADD_NODE', node: { ...node, history: [] } })),
+                ...pasted.edges.map((edge) => ({ type: 'ADD_EDGE', ...edge })),
+              ],
+            });
+            onSelect({ kind: 'node', id: pasted.ids[pasted.ids.length - 1] });
+          }}
+          renderBody={(n) => (n.kind === 'item' || n.kind === LINKING_NODE_KIND ? null : n.body)}
+          renderExtra={(n, dimensions) => {
             if (n._sub) return null;
             if (n.kind === 'framework') {
               const fw = FRAMEWORK_TYPES[n.frameworkId] || FRAMEWORK_TYPES.fate;
-              return <FrameworkPreview frameworkId={fw.id} />;
+              return <FrameworkPreview frameworkId={fw.id} nodeWidth={dimensions.width} nodeHeight={dimensions.height} />;
             }
             if (n.kind === 'concept') {
               const cnt = Object.keys(n.sub?.nodes || {}).length;
@@ -649,6 +739,20 @@ export default function ScenarioFlow({ selection, onSelect }) {
                   </div>
                 </div>
               );
+            }
+            if (n.kind === STORY_STRUCTURE_CONTAINER_KIND) {
+              const cnt = Object.keys(n.sub?.nodes || {}).length;
+              return (
+                <div className="cptbody">
+                  <div className="cptrow">
+                    <span className="cptbadge">Story Structure · {cnt} inside</span>
+                    <button className="linkbtn" onClick={(e) => { e.stopPropagation(); setOpenPath([n.id]); onSelect(null); }}>Enter structure</button>
+                  </div>
+                </div>
+              );
+            }
+            if (n.kind === LINKING_NODE_KIND) {
+              return <LinkingNodePreview node={n} onNavigate={onNavigate} onInsert={(ref) => insertLinkedTarget(n, ref)} />;
             }
             if (n.kind === 'item') {
               return (

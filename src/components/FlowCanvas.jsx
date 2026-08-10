@@ -1,5 +1,19 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ENTITY_COLORS, PrimIcon } from './bits.jsx';
+import { arrowEndpointGeometry, splineControlOffset } from '../lib/arrowGeometry.js';
+import { frameBackgroundCss } from '../lib/frameAppearance.js';
+import { resizeFrameOnly } from '../lib/frameScale.js';
+import { resolveSupportEndpoint, resolveSupportGeometry } from '../lib/supportAnchors.js';
+import {
+  VISUAL_MARKER_BASE_SIZE,
+  visualMarkerAttachment,
+  visualMarkerLabel,
+  visualMarkerPixelSize,
+  visualMarkerPosition,
+} from '../lib/visualMarkers.js';
+import { shiftToggleSelection } from '../lib/multiSelect.js';
+import { NODE_DEFAULT_WIDTH, NODE_MIN_HEIGHT, NODE_MIN_WIDTH } from '../lib/nodeBoxSize.js';
+import { createCanvasClipboard, offsetCanvasClipboard } from '../lib/canvasClipboard.js';
 
 // In-app node clipboard, shared across canvases (copy in a structure
 // template, paste on the game canvas, and vice versa).
@@ -62,7 +76,7 @@ export function visibleCanvasPlacement(fallback = { x: 80, y: 80 }, size = { w: 
   return { x: Math.max(8, Math.round(candidate.x)), y: Math.max(8, Math.round(candidate.y)) };
 }
 
-export const NODE_W = 236;
+export const NODE_W = NODE_DEFAULT_WIDTH;
 export const KIND_LABEL = {
   story: 'Story beat', location: 'Location', objective: 'Objective', enemy: 'Enemy encounter', mechanic: 'Mechanic', sensor: 'Sensor trigger',
   // Narrative v2 typed nodes.
@@ -71,16 +85,20 @@ export const KIND_LABEL = {
   task: 'Task', travel: 'Travel Time', placement: 'Placement', rule: 'Rule', prop: 'Prop / kit', power: 'Power', effect: 'Effect',
   // Narrative Weaver: base nodes, concept containers, subnodes.
   event: 'Event', character: 'Character', storyLocation: 'Story Location', item: 'Story Item', quest: 'Quest', concept: 'Concept', masterAct: 'Master Act',
+  characterShadow: 'Dark Side',
+  characterArchetypeFacet: 'Archetype',
+  characterArchetypeCombinations: 'Archetype Combinations',
+  linkingNode: 'Linking Node', storyStructureContainer: 'Story Structure',
   conceptTitle: 'Section Title', conceptQuestion: 'Question', conceptChoice: 'Choice',
   outcomeBranches: 'Outcome Branches', relChange: 'Rel. / Status Change', internalState: 'Internal State',
   locationArchetype: 'Location Archetype', narrativeResponse: 'Narrative Response', emotionalTone: 'Emotional Tone',
 };
-const SWATCHES = ['#5CA8F5', '#43BF87', '#E0A23C', '#E86464', '#A87BF0', '#3EC6D6', '#E8D25C', '#F08CB4'];
+const SWATCHES = ['#5CA8F5', '#43BF87', '#E0A23C', '#E86464', '#A87BF0', '#3EC6D6', '#E8D25C', '#F08CB4', '#8B92A6', '#000000'];
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.8;
 const ZOOM_STEP = 0.1;
-const MIN_NODE_W = 148;
-const MIN_NODE_H = 74;
+const MIN_NODE_W = NODE_MIN_WIDTH;
+const MIN_NODE_H = NODE_MIN_HEIGHT;
 const EDGE_SIDES = ['left', 'right', 'top', 'bottom'];
 const EDGE_SIDE_LABELS = { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' };
 const SIDE_VECTOR = {
@@ -104,7 +122,7 @@ const normalizeSide = (side, fallback) => {
 export default function FlowCanvas({
   nodes, edges, selId, colorOf,
   onSelect, onMove, onConnect, onRemoveEdge, onRemoveEdges, onSetColor, onDropPalette,
-  onPasteNode, onDeleteNode, onDeleteNodes, onMoveNodes, onClearCanvas, onEditEdge, onResizeNode, renderBody, renderExtra,
+  onPasteNode, onPasteNodes, onDeleteNode, onDeleteNodes, onMoveNodes, onMoveSelection, onDeleteSelection, onClearCanvas, onEditEdge, onResizeNode, onUpdateNode, renderBody, renderExtra,
   // Optional presentation hooks (unused by the library structure editors):
   //   iconOf(node) → icon name · teamOf(node) → {name,color} · dimNode(node) →
   //   bool · edgeFact(edge) → {color,title} to show a fact dot on a connection.
@@ -118,9 +136,9 @@ export default function FlowCanvas({
   attachments, onDetach,
   // frames: visual grouping rectangles. Dragging the header moves the frame
   // and everything inside (host reducer handles containment).
-  frames, onFrameMove, onFrameResize, onFrameSelect, selFrame,
+  frames, onFrameMove, onFrameMoveTo, onFrameResize, onFrameGeometry, onFrameScale, onFrameSelect, onFrameDelete, selFrame,
   // numberMarkers: visual Miro-style numbered badges, not graph nodes.
-  numberMarkers, onNumberMarkerSelect, onNumberMarkerMove, onNumberMarkerDelete, selNumberMarker,
+  numberMarkers, onNumberMarkerSelect, onNumberMarkerMove, onNumberMarkerUpdate, onNumberMarkerDelete, selNumberMarker,
   // titleMarkers: draggable text headings for visually grouping graph areas.
   titleMarkers, onTitleMarkerSelect, onTitleMarkerMove, onTitleMarkerDelete, selTitleMarker,
 }) {
@@ -128,6 +146,7 @@ export default function FlowCanvas({
   const dragRef = useRef(null);
   const resizeRef = useRef(null);
   const frameRef = useRef(null);
+  const mixedDragRef = useRef(null);
   const markerRef = useRef(null);
   const titleRef = useRef(null);
   const cutDragRef = useRef(null);
@@ -135,6 +154,7 @@ export default function FlowCanvas({
   const linkTargetRef = useRef(null);
   const [linkDrag, setLinkDrag] = useState(null);
   const [linkTarget, setLinkTarget] = useState(null);
+  const [supportLinkTarget, setSupportLinkTarget] = useState(null);
   const [cutDrag, setCutDrag] = useState(null);
   const [boxDrag, setBoxDrag] = useState(null);
   const [multiSel, setMultiSel] = useState(() => new Set());
@@ -156,12 +176,25 @@ export default function FlowCanvas({
         onClearCanvas();
         return;
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && multiSel.size > 0 && (onDeleteNodes || onDeleteNode)) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && multiSel.size > 0) {
         e.preventDefault();
-        const ids = Array.from(multiSel).filter((id) => nodes[id]);
-        if (onDeleteNodes) onDeleteNodes(ids);
-        else ids.forEach((id) => onDeleteNode(id));
+        const selection = selectionByCollection(multiSel);
+        if (onDeleteSelection) onDeleteSelection(selection);
+        else {
+          if (selection.nodes.length) {
+            if (onDeleteNodes) onDeleteNodes(selection.nodes);
+            else selection.nodes.forEach((id) => onDeleteNode?.(id));
+          }
+          selection.frames.forEach((id) => onFrameDelete?.(id));
+          selection.numberMarkers.forEach((id) => onNumberMarkerDelete?.(id));
+          selection.titleMarkers.forEach((id) => onTitleMarkerDelete?.(id));
+        }
         setMultiSel(new Set());
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && onFrameDelete && selFrame && frames?.[selFrame]) {
+        e.preventDefault();
+        onFrameDelete(selFrame);
         return;
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && onNumberMarkerDelete && selNumberMarker && numberMarkers?.[selNumberMarker]) {
@@ -179,34 +212,67 @@ export default function FlowCanvas({
         onDeleteNode(selId);
         return;
       }
-      if (!(e.ctrlKey || e.metaKey) || !onPasteNode) return;
+      if (!(e.ctrlKey || e.metaKey) || (!onPasteNode && !onPasteNodes)) return;
       const k = e.key.toLowerCase();
       if (k === 'c') {
         if (window.getSelection()?.toString()) return; // real text copy wins
-        const n = selId && nodes[selId];
-        if (!n) return;
-        nodeClipboard = { kind: n.kind, title: n.title, body: n.body ?? '', phaseNotes: n.phaseNotes ?? '', color: n.color ?? null, primitiveId: n.primitiveId ?? null, image: n.image ?? null, x: n.x, y: n.y, w: n.w ?? null, h: n.h ?? null };
+        const selectedNodeIds = Array.from(multiSel).filter((id) => nodes[id]);
+        if (!selectedNodeIds.length && selId && nodes[selId]) selectedNodeIds.push(selId);
+        nodeClipboard = createCanvasClipboard(nodes, edges, selectedNodeIds);
+        if (!nodeClipboard) return;
         e.preventDefault();
       } else if (k === 'v' || k === 'p') {
         if (!nodeClipboard) return;
         e.preventDefault();
-        nodeClipboard = { ...nodeClipboard, x: nodeClipboard.x + 28, y: nodeClipboard.y + 28 };
-        onPasteNode({ ...nodeClipboard });
+        nodeClipboard = offsetCanvasClipboard(nodeClipboard);
+        if (onPasteNodes) onPasteNodes(nodeClipboard);
+        else nodeClipboard.nodes.forEach((node) => onPasteNode({ ...node }));
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [selId, nodes, onPasteNode, onDeleteNode, onDeleteNodes, onClearCanvas, selNumberMarker, numberMarkers, onNumberMarkerDelete, selTitleMarker, titleMarkers, onTitleMarkerDelete, multiSel]);
+  }, [selId, nodes, edges, onPasteNode, onPasteNodes, onDeleteNode, onDeleteNodes, onMoveSelection, onDeleteSelection, onClearCanvas, selFrame, frames, onFrameDelete, selNumberMarker, numberMarkers, onNumberMarkerDelete, selTitleMarker, titleMarkers, onTitleMarkerDelete, multiSel]);
 
   useEffect(() => { cutDragRef.current = cutDrag; }, [cutDrag]);
   useEffect(() => { linkDragRef.current = linkDrag; }, [linkDrag]);
 
   const list = Object.values(nodes);
-  const markerList = Object.values(numberMarkers || {});
+  const markerList = Object.values(numberMarkers || {}).map((marker) => ({
+    ...marker,
+    ...visualMarkerPosition(marker, nodes),
+  }));
   const titleList = Object.values(titleMarkers || {});
+  const objectExists = (id) => !!(nodes[id] || frames?.[id] || numberMarkers?.[id] || titleMarkers?.[id]);
+  const selectionByCollection = (ids) => {
+    const result = { nodes: [], frames: [], numberMarkers: [], titleMarkers: [] };
+    Array.from(ids || []).forEach((id) => {
+      if (nodes[id]) result.nodes.push(id);
+      else if (frames?.[id]) result.frames.push(id);
+      else if (numberMarkers?.[id]) result.numberMarkers.push(id);
+      else if (titleMarkers?.[id]) result.titleMarkers.push(id);
+    });
+    return result;
+  };
+  const selectCanvasObject = (id) => {
+    if (nodes[id]) onSelect?.(id);
+    else if (frames?.[id]) onFrameSelect?.(id);
+    else if (numberMarkers?.[id]) onNumberMarkerSelect?.(id);
+    else if (titleMarkers?.[id]) onTitleMarkerSelect?.(id);
+  };
+  const toggleCanvasObject = (id) => {
+    const activeId = selId || selFrame || selNumberMarker || selTitleMarker;
+    const next = shiftToggleSelection(multiSel, activeId, id);
+    const valid = new Set(Array.from(next).filter(objectExists));
+    setMultiSel(valid);
+    if (valid.has(id)) selectCanvasObject(id);
+    return valid;
+  };
   const nodeDefaultW = (n) => {
     if (n.kind === 'framework' && n.frameworkId === 'jungianMasculineArchetypes') return 360;
     if (n.kind === 'framework' && n.frameworkId === 'kolbLearningCycle') return 300;
+    if (n.kind === 'framework' && n.frameworkId === 'descentAndRecovery') return 330;
+    if (n.kind === 'framework' && n.frameworkId === 'homeVoyageReturn') return 360;
+    if (n.kind === 'framework' && n.frameworkId === 'storyBuildingSystem') return 400;
     return String(nodeClass?.(n) || '').includes('subnode') ? 196 : NODE_W;
   };
   const nodeW = (n) => Math.max(MIN_NODE_W, Number(n.w) || nodeDefaultW(n));
@@ -219,17 +285,39 @@ export default function FlowCanvas({
     ? Math.max(40, Number(measuredTitleSizes[n.id]?.w) || Math.min(560, String(n.text || 'Title').length * (Number(n.fontSize) || 28) * 0.58 + 16))
     : nodeW(n);
   const endpointFor = (id) => nodes[id] || (titleMarkers?.[id] ? { ...titleMarkers[id], _titleTarget: true } : null);
+  const pointOnEntity = (entity, side = 'right') => {
+    const w = endpointW(entity);
+    const h = nodeH(entity);
+    const normalized = normalizeSide(side, 'right');
+    if (normalized === 'left') return { x: entity.x, y: entity.y + h / 2 };
+    if (normalized === 'right') return { x: entity.x + w, y: entity.y + h / 2 };
+    if (normalized === 'top') return { x: entity.x + w / 2, y: entity.y };
+    return { x: entity.x + w / 2, y: entity.y + h };
+  };
+  const rawSupportGeometry = (frame) => ({ x: frame.x, y: frame.y, w: frame.w, h: frame.h });
+  const supportAnchorContext = {
+    supports: frames || {},
+    resolveEntityAnchor: (anchor) => {
+      const entity = endpointFor(anchor.id);
+      return entity ? pointOnEntity(entity, anchor.side) : null;
+    },
+  };
+  const resolvedSupportEndpoint = (frame, endpoint) => resolveSupportEndpoint(frame, endpoint, supportAnchorContext);
+  const resolvedSupportGeometry = (frame) => resolveSupportGeometry(frame, supportAnchorContext);
   const frameRect = (f) => ({
     id: f.id,
-    x: Math.min(f.x, f.x + f.w),
-    y: Math.min(f.y, f.y + f.h),
-    w: Math.abs(f.w),
-    h: Math.abs(f.h),
+    x: Math.min(resolvedSupportGeometry(f).x, resolvedSupportGeometry(f).x + resolvedSupportGeometry(f).w),
+    y: Math.min(resolvedSupportGeometry(f).y, resolvedSupportGeometry(f).y + resolvedSupportGeometry(f).h),
+    w: Math.abs(resolvedSupportGeometry(f).w),
+    h: Math.abs(resolvedSupportGeometry(f).h),
   });
   const objectRects = () => [
     ...list.map((n) => ({ id: n.id, x: n.x, y: n.y, w: nodeW(n), h: nodeH(n) })),
     ...Object.values(frames || {}).map(frameRect),
-    ...markerList.map((m) => ({ id: m.id, x: m.x, y: m.y, w: 34, h: 34 })),
+    ...markerList.map((m) => {
+      const size = visualMarkerPixelSize(m);
+      return { id: m.id, x: m.x, y: m.y, w: size, h: size };
+    }),
     ...titleList.map((m) => ({ id: m.id, x: m.x, y: m.y, w: endpointW({ ...m, _titleTarget: true }), h: nodeH({ ...m, _titleTarget: true }) })),
   ];
   const guidesForRect = (moving, excludedIds = []) => {
@@ -326,18 +414,18 @@ export default function FlowCanvas({
   };
   const onWheel = (e) => {
     if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
-    e.preventDefault();
-    zoomBy(e.deltaY > 0 ? -1 : 1, e.clientX, e.clientY);
+    if (e.altKey) {
+      e.preventDefault();
+      zoomBy(e.deltaY > 0 ? -1 : 1, e.clientX, e.clientY);
+      return;
+    }
+    if (e.shiftKey) {
+      e.preventDefault();
+      const el = canvasRef.current;
+      if (el) el.scrollLeft += Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    }
   };
-  const anchorFor = (n, side = 'right') => {
-    const w = endpointW(n);
-    const h = nodeH(n);
-    const s = normalizeSide(side, 'right');
-    if (s === 'left') return { x: n.x, y: n.y + h / 2 };
-    if (s === 'right') return { x: n.x + w, y: n.y + h / 2 };
-    if (s === 'top') return { x: n.x + w / 2, y: n.y };
-    return { x: n.x + w / 2, y: n.y + h };
-  };
+  const anchorFor = (n, side = 'right') => pointOnEntity(n, side);
   const outAnchor = (n, side = 'right') => anchorFor(n, side);
   const inAnchor = (n, side = 'left') => anchorFor(n, side);
   const controlPoints = (a, b, fromSide = 'right', toSide = 'left') => {
@@ -368,10 +456,13 @@ export default function FlowCanvas({
     w: Math.abs(a.x - b.x),
     h: Math.abs(a.y - b.y),
   });
+  const rectHitsRect = (n, r) => (
+    n.x < r.x + r.w && n.x + n.w > r.x && n.y < r.y + r.h && n.y + n.h > r.y
+  );
   const nodeHitsRect = (n, r) => {
     const w = nodeW(n);
     const h = nodeH(n);
-    return n.x < r.x + r.w && n.x + w > r.x && n.y < r.y + r.h && n.y + h > r.y;
+    return rectHitsRect({ x: n.x, y: n.y, w, h }, r);
   };
   const cutHitsEdge = (cutPoints, e) => {
     const from = endpointFor(e.from), to = endpointFor(e.to);
@@ -389,10 +480,78 @@ export default function FlowCanvas({
     return false;
   };
 
+  const beginMixedDrag = (id, point) => {
+    if (!multiSel.has(id) || multiSel.size < 2) return false;
+    const selection = selectionByCollection(multiSel);
+    mixedDragRef.current = {
+      selection,
+      startX: point.x,
+      startY: point.y,
+      lastDx: 0,
+      lastDy: 0,
+      moved: false,
+      undoGroup: `mixed-canvas-move:${Date.now()}`,
+      starts: {
+        nodes: Object.fromEntries(selection.nodes.map((itemId) => [itemId, { x: nodes[itemId].x, y: nodes[itemId].y }])),
+        frames: Object.fromEntries(selection.frames.map((itemId) => [itemId, { x: frames[itemId].x, y: frames[itemId].y }])),
+        numberMarkers: Object.fromEntries(selection.numberMarkers.map((itemId) => [itemId, { x: numberMarkers[itemId].x, y: numberMarkers[itemId].y }])),
+        titleMarkers: Object.fromEntries(selection.titleMarkers.map((itemId) => [itemId, { x: titleMarkers[itemId].x, y: titleMarkers[itemId].y }])),
+      },
+    };
+    return true;
+  };
+  const moveMixedDrag = (point) => {
+    const d = mixedDragRef.current;
+    if (!d) return false;
+    const dx = Math.round(point.x - d.startX);
+    const dy = Math.round(point.y - d.startY);
+    if (!d.moved && Math.abs(dx) + Math.abs(dy) < 4) return true;
+    d.moved = true;
+    const patches = {
+      nodes: Object.fromEntries(Object.entries(d.starts.nodes).map(([id, start]) => [id, { x: Math.max(8, start.x + dx), y: Math.max(8, start.y + dy) }])),
+      frames: Object.fromEntries(Object.entries(d.starts.frames).map(([id, start]) => [id, { x: start.x + dx, y: start.y + dy }])),
+      numberMarkers: Object.fromEntries(Object.entries(d.starts.numberMarkers).map(([id, start]) => [id, { x: start.x + dx, y: start.y + dy }])),
+      titleMarkers: Object.fromEntries(Object.entries(d.starts.titleMarkers).map(([id, start]) => [id, { x: start.x + dx, y: start.y + dy }])),
+    };
+    if (onMoveSelection) onMoveSelection(patches, { undoGroup: d.undoGroup });
+    else {
+      if (Object.keys(patches.nodes).length) {
+        if (onMoveNodes) onMoveNodes(patches.nodes, { undoGroup: d.undoGroup });
+        else Object.entries(patches.nodes).forEach(([itemId, pos]) => onMove?.(itemId, pos.x, pos.y));
+      }
+      Object.entries(patches.frames).forEach(([itemId, pos]) => onFrameGeometry?.(itemId, pos));
+      const stepDx = dx - d.lastDx;
+      const stepDy = dy - d.lastDy;
+      Object.keys(patches.numberMarkers).forEach((itemId) => onNumberMarkerMove?.(itemId, stepDx, stepDy));
+      Object.keys(patches.titleMarkers).forEach((itemId) => onTitleMarkerMove?.(itemId, stepDx, stepDy));
+    }
+    d.lastDx = dx;
+    d.lastDy = dy;
+    return true;
+  };
+  const finishMixedDrag = () => {
+    const wasActive = !!mixedDragRef.current;
+    mixedDragRef.current = null;
+    if (wasActive) clearAlignmentGuides();
+    return wasActive;
+  };
+
   const onNodeDown = (e, n) => {
     if (e.button !== 0 || e.target.closest('.port, .icpick, .swatchpop, .x, .nresize')) return;
     const p = canvasPoint(e);
     clearAlignmentGuides();
+    if (e.shiftKey) {
+      const next = toggleCanvasObject(n.id);
+      if (!next.has(n.id)) onSelect?.(Array.from(next).filter((id) => nodes[id]).at(-1) || null);
+      dragRef.current = { id: n.id, selectionOnly: true, moved: false };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setPickerFor(null);
+      return;
+    }
+    if (beginMixedDrag(n.id, p)) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     const group = multiSel.has(n.id) ? Array.from(multiSel).filter((id) => nodes[id]) : [];
     dragRef.current = group.length > 1
       ? {
@@ -408,8 +567,13 @@ export default function FlowCanvas({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onNodeMove = (e) => {
+    if (mixedDragRef.current) {
+      moveMixedDrag(canvasPoint(e));
+      return;
+    }
     const d = dragRef.current;
     if (!d) return;
+    if (d.selectionOnly) return;
     const p = canvasPoint(e);
     if (d.group?.length > 1) {
       const dx = Math.round(p.x - d.startX);
@@ -443,9 +607,11 @@ export default function FlowCanvas({
     guidesForRect({ x, y, w: nodeW(n), h: nodeH(n) }, [d.id]);
   };
   const onNodeUp = (e, n) => {
+    if (finishMixedDrag()) return;
     const d = dragRef.current;
     dragRef.current = null;
     clearAlignmentGuides();
+    if (d?.selectionOnly) return;
     if (d && !d.moved) {
       if (!d.group?.length) setMultiSel(new Set());
       onSelect(n.id);
@@ -601,18 +767,97 @@ export default function FlowCanvas({
     });
   };
 
+  const supportAnchorAt = (point, sourceId) => {
+    const candidates = [];
+    list.forEach((node) => EDGE_SIDES.forEach((side) => candidates.push({
+      point: pointOnEntity(node, side),
+      anchor: { kind: 'node', id: node.id, side },
+    })));
+    titleList.forEach((title) => EDGE_SIDES.forEach((side) => candidates.push({
+      point: pointOnEntity({ ...title, _titleTarget: true }, side),
+      anchor: { kind: 'title', id: title.id, side },
+    })));
+    Object.values(frames || {}).forEach((support) => {
+      if (support.id === sourceId || !['arrow', 'spline'].includes(support.shape)) return;
+      candidates.push(
+        { point: resolvedSupportEndpoint(support, 'tail'), anchor: { kind: 'support', id: support.id, endpoint: 'tail' } },
+        { point: resolvedSupportEndpoint(support, 'head'), anchor: { kind: 'support', id: support.id, endpoint: 'head' } },
+      );
+    });
+    // Keep port snapping deliberate so free spline endpoint placement remains precise.
+    const radius = 14 / zoom;
+    return candidates
+      .map((candidate) => ({ ...candidate, distance: Math.hypot(point.x - candidate.point.x, point.y - candidate.point.y) }))
+      .filter((candidate) => candidate.distance <= radius)
+      .sort((a, b) => a.distance - b.distance)[0]?.anchor || null;
+  };
+
   // Frame drag (header) and resize (corner handle).
   const onFrameDown = (e, f, mode) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     const p = canvasPoint(e);
     clearAlignmentGuides();
-    frameRef.current = { id: f.id, mode, lastX: p.x, lastY: p.y };
+    if (e.shiftKey && mode === 'move') {
+      toggleCanvasObject(f.id);
+      return;
+    }
+    if (mode === 'move' && beginMixedDrag(f.id, p)) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const move = (event) => onFramePtrMove(event);
+      const finish = () => {
+        onFramePtrUp();
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', finish);
+        document.removeEventListener('pointercancel', finish);
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', finish);
+      document.addEventListener('pointercancel', finish);
+      return;
+    }
+    setMultiSel(new Set());
+    const isLineSupport = f.shape === 'arrow' || f.shape === 'spline';
+    const lineGeometry = isLineSupport ? resolvedSupportGeometry(f) : null;
+    if (isLineSupport && onFrameGeometry) {
+      if (mode === 'arrow-tail' || mode === 'spline-tail') {
+        setSupportLinkTarget(null);
+        onFrameGeometry(f.id, { ...lineGeometry, tailAnchor: null });
+      } else if (mode === 'arrow-head' || mode === 'spline-head') {
+        setSupportLinkTarget(null);
+        onFrameGeometry(f.id, { ...lineGeometry, headAnchor: null });
+      } else if (mode === 'move' && (f.tailAnchor || f.headAnchor)) {
+        onFrameGeometry(f.id, { ...lineGeometry, tailAnchor: null, headAnchor: null });
+      }
+    }
+    const source = frameRect(f);
+    const fullyInside = (rect) => rect.x >= source.x && rect.y >= source.y
+      && rect.x + rect.w <= source.x + source.w && rect.y + rect.h <= source.y + source.h;
+    const scaleTargets = mode === 'scale' ? {
+      nodes: list.filter((n) => fullyInside({ x: n.x, y: n.y, w: nodeW(n), h: nodeH(n) }))
+        .map((n) => ({ id: n.id, x: n.x, y: n.y, w: nodeW(n), h: nodeH(n) })),
+      frames: Object.values(frames || {}).filter((inner) => inner.id !== f.id && fullyInside(frameRect(inner)))
+        .map((inner) => ({ id: inner.id, x: inner.x, y: inner.y, w: inner.w, h: inner.h })),
+      numberMarkers: markerList.filter((m) => {
+        const size = visualMarkerPixelSize(m);
+        return fullyInside({ x: m.x, y: m.y, w: size, h: size });
+      }).map((m) => ({ id: m.id, x: m.x, y: m.y, scale: Number(m.scale) || 1 })),
+      titleMarkers: titleList.filter((m) => {
+        const size = measuredTitleSizes[m.id] || { w: endpointW({ ...m, _titleTarget: true }), h: nodeH({ ...m, _titleTarget: true }) };
+        return fullyInside({ x: m.x, y: m.y, ...size });
+      }).map((m) => ({ id: m.id, x: m.x, y: m.y, fontSize: Number(m.fontSize) || 28 })),
+    } : null;
+    frameRef.current = {
+      id: f.id, mode, lastX: p.x, lastY: p.y, startX: p.x, startY: p.y,
+      source: { x: source.x, y: source.y, w: source.w, h: source.h },
+      origin: { x: lineGeometry?.x ?? f.x, y: lineGeometry?.y ?? f.y }, shape: f.shape || null,
+      arrow: { ...(lineGeometry || rawSupportGeometry(f)), curveX: f.curveX, curveY: f.curveY }, scaleTargets,
+    };
     e.currentTarget.setPointerCapture(e.pointerId);
     onFrameSelect?.(f.id);
     const move = (event) => onFramePtrMove(event);
-    const finish = () => {
-      onFramePtrUp();
+    const finish = (event) => {
+      onFramePtrUp(event);
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', finish);
       document.removeEventListener('pointercancel', finish);
@@ -622,62 +867,199 @@ export default function FlowCanvas({
     document.addEventListener('pointercancel', finish);
   };
   const onFramePtrMove = (e) => {
+    if (mixedDragRef.current) {
+      moveMixedDrag(canvasPoint(e));
+      return;
+    }
     const d = frameRef.current;
     if (!d) return;
     const p = canvasPoint(e);
+    if (d.mode === 'scale') {
+      const base = d.source;
+      const bottom = base.y + base.h;
+      const nextRight = Math.max(base.x + 160, base.x + base.w + (p.x - d.startX));
+      const nextTop = Math.min(bottom - 100, base.y + (p.y - d.startY));
+      const nextFrame = {
+        x: Math.round(base.x), y: Math.round(nextTop),
+        w: Math.round(nextRight - base.x), h: Math.round(bottom - nextTop),
+      };
+      const sx = nextFrame.w / base.w;
+      const sy = nextFrame.h / base.h;
+      const visualScale = Math.min(sx, sy);
+      const position = (item) => ({
+        x: Math.round(nextFrame.x + (item.x - base.x) * sx),
+        y: Math.round(nextFrame.y + (item.y - base.y) * sy),
+      });
+      const nodePatches = Object.fromEntries(d.scaleTargets.nodes.map((n) => [n.id, {
+        ...position(n), w: Math.max(MIN_NODE_W, Math.round(n.w * sx)), h: Math.max(MIN_NODE_H, Math.round(n.h * sy)),
+      }]));
+      const framePatches = Object.fromEntries(d.scaleTargets.frames.map((inner) => [inner.id, {
+        ...position(inner), w: Math.round(inner.w * sx), h: Math.round(inner.h * sy),
+      }]));
+      const numberMarkerPatches = Object.fromEntries(d.scaleTargets.numberMarkers.map((m) => [m.id, {
+        ...position(m), scale: Math.max(0.35, +(m.scale * visualScale).toFixed(3)),
+      }]));
+      const titleMarkerPatches = Object.fromEntries(d.scaleTargets.titleMarkers.map((m) => [m.id, {
+        ...position(m), fontSize: Math.max(12, Math.min(96, Math.round(m.fontSize * visualScale))),
+      }]));
+      onFrameScale?.(d.id, { frame: nextFrame, nodePatches, framePatches, numberMarkerPatches, titleMarkerPatches });
+      return;
+    }
+    if (d.mode === 'arrow-tail' || d.mode === 'arrow-head' || d.mode === 'spline-tail' || d.mode === 'spline-head') {
+      const endpoint = d.mode.endsWith('tail') ? 'tail' : 'head';
+      const minLength = d.shape === 'spline' ? 1 : 30;
+      const geometry = arrowEndpointGeometry(d.arrow, endpoint, p, minLength);
+      if (onFrameGeometry) onFrameGeometry(d.id, geometry);
+      else if (d.mode.endsWith('head')) onFrameResize?.(d.id, geometry.w, geometry.h);
+      setSupportLinkTarget(supportAnchorAt(p, d.id));
+      return;
+    }
+    if (d.mode === 'spline-control') {
+      onFrameGeometry?.(d.id, splineControlOffset(d.arrow, p));
+      return;
+    }
+    if (d.mode === 'resize') {
+      const geometry = resizeFrameOnly(
+        d.source,
+        { x: d.startX, y: d.startY },
+        p,
+        { circle: d.shape === 'circle' },
+      );
+      onFrameResize?.(d.id, geometry.w, geometry.h);
+      return;
+    }
     const dx = Math.round(p.x - d.lastX), dy = Math.round(p.y - d.lastY);
     if (dx === 0 && dy === 0) return;
     d.lastX = p.x; d.lastY = p.y;
     const f = frames[d.id];
     if (d.mode === 'move') {
-      onFrameMove?.(d.id, dx, dy);
-      guidesForRect({ x: f.x + dx, y: f.y + dy, w: f.w, h: f.h }, [d.id]);
-    } else if (f.shape === 'arrow') {
-      let w = f.w + dx;
-      let h = f.h + dy;
-      if (Math.hypot(w, h) < 30) {
-        const angle = Math.atan2(h || f.h || 1, w || f.w || 1);
-        w = Math.cos(angle) * 30;
-        h = Math.sin(angle) * 30;
+      if ((d.shape === 'arrow' || d.shape === 'spline') && onFrameGeometry) {
+        onFrameGeometry(d.id, {
+          x: Math.round(d.origin.x + p.x - d.startX),
+          y: Math.round(d.origin.y + p.y - d.startY),
+        });
+      } else if (onFrameMoveTo) {
+        onFrameMoveTo(d.id, Math.round(d.origin.x + p.x - d.startX), Math.round(d.origin.y + p.y - d.startY));
+      } else {
+        onFrameMove?.(d.id, dx, dy);
       }
-      onFrameResize?.(d.id, Math.round(w), Math.round(h));
-    } else if (f.shape === 'circle') {
-      const diameter = Math.max(24, Math.round(Math.max(f.w + dx, f.h + dy)));
-      onFrameResize?.(d.id, diameter, diameter);
-    } else onFrameResize?.(d.id, Math.max(160, f.w + dx), Math.max(100, f.h + dy));
+      guidesForRect({ x: d.origin.x + p.x - d.startX, y: d.origin.y + p.y - d.startY, w: d.arrow.w, h: d.arrow.h }, [d.id]);
+    }
   };
-  const onFramePtrUp = () => { frameRef.current = null; clearAlignmentGuides(); };
+  const onFramePtrUp = (event) => {
+    if (finishMixedDrag()) return;
+    const d = frameRef.current;
+    if (d && event && (d.mode === 'arrow-tail' || d.mode === 'spline-tail' || d.mode === 'arrow-head' || d.mode === 'spline-head')) {
+      const point = canvasPoint(event);
+      const endpoint = d.mode.endsWith('tail') ? 'tail' : 'head';
+      const field = endpoint === 'tail' ? 'tailAnchor' : 'headAnchor';
+      const minLength = d.shape === 'spline' ? 1 : 30;
+      // Pointermove events can lag behind a quick release. Commit the release
+      // coordinate itself so a free endpoint lands exactly where it was dropped.
+      onFrameGeometry?.(d.id, {
+        ...arrowEndpointGeometry(d.arrow, endpoint, point, minLength),
+        [field]: supportAnchorAt(point, d.id),
+      });
+    }
+    setSupportLinkTarget(null);
+    frameRef.current = null;
+    clearAlignmentGuides();
+  };
   const onMarkerDown = (e, marker) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     const p = canvasPoint(e);
     clearAlignmentGuides();
-    markerRef.current = { id: marker.id, lastX: p.x, lastY: p.y };
+    if (e.shiftKey) {
+      toggleCanvasObject(marker.id);
+      return;
+    }
+    if (beginMixedDrag(marker.id, p)) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
+    setMultiSel(new Set());
+    markerRef.current = {
+      id: marker.id,
+      lastX: p.x,
+      lastY: p.y,
+      startX: p.x,
+      startY: p.y,
+      x: marker.x,
+      y: marker.y,
+      scale: Number(marker.scale) || 1,
+      moved: false,
+    };
     e.currentTarget.setPointerCapture(e.pointerId);
     onNumberMarkerSelect?.(marker.id);
   };
   const onMarkerMove = (e) => {
+    if (mixedDragRef.current) {
+      moveMixedDrag(canvasPoint(e));
+      return;
+    }
     const d = markerRef.current;
     if (!d) return;
     const p = canvasPoint(e);
     const dx = Math.round(p.x - d.lastX), dy = Math.round(p.y - d.lastY);
     if (dx === 0 && dy === 0) return;
+    if (!d.moved && Math.abs(p.x - d.startX) + Math.abs(p.y - d.startY) < 4) return;
+    d.moved = true;
     d.lastX = p.x; d.lastY = p.y;
-    onNumberMarkerMove?.(d.id, dx, dy);
-    const marker = numberMarkers?.[d.id];
-    if (marker) guidesForRect({ x: marker.x + dx, y: marker.y + dy, w: 34, h: 34 }, [d.id]);
+    d.x += dx; d.y += dy;
+    if (onNumberMarkerUpdate) {
+      onNumberMarkerUpdate(d.id, {
+        x: d.x,
+        y: d.y,
+        attachedToNodeId: null,
+        attachmentOffsetX: null,
+        attachmentOffsetY: null,
+      });
+    } else {
+      onNumberMarkerMove?.(d.id, dx, dy);
+    }
+    guidesForRect({ x: d.x, y: d.y, w: VISUAL_MARKER_BASE_SIZE * d.scale, h: VISUAL_MARKER_BASE_SIZE * d.scale }, [d.id]);
   };
-  const onMarkerUp = () => { markerRef.current = null; clearAlignmentGuides(); };
+  const onMarkerUp = () => {
+    if (finishMixedDrag()) return;
+    const d = markerRef.current;
+    markerRef.current = null;
+    clearAlignmentGuides();
+    if (!d?.moved || !onNumberMarkerUpdate) return;
+    const attachment = visualMarkerAttachment(
+      { x: d.x, y: d.y },
+      VISUAL_MARKER_BASE_SIZE * d.scale,
+      list.map((node) => ({ id: node.id, x: node.x, y: node.y, w: nodeW(node), h: nodeH(node) })),
+    );
+    onNumberMarkerUpdate(d.id, attachment || {
+      attachedToNodeId: null,
+      attachmentOffsetX: null,
+      attachmentOffsetY: null,
+    });
+  };
   const onTitleDown = (e, marker) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     const p = canvasPoint(e);
     clearAlignmentGuides();
+    if (e.shiftKey) {
+      toggleCanvasObject(marker.id);
+      return;
+    }
+    if (beginMixedDrag(marker.id, p)) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
+    setMultiSel(new Set());
     titleRef.current = { id: marker.id, lastX: p.x, lastY: p.y };
     e.currentTarget.setPointerCapture(e.pointerId);
     onTitleMarkerSelect?.(marker.id);
   };
   const onTitleMove = (e) => {
+    if (mixedDragRef.current) {
+      moveMixedDrag(canvasPoint(e));
+      return;
+    }
     const d = titleRef.current;
     if (!d) return;
     const p = canvasPoint(e);
@@ -691,20 +1073,21 @@ export default function FlowCanvas({
       w: endpointW({ ...marker, _titleTarget: true }), h: nodeH({ ...marker, _titleTarget: true }),
     }, [d.id]);
   };
-  const onTitleUp = () => { titleRef.current = null; clearAlignmentGuides(); };
+  const onTitleUp = () => { finishMixedDrag(); titleRef.current = null; clearAlignmentGuides(); };
   const onCanvasDown = (e) => {
     if (e.button !== 0) return;
     if (e.target.closest?.('[data-node], .gframe, .garrow, .numarker, .titlemarker, .zoomctl, .elab, .attlab, .port, .icpick, .swatchpop, .nresize, button, input, textarea, select')) return;
     const p = canvasPoint(e);
     if (e.ctrlKey || e.metaKey) {
-      setCutDrag(null);
-      setBoxDrag({ start: p, current: p });
+      if (!onRemoveEdge) return;
+      setBoxDrag(null);
+      setMultiSel(new Set());
+      setCutDrag({ points: [p] });
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
-    if (!onRemoveEdge) return;
-    setMultiSel(new Set());
-    setCutDrag({ points: [p] });
+    setCutDrag(null);
+    setBoxDrag({ start: p, current: p });
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onCanvasMove = (e) => {
@@ -735,9 +1118,27 @@ export default function FlowCanvas({
   const finishBoxSelect = () => {
     if (!boxDrag) return;
     const r = normRect(boxDrag.start, boxDrag.current);
-    const ids = r.w < 4 && r.h < 4 ? [] : list.filter((n) => nodeHitsRect(n, r)).map((n) => n.id);
+    const centerInsideSelection = (rect) => {
+      const centerX = rect.x + rect.w / 2;
+      const centerY = rect.y + rect.h / 2;
+      return centerX >= r.x && centerX <= r.x + r.w && centerY >= r.y && centerY <= r.y + r.h;
+    };
+    const ids = r.w < 4 && r.h < 4 ? [] : [
+      ...list.filter((n) => nodeHitsRect(n, r)).map((n) => n.id),
+      ...Object.values(frames || {}).filter((f) => centerInsideSelection(frameRect(f))).map((f) => f.id),
+      ...markerList.filter((m) => {
+        const size = visualMarkerPixelSize(m);
+        return rectHitsRect({ x: m.x, y: m.y, w: size, h: size }, r);
+      }).map((m) => m.id),
+      ...titleList.filter((m) => rectHitsRect({
+        x: m.x,
+        y: m.y,
+        w: endpointW({ ...m, _titleTarget: true }),
+        h: nodeH({ ...m, _titleTarget: true }),
+      }, r)).map((m) => m.id),
+    ];
     setMultiSel(new Set(ids));
-    if (ids.length > 0) onSelect(ids[ids.length - 1]);
+    if (ids.length > 0) selectCanvasObject(ids[ids.length - 1]);
     setBoxDrag(null);
   };
   const onCanvasUp = () => {
@@ -765,7 +1166,7 @@ export default function FlowCanvas({
       document.removeEventListener('pointerup', clear);
       document.removeEventListener('pointercancel', clear);
     };
-  }, [boxDrag, list]);
+  }, [boxDrag, list, frames, markerList, titleList, measuredTitleSizes]);
 
   return (
     <div
@@ -793,34 +1194,58 @@ export default function FlowCanvas({
         <button title="Zoom in" onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}>+</button>
         <button title="Reset zoom" onClick={() => setZoom(1)}>1:1</button>
       </div>
-      {multiSel.size > 1 && <div className="multisel-count">{multiSel.size} nodes selected</div>}
+      {multiSel.size > 1 && <div className="multisel-count">{multiSel.size} objects selected</div>}
       <div className="canvas-zoom" style={{ width: extentX * zoom, height: extentY * zoom }}>
         <div className="canvas-world" style={{ width: extentX, height: extentY, transform: `scale(${zoom})` }}>
-      {frames && Object.values(frames).map((f) => f.shape === 'arrow' ? (() => {
+      {frames && Object.values(frames).map((f) => (f.shape === 'arrow' || f.shape === 'spline') ? (() => {
+        const isSpline = f.shape === 'spline';
+        const geometry = resolvedSupportGeometry(f);
         const rect = frameRect(f);
-        const x1 = f.w >= 0 ? 0 : rect.w;
-        const y1 = f.h >= 0 ? 0 : rect.h;
-        const x2 = f.w >= 0 ? rect.w : 0;
-        const y2 = f.h >= 0 ? rect.h : 0;
+        const x1 = geometry.w >= 0 ? 0 : rect.w;
+        const y1 = geometry.h >= 0 ? 0 : rect.h;
+        const x2 = geometry.w >= 0 ? rect.w : 0;
+        const y2 = geometry.h >= 0 ? rect.h : 0;
+        const cx = geometry.x + geometry.w / 2 + (Number(f.curveX) || 0) - rect.x;
+        const cy = geometry.y + geometry.h / 2 + (Number(f.curveY) || 0) - rect.y;
         const markerId = `arrowhead-${String(f.id).replace(/[^a-zA-Z0-9_-]/g, '')}`;
         return (
-          <div key={f.id} className={`garrow${selFrame === f.id ? ' sel' : ''}`}
+          <div key={f.id} className={`garrow${isSpline ? ' gspline' : ''}${selFrame === f.id || multiSel.has(f.id) ? ' sel' : ''}`}
             style={{ left: rect.x, top: rect.y, width: Math.max(1, rect.w), height: Math.max(1, rect.h), color: f.color || '#5CA8F5' }}>
             <svg viewBox={`0 0 ${Math.max(1, rect.w)} ${Math.max(1, rect.h)}`} preserveAspectRatio="none">
-              <defs><marker id={markerId} markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M 0 0 L 9 4.5 L 0 9 z" fill="currentColor" /></marker></defs>
-              <line className="garrow-line" x1={x1} y1={y1} x2={x2} y2={y2} markerEnd={`url(#${markerId})`} />
-              <line className="garrow-hit" x1={x1} y1={y1} x2={x2} y2={y2}
-                onPointerDown={(e) => onFrameDown(e, f, 'move')} />
+              {!isSpline && <defs><marker id={markerId} markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M 0 0 L 9 4.5 L 0 9 z" fill="currentColor" /></marker></defs>}
+              {isSpline ? <>
+                <path className="garrow-line" d={`M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`} />
+                <path className="garrow-hit" d={`M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`}
+                  onPointerDown={(e) => onFrameDown(e, f, 'move')} />
+              </> : <>
+                <line className="garrow-line" x1={x1} y1={y1} x2={x2} y2={y2} markerEnd={`url(#${markerId})`} />
+                <line className="garrow-hit" x1={x1} y1={y1} x2={x2} y2={y2}
+                  onPointerDown={(e) => onFrameDown(e, f, 'move')} />
+              </>}
             </svg>
-            <div className="garrow-start" style={{ left: x1, top: y1 }}
+            <div className={`garrow-start${f.tailAnchor ? ' attached' : ''}${supportLinkTarget?.kind === 'support' && supportLinkTarget.id === f.id && supportLinkTarget.endpoint === 'tail' ? ' target' : ''}`} style={{ left: x1, top: y1 }}
+              data-support-id={f.id} data-support-endpoint="tail"
+              title={`Drag to move the ${isSpline ? 'spline' : 'arrow'} start`}
+              onPointerDown={(e) => onFrameDown(e, f, isSpline ? 'spline-tail' : 'arrow-tail')} />
+            <div className="garrow-move" style={{ left: (x1 + x2) / 2, top: (y1 + y2) / 2 }}
+              title={`Drag to move the whole ${isSpline ? 'spline' : 'arrow'}`}
               onPointerDown={(e) => onFrameDown(e, f, 'move')} />
-            <div className="garrow-end" style={{ left: x2, top: y2 }} title="Drag to change arrow direction and length"
-              onPointerDown={(e) => onFrameDown(e, f, 'resize')} />
+            <div className={`garrow-end${f.headAnchor ? ' attached' : ''}${supportLinkTarget?.kind === 'support' && supportLinkTarget.id === f.id && supportLinkTarget.endpoint === 'head' ? ' target' : ''}`} style={{ left: x2, top: y2 }}
+              data-support-id={f.id} data-support-endpoint="head"
+              title={`Drag to change ${isSpline ? 'spline' : 'arrow'} direction and length`}
+              onPointerDown={(e) => onFrameDown(e, f, isSpline ? 'spline-head' : 'arrow-head')} />
+            {isSpline && <div className="gspline-control" style={{ left: cx, top: cy }}
+              title="Drag to reshape the spline"
+              onPointerDown={(e) => onFrameDown(e, f, 'spline-control')} />}
           </div>
         );
       })() : (
-        <div key={f.id} className={`gframe${f.shape === 'circle' ? ' gcircle' : ''}${selFrame === f.id ? ' sel' : ''}`}
-          style={{ left: f.x, top: f.y, width: f.w, height: f.h, borderColor: f.color || 'var(--line)' }}>
+        <div key={f.id} className={`gframe${f.shape === 'circle' ? ' gcircle' : ''}${selFrame === f.id || multiSel.has(f.id) ? ' sel' : ''}`}
+          style={{
+            left: f.x, top: f.y, width: f.w, height: f.h,
+            borderColor: f.color || 'var(--line)',
+            background: frameBackgroundCss(f.backgroundColor, f.backgroundOpacity),
+          }}>
           {f.shape === 'circle' ? (
             <div className="gcirclemove" style={{ borderColor: f.color || 'var(--line)', color: f.color || 'var(--muted)' }}
               onPointerDown={(e) => onFrameDown(e, f, 'move')}
@@ -828,20 +1253,22 @@ export default function FlowCanvas({
           ) : (
             <div className="gframehead" style={{ background: f.color || 'var(--raised)' }}
               onPointerDown={(e) => onFrameDown(e, f, 'move')}
-              title="Drag to move the frame and everything inside it">
+              title={f.sticky === true ? 'Drag to move the frame and everything inside it' : 'Drag to move the frame only'}>
               {f.label || 'Frame'}
             </div>
           )}
           <div className="gframegrip" title="Drag to resize"
             onPointerDown={(e) => onFrameDown(e, f, 'resize')} />
+          {!f.shape && onFrameScale && <div className="gframescalegrip" title="Drag to resize the frame and scale everything inside"
+            onPointerDown={(e) => onFrameDown(e, f, 'scale')} />}
         </div>
       ))}
       {markerList.map((marker) => (
         <div
           key={marker.id}
-          className={`numarker${selNumberMarker === marker.id ? ' sel' : ''}`}
-          style={{ left: marker.x, top: marker.y, '--marker-color': marker.color || '#E8D25C' }}
-          title="Drag to move this number marker"
+          className={`numarker${selNumberMarker === marker.id || multiSel.has(marker.id) ? ' sel' : ''}`}
+          style={{ left: marker.x, top: marker.y, '--marker-color': marker.color || '#E8D25C', transform: `scale(${Number(marker.scale) || 1})`, transformOrigin: 'top left' }}
+          title={`Drag to move this ${visualMarkerLabel(marker).toLowerCase()} marker`}
           onPointerDown={(e) => onMarkerDown(e, marker)}
           onPointerMove={onMarkerMove}
           onPointerUp={onMarkerUp}
@@ -851,7 +1278,7 @@ export default function FlowCanvas({
           {selNumberMarker === marker.id && onNumberMarkerDelete && (
             <button
               className="numarker-x"
-              title="Delete number marker"
+              title={`Delete ${visualMarkerLabel(marker).toLowerCase()} marker`}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); onNumberMarkerDelete(marker.id); }}
             >×</button>
@@ -863,7 +1290,7 @@ export default function FlowCanvas({
           key={marker.id}
           data-title-marker={marker.id}
           data-edge-target={marker.id}
-          className={`titlemarker${selTitleMarker === marker.id ? ' sel' : ''}`}
+          className={`titlemarker${selTitleMarker === marker.id || multiSel.has(marker.id) ? ' sel' : ''}`}
           style={{ left: marker.x, top: marker.y, color: marker.color || '#E9EBF3', fontSize: `${Math.max(12, Math.min(96, Number(marker.fontSize) || 28))}px` }}
           title="Drag to move this title"
           onPointerDown={(e) => onTitleDown(e, marker)}
@@ -874,7 +1301,7 @@ export default function FlowCanvas({
           <span>{marker.text || 'Title'}</span>
           {onConnect && EDGE_SIDES.map((side) => (
             <span key={side} data-side={side}
-              className={`port titleport ${side}${linkTarget?.nodeId === marker.id && linkTarget.side === side ? ' target' : ''}`}
+              className={`port titleport ${side}${linkTarget?.nodeId === marker.id && linkTarget.side === side ? ' target' : ''}${supportLinkTarget?.kind === 'title' && supportLinkTarget.id === marker.id && supportLinkTarget.side === side ? ' target' : ''}`}
               title={`Connect to the title's ${side} side`}
               onPointerDown={(e) => onPortDown(e, marker, side)}
               onPointerEnter={(e) => onPortEnter(e, marker, side)}
@@ -971,13 +1398,24 @@ export default function FlowCanvas({
         const icon = iconOf?.(n);
         const team = teamOf?.(n);
         const isFramework = n.kind === 'framework';
+        const isActionMechanism = n.mechKind === 'actionMechanism';
         const body = renderBody ? renderBody(n) : n.body;
         const w = nodeW(n);
         const h = explicitNodeH(n);
+        const isArchetypeCombinations = n.kind === 'characterArchetypeCombinations';
+        const combinationRows = Array.from({ length: 8 }, (_, index) => ({
+          base: n.combinations?.[index]?.base ?? n.title ?? '',
+          plus: n.combinations?.[index]?.plus ?? '',
+          result: n.combinations?.[index]?.result ?? '',
+        }));
+        const patchCombination = (index, field, value) => {
+          const combinations = combinationRows.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row);
+          onUpdateNode?.(n.id, { combinations });
+        };
         return (
           <div
             key={n.id} data-node={n.id} data-edge-target={n.id} role="button" tabIndex={0}
-            className={`node${selId === n.id || multiSel.has(n.id) ? ' sel' : ''}${multiSel.has(n.id) ? ' multisel' : ''}${linkDrag && linkDrag.from !== n.id ? ' droppable' : ''}${dimNode?.(n) ? ' dim' : ''}${nodeClass ? ` ${nodeClass(n) || ''}` : ''}`}
+            className={`node${isActionMechanism ? ' action-mechanism-node' : ''}${selId === n.id || multiSel.has(n.id) ? ' sel' : ''}${multiSel.has(n.id) ? ' multisel' : ''}${linkDrag && linkDrag.from !== n.id ? ' droppable' : ''}${dimNode?.(n) ? ' dim' : ''}${nodeClass ? ` ${nodeClass(n) || ''}` : ''}`}
             style={{ left: n.x, top: n.y, width: w, ...(h ? { height: h } : {}), borderTopColor: color }}
             onPointerDown={(e) => onNodeDown(e, n)}
             onPointerMove={onNodeMove}
@@ -993,7 +1431,7 @@ export default function FlowCanvas({
                   {icon && <PrimIcon icon={icon} color="#fff" size={12} />}
                 </button>
               ) : <span className="icpick" style={{ background: color }}>{icon && <PrimIcon icon={icon} color="#fff" size={12} />}</span>}
-              <div className="nhmeta"><small style={{ color }}>{KIND_LABEL[n.kind] ?? n.kind}</small><b>{n.kind === 'item' ? (n.shortTitle || n.title) : n.title}</b></div>
+              <div className="nhmeta"><small style={{ color }}>{isActionMechanism ? (n.mechanismCategory || 'Action Mechanism') : (KIND_LABEL[n.kind] ?? n.kind)}</small><b>{n.kind === 'item' ? (n.shortTitle || n.title) : n.title}</b></div>
               {team && <span className="nteam" style={{ background: team.color }} title={`Lane: ${team.name}`}>{team.name}</span>}
               {onOpenNode && !isFramework && (
                 <button className="nopen" title="Open detail graph (or double-click the node)"
@@ -1004,13 +1442,32 @@ export default function FlowCanvas({
               )}
             </div>
             <div className="nb">
-              {n.image?.dataUrl && <img className="nimg" src={n.image.dataUrl} alt="" draggable={false} />}
-              {body}
-              {renderExtra?.(n)}
+              {n.image?.dataUrl && n.subnodeKind !== 'actionTypePattern' && (
+                <span className={`nimgframe${n.mechKind === 'actionProbability' ? ' resolution' : ''}${isActionMechanism ? ' action-mechanism' : ''}`}>
+                  <img className="nimg" src={n.image.dataUrl} alt="" draggable={false}
+                    style={{ transform: n.mechKind === 'actionProbability' || isActionMechanism
+                      ? `translate(${n.imagePositionX || 0}%, ${n.imagePositionY || 0}%) scale(${n.imageScale || 1})`
+                      : 'scale(1)' }} />
+                </span>
+              )}
+              {isArchetypeCombinations ? (
+                <div className="archetype-combinations" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                  {combinationRows.map((row, index) => (
+                    <div className="archetype-combination-row" key={index}>
+                      <input aria-label={`Combination ${index + 1} base archetype`} value={row.base} onFocus={() => onSelect(n.id)} onChange={(e) => patchCombination(index, 'base', e.target.value)} />
+                      <span>+</span>
+                      <input aria-label={`Combination ${index + 1} second archetype`} placeholder="Second archetype" value={row.plus} onFocus={() => onSelect(n.id)} onChange={(e) => patchCombination(index, 'plus', e.target.value)} />
+                      <span>=</span>
+                      <input aria-label={`Combination ${index + 1} result archetype`} placeholder="Result" value={row.result} onFocus={() => onSelect(n.id)} onChange={(e) => patchCombination(index, 'result', e.target.value)} />
+                    </div>
+                  ))}
+                </div>
+              ) : body}
+              {renderExtra?.(n, { width: w, height: h })}
             </div>
             {onConnect && EDGE_SIDES.map((side) => (
               <span key={side} data-side={side}
-                className={`port ${side}${linkTarget?.nodeId === n.id && linkTarget.side === side ? ' target' : ''}`}
+                className={`port ${side}${linkTarget?.nodeId === n.id && linkTarget.side === side ? ' target' : ''}${supportLinkTarget?.kind === 'node' && supportLinkTarget.id === n.id && supportLinkTarget.side === side ? ' target' : ''}`}
                 title={`Drag from or connect to the ${side} side`}
                 onPointerDown={(e) => onPortDown(e, n, side)}
                 onPointerEnter={(e) => onPortEnter(e, n, side)}

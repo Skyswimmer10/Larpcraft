@@ -1,10 +1,12 @@
 import { ENTITY_COLORS } from '../components/bits.jsx';
 import { MECHANIC_SUBNODE_TYPES, TASK_DETAIL_TYPES } from '../data/seed.js';
 import { genId } from '../data/csvSchemas.js';
+import { isCurrentMechanicPrimitive, isCurrentMechanicSubnode } from './nodeArchive.js';
 
 export const MECHANICS_PALETTE_FILTERS = [
   { id: 'all', label: 'All', color: '#8B7BF5' },
   { id: 'mechanic', label: 'Mechanic Nodes', color: '#A87BF0' },
+  { id: 'boardGame', label: 'Board Game Nodes', color: '#58C7A6' },
   { id: 'gameplayModifiers', label: 'Gameplay Modifiers', color: '#F08CB4' },
   { id: 'supporting', label: 'Supporting', color: '#8B92A6' },
   { id: 'physical', label: 'Physical', color: '#E0A23C' },
@@ -59,13 +61,13 @@ const itemTypeMeta = (lib, type) => lib.itemTypes?.[type] || { label: type || 'I
 
 const payload = (type, id) => `${type}:${id}`;
 
-const defaultChallengeCore = () => ({
-  id: 'CORE-1',
-  primitiveId: 'LIB-MPRIM-CHALLENGE-CORE',
+const defaultCooperation = () => ({
+  id: 'COOP-1',
+  primitiveId: 'LIB-MPRIM-COOPERATION',
   kind: 'mechanic',
-  mechKind: 'challengeCore',
-  title: 'Challenge Core',
-  body: 'Central task controller: goal, physical/cognitive tracks, and cooperation style. Add subnodes for pressure, outcomes, fail-safes, and advanced rules.',
+  mechKind: 'cooperation',
+  title: 'Cooperation',
+  body: 'Define how players coordinate, divide roles, or act together.',
   x: 80,
   y: 80,
   color: '#A87BF0',
@@ -73,21 +75,19 @@ const defaultChallengeCore = () => ({
   estMinutes: 15,
   crew: 1,
   collapseDepth: 0,
-  goal: '',
   cooperationStyle: 'Parallel',
-  physicalTrackSubnodeIds: [],
-  cognitiveTrackSubnodeIds: [],
-  noteColor: '#A87BF0',
+  attachedSubnodeIds: [],
 });
 
 export const isProgressStateNode = (node) => node?.mechKind === 'progressState';
 export const progressValue = (node) => Math.min(10, Math.max(1, Number(node?.currentProgress) || 1));
 export const progressPercent = (node) => Math.round((progressValue(node) / 10) * 100);
 
-const activeMechanicPrimitives = (lib) => Object.values(lib.mechPrimitives || {}).filter((node) => !node.deprecated);
+const activeMechanicPrimitives = (lib) => Object.values(lib.mechPrimitives || {})
+  .filter((node) => !node.deprecated && isCurrentMechanicPrimitive(node));
 
 const defaultTaskTemplateSubgraph = () => ({
-  nodes: { 'CORE-1': defaultChallengeCore() },
+  nodes: { 'COOP-1': defaultCooperation() },
   edges: [],
   frames: {},
 });
@@ -119,11 +119,13 @@ export function buildMechanicsPaletteGroups(lib, {
     };
   });
 
-  const subnodes = Object.values(lib.mechSubnodes || {}).filter((node) => !node.deprecated && !node.hiddenFromPalette);
+  const subnodes = Object.values(lib.mechSubnodes || {})
+    .filter((node) => !node.deprecated && !node.hiddenFromPalette && isCurrentMechanicSubnode(node));
   const gameplayModifierSubnodes = subnodes.filter((node) => mechanicSubnodeCategory(node) === 'gameplayModifiers');
   const supportingSubnodes = subnodes.filter((node) => mechanicSubnodeCategory(node) === 'supporting');
   const primitives = activeMechanicPrimitives(lib);
-  const mechanicPrimitives = primitives.filter((node) => node.category !== 'supporting');
+  const actionPrimitives = primitives.filter((node) => node.category === 'action');
+  const mechanicPrimitives = primitives.filter((node) => node.category !== 'supporting' && node.category !== 'action');
   const supportingPrimitives = primitives.filter((node) => node.category === 'supporting');
 
   return [
@@ -156,6 +158,18 @@ export function buildMechanicsPaletteGroups(lib, {
       })),
     },
     {
+      id: 'boardGame',
+      type: 'boardGame',
+      label: 'Board Game Nodes',
+      hint: 'Action, sequence, and resolution building blocks for board-game-style systems.',
+      items: actionPrimitives.map((node) => ({
+        id: payload('mech', node.id), label: node.name,
+        blurb: node.defaultBody || (node.mechKind === 'playerFacingInstruction' ? 'The exact instruction presented or read to players.' : ''),
+        color: node.color, icon: node.icon, kicker: node.mechKind,
+        dragPayload: payload('mech', node.id), onClick: () => onAdd?.(payload('mech', node.id)),
+      })),
+    },
+    {
       id: 'mechanic',
       type: 'mechanic',
       label: 'Mechanic Nodes',
@@ -174,11 +188,11 @@ export function buildMechanicsPaletteGroups(lib, {
       id: 'gameplayModifiers',
       type: 'gameplayModifiers',
       label: 'Gameplay Modifiers',
-      hint: 'Attachable task modifiers, especially for Challenge Core and Task Template nodes.',
+      hint: 'Attachable task modifiers, especially for Cooperation and Task Template nodes.',
       items: gameplayModifierSubnodes.map((node) => ({
         id: payload('msub', node.id),
         label: node.name,
-        blurb: node.purpose,
+        blurb: node.description || node.purpose,
         color: node.color,
         icon: node.icon,
         kicker: node.reusable ? 'Reusable' : 'Modifier',
@@ -189,8 +203,8 @@ export function buildMechanicsPaletteGroups(lib, {
     (supportingPrimitives.length > 0 || supportingSubnodes.length > 0) && {
       id: 'supporting',
       type: 'supporting',
-      label: 'Supporting / Universal',
-      hint: 'Lightweight reusable notes, comments, player/team selectors, and status tags that can attach anywhere.',
+      label: 'Supporting',
+      hint: 'Player-facing instructions, reusable notes, player/team selectors, comments, and status tags.',
       items: [
         ...supportingPrimitives.map((node) => ({
           id: payload('mech', node.id),
@@ -246,18 +260,27 @@ export function buildMechanicsPaletteGroups(lib, {
       })),
     },
     includeTemplates && {
-      id: 'templates',
+      id: 'actionTemplates',
       type: 'templates',
-      label: 'Task Templates',
-      items: Object.values(lib.mechStructures || {}).map((template) => ({
+      label: 'Action Templates',
+      hint: 'Book-inspired starting points. Each opens as an editable action plus its relevant modifier.',
+      items: Object.values(lib.mechStructures || {}).filter((template) => template.templateKind === 'action').map((template) => ({
         id: payload('template', template.id),
         label: template.name,
         blurb: template.description,
-        color: '#8B7BF5',
-        icon: 'layers',
-        kicker: `${Object.keys(template.nodes || {}).length} nodes`,
+        color: '#58C7A6',
+        icon: 'zap',
+        kicker: template.actionCode || 'Action',
         dragPayload: payload('template', template.id),
         onClick: () => onAdd?.(payload('template', template.id)),
+      })),
+    },
+    includeTemplates && {
+      id: 'templates', type: 'templates', label: 'Task Templates',
+      items: Object.values(lib.mechStructures || {}).filter((template) => template.templateKind !== 'action').map((template) => ({
+        id: payload('template', template.id), label: template.name, blurb: template.description,
+        color: '#8B7BF5', icon: 'layers', kicker: `${Object.keys(template.nodes || {}).length} nodes`,
+        dragPayload: payload('template', template.id), onClick: () => onAdd?.(payload('template', template.id)),
       })),
     },
   ].filter(Boolean);
@@ -271,10 +294,20 @@ export const filterMechanicsPaletteGroups = (groups, activeFilter) => {
 export function buildMechanicsLibrarySections(lib, onPick) {
   return [
     {
+      id: 'actionTemplates',
+      label: 'Action Templates',
+      hint: 'Reusable action mechanisms inspired by Building Blocks of Tabletop Game Design.',
+      items: Object.values(lib.mechStructures || {}).filter((template) => template.templateKind === 'action').map((template) => ({
+        id: payload('template', template.id), label: template.name, blurb: template.description,
+        color: '#58C7A6', icon: 'zap', kicker: template.actionCode || 'Action',
+        onPick: () => onPick?.(payload('template', template.id)),
+      })),
+    },
+    {
       id: 'mechanicTemplates',
       label: 'Task Templates',
       hint: 'Reusable mechanics structures that drop onto the canvas as clean task/template nodes.',
-      items: Object.values(lib.mechStructures || {}).map((template) => ({
+      items: Object.values(lib.mechStructures || {}).filter((template) => template.templateKind !== 'action').map((template) => ({
         id: payload('template', template.id),
         label: template.name,
         blurb: template.description,
@@ -372,7 +405,9 @@ export function mechanicsPayloadToNode(payloadText, lib, existingNodes = {}, x =
       ...base, primitiveId: p.id, kind: p.baseKind, mechKind: p.mechKind, title: p.name,
       body: p.defaultBody || '', color: p.color ?? null, refs: p.refs ? JSON.parse(JSON.stringify(p.refs)) : {},
       ...JSON.parse(JSON.stringify(extras)),
-      sub: p.mechKind === 'taskTemplate' ? defaultTaskTemplateSubgraph() : undefined,
+      sub: p.mechKind === 'taskTemplate' ? defaultTaskTemplateSubgraph()
+        : p.mechKind === 'actionSequence' ? { nodes: {}, edges: [], frames: {} }
+          : undefined,
     };
   }
   if (type === 'msub') {
@@ -384,7 +419,7 @@ export function mechanicsPayloadToNode(payloadText, lib, existingNodes = {}, x =
     }
     return {
       ...base, primitiveId: sn.id, kind: 'mechanicSubnode', subnodeKind: sn.kind, title: sn.name,
-      body: sn.purpose || '', color: sn.color ?? null, icon: sn.icon,
+      body: sn.description || sn.purpose || '', color: sn.color ?? null, icon: sn.icon,
       category: mechanicSubnodeCategory(sn),
       fields: JSON.parse(JSON.stringify(sn.fields || {})), attachesTo: [...(sn.attachesTo || ['*'])],
     };
@@ -418,9 +453,11 @@ export function mechanicsPayloadToNode(payloadText, lib, existingNodes = {}, x =
   if (type === 'template') {
     const template = lib.mechStructures?.[id];
     if (!template) return null;
+    const actionTemplate = template.templateKind === 'action';
     return {
-      ...base, primitiveId: template.id, kind: 'task', mechKind: 'taskTemplate', title: template.name,
-      body: template.description || '', color: '#8B7BF5', templateId: template.id,
+      ...base, primitiveId: template.id, kind: actionTemplate ? 'mechanic' : 'task', mechKind: actionTemplate ? 'actionSequence' : 'taskTemplate', title: template.name,
+      body: template.description || '', color: actionTemplate ? '#58C7A6' : '#8B7BF5', templateId: template.id,
+      sequenceMode: actionTemplate ? 'Custom' : undefined,
       sub: {
         nodes: JSON.parse(JSON.stringify(template.nodes || {})),
         edges: JSON.parse(JSON.stringify(template.edges || [])),

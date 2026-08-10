@@ -79,7 +79,7 @@ describe('edges may span nodes and subnodes', () => {
 describe('frames', () => {
   it('FRAME_MOVE carries nodes whose top-left sits inside', () => {
     let s = makeEmptyProject('g');
-    s.frames = { F: { id: 'F', label: 'f', x: 0, y: 0, w: 200, h: 200, color: null } };
+    s.frames = { F: { id: 'F', label: 'f', x: 0, y: 0, w: 200, h: 200, color: null, sticky: true } };
     s.nodes = {
       IN: { id: 'IN', kind: 'event', title: 'in', x: 50, y: 50 },
       OUT: { id: 'OUT', kind: 'event', title: 'out', x: 400, y: 400 },
@@ -89,6 +89,17 @@ describe('frames', () => {
     expect(s.nodes['IN'].y).toBe(70);
     expect(s.nodes['OUT'].x).toBe(400); // untouched
     expect(s.frames['F'].x).toBe(10);
+  });
+
+  it('FRAME_MOVE leaves contents in place when stickiness is off by default', () => {
+    let s = makeEmptyProject('g');
+    s.frames = { F: { id: 'F', label: 'f', x: 0, y: 0, w: 200, h: 200, color: null } };
+    s.nodes = { IN: { id: 'IN', kind: 'event', title: 'in', x: 50, y: 50 } };
+
+    s = reducer(s, { type: 'FRAME_MOVE', frameId: 'F', dx: 10, dy: 20 });
+
+    expect(s.frames.F).toMatchObject({ x: 10, y: 20 });
+    expect(s.nodes.IN).toMatchObject({ x: 50, y: 50 });
   });
 
   it('moves a support arrow without carrying nearby nodes', () => {

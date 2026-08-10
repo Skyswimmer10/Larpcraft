@@ -11,6 +11,32 @@ import {
   LIB_PREFIX, DEFAULT_CHARACTER_CARD_TEMPLATE, cloneCharacterCardTemplateForSettings, normalizeCharacterCard,
 } from '../data/seed.js';
 import { genId } from '../data/csvSchemas.js';
+import {
+  MARKER_LETTERS,
+  VISUAL_MARKER_MAX_SIZE,
+  VISUAL_MARKER_MIN_SIZE,
+  visualMarkerLabel,
+  visualMarkerPixelSize,
+  visualMarkerScaleFromPixels,
+} from '../lib/visualMarkers.js';
+import { frameBackgroundOpacity } from '../lib/frameAppearance.js';
+import { frameworkBaseSize } from '../lib/frameworkScale.js';
+import { effectiveNodeBoxSize, normalizeNodeBoxDimension } from '../lib/nodeBoxSize.js';
+import { CHARACTER_ARCHETYPE_COMBINATIONS_KIND, CHARACTER_ARCHETYPE_FACET_KIND, CHARACTER_SHADOW_SIDES, syncCharacterArchetypeGraph } from '../lib/characterArchetype.js';
+import {
+  buildNarrativeLinkInsertion,
+  LINKING_NODE_KIND,
+  LINK_TARGET_TYPES,
+  narrativeLinkRecords,
+  resolveNarrativeLink,
+} from '../lib/narrativeLinks.js';
+import {
+  ACTION_MECHANISM_NODE_KIND,
+  ACTION_PATTERN_SYSTEMS,
+  actionMechanismNodePatch,
+  updateActionPatternSelection,
+} from '../data/actionMechanics.js';
+import MechanismBrowser from './MechanismBrowser.jsx';
 
 const minToTime = (m) => (Number.isFinite(m) ? `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}` : '');
 const timeToMin = (t) => { const [h, m] = (t || '').split(':').map(Number); return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null; };
@@ -470,9 +496,59 @@ function TeamPanel({ team }) {
   );
 }
 
-const NODE_SWATCHES = ['#5CA8F5', '#43BF87', '#E0A23C', '#E86464', '#A87BF0', '#3EC6D6', '#E8D25C', '#F08CB4'];
+const NODE_SWATCHES = ['#5CA8F5', '#43BF87', '#E0A23C', '#E86464', '#A87BF0', '#3EC6D6', '#E8D25C', '#F08CB4', '#8B92A6', '#000000'];
+const FRAME_SWATCHES = [...NODE_SWATCHES, '#FFFFFF'];
 
-function NodePanel({ node }) {
+function LinkingNodeInspector({ node, onPatch, onNavigate, onInsert }) {
+  const lib = useLibrary();
+  const ref = node.linkTarget || { type: 'narrative', id: null };
+  const records = narrativeLinkRecords(lib, ref.type);
+  const target = resolveNarrativeLink(lib, ref);
+  const setType = (type) => onPatch({ linkTarget: { type, id: null } });
+  const setTarget = (id) => onPatch({ linkTarget: { type: ref.type, id: id || null } });
+  const go = () => {
+    if (!target) return;
+    if (window.confirm(`Open "${target.label}" in a source window above this canvas?`)) onNavigate?.(ref);
+  };
+  const insert = () => {
+    if (!target) return;
+    const noun = ref.type === 'narrative' ? 'node' : 'collapsed container';
+    if (window.confirm(`Insert "${target.label}" here as one ${noun}?`)) onInsert?.(ref);
+  };
+  return (
+    <>
+      <div className="ihead">
+        <div className="ihrow"><span className="sq big" style={{ background: '#68D7C0' }}><PrimIcon icon="link" color="#fff" size={13} /></span><h3>{target?.label || node.title}</h3></div>
+        <div className="sub">Linking Node · <span className="mono">{node.id}</span></div>
+      </div>
+      <ISection label="Link Target" collapsed={false}>
+        <SectionLabel>Target type</SectionLabel>
+        <select className="field-input" value={ref.type} onChange={(e) => setType(e.target.value)}>
+          {LINK_TARGET_TYPES.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}
+        </select>
+        <SectionLabel>Saved record</SectionLabel>
+        <select className="field-input" value={ref.id || ''} onChange={(e) => setTarget(e.target.value)}>
+          <option value="">— choose a {LINK_TARGET_TYPES.find((type) => type.id === ref.type)?.label.toLowerCase()} —</option>
+          {records.map((record) => <option key={record.id} value={record.id}>{record.label}</option>)}
+        </select>
+        {ref.id && !target && <div className="link-missing-warning">Missing link. The source was deleted; choose a replacement.</div>}
+        {target && (
+          <div className="link-target-summary">
+            <b>{target.label}</b>
+            <small>{target.description}</small>
+          </div>
+        )}
+      </ISection>
+      <ISection label="Link Actions" collapsed={false}>
+        <button className="btn wide" disabled={!target} onClick={go}>Go to source</button>
+        <button className="btn primary wide" disabled={!target} onClick={insert}>Insert here</button>
+        <div className="hint">Concepts and structures are inserted as one collapsed node. Their complete graph remains one level down.</div>
+      </ISection>
+    </>
+  );
+}
+
+function NodePanel({ node, onSelect, onNavigate }) {
   const s = useGame();
   const lib = useLibrary();
   const dispatch = useDispatch();
@@ -487,6 +563,20 @@ function NodePanel({ node }) {
   const sets = node.sets || [];
   const setFactIds = sets.map((x) => x.factId);
   const unsetFacts = Object.values(facts).filter((f) => !setFactIds.includes(f.id));
+  if (node.kind === LINKING_NODE_KIND) {
+    return <LinkingNodeInspector node={node} onPatch={upd} onNavigate={onNavigate} onInsert={(ref) => {
+      const inserted = buildNarrativeLinkInsertion(lib, ref, s.nodes, { x: node.x + (node.w || 280) + 50, y: node.y }, `${s.meta.prefix}-INS-`);
+      if (!inserted) return;
+      dispatch({ type: 'ADD_NODE', node: inserted });
+      onSelect?.({ kind: 'node', id: inserted.id });
+    }} />;
+  }
+  if (node.kind === CHARACTER_ARCHETYPE_FACET_KIND) {
+    return <CharacterArchetypeFacetInspector node={node} onPatch={upd} />;
+  }
+  if (node.kind === CHARACTER_ARCHETYPE_COMBINATIONS_KIND) {
+    return <CharacterArchetypeCombinationsInspector node={node} onPatch={upd} />;
+  }
   return (
     <>
       {prim && <InstanceBadge templateId={prim.id} />}
@@ -689,7 +779,7 @@ function FactPanel({ fact }) {
 //   Relationships / Links → Notes & Keywords → Change History
 // ===========================================================================
 
-function ISection({ label, children, collapsed = false }) {
+function ISection({ label, children, collapsed = true }) {
   const [open, setOpen] = useState(!collapsed);
   return (
     <div className={`isect isec${open ? '' : ' closed'}`}>
@@ -717,6 +807,57 @@ function HistorySection({ entity }) {
       {log.map((h, i) => (
         <div className="histrow" key={i}><span className="dim">{timeAgo(h.t)}</span> — {h.fields.join(', ')}</div>
       ))}
+    </ISection>
+  );
+}
+
+function BoxDimensionInput({ label, value, axis, onCommit }) {
+  const [draft, setDraft] = useState(String(value));
+  React.useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const next = normalizeNodeBoxDimension(draft, axis, value);
+    setDraft(String(next));
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <label>
+      <span>{label}</span>
+      <input
+        className="field-input"
+        type="number"
+        min={axis === 'height' ? 74 : 148}
+        step="1"
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+            e.currentTarget.blur();
+          }
+        }}
+      />
+    </label>
+  );
+}
+
+function NodeBoxSizeFields({ entity, onPatch, role }) {
+  const framework = entity.kind === 'framework' ? (FRAMEWORK_TYPES[entity.frameworkId] || FRAMEWORK_TYPES.fate) : null;
+  const frameworkSize = framework ? frameworkBaseSize(framework) : null;
+  const defaults = frameworkSize || { width: role === 'subnode' || entity._sub ? 196 : 236, height: 130 };
+  const size = effectiveNodeBoxSize(entity, {
+    width: defaults.width ?? defaults.w,
+    height: defaults.height ?? defaults.h,
+  });
+  return (
+    <ISection label="Box Size" collapsed={false}>
+      <div className="formgrid two">
+        <BoxDimensionInput label="Width · px" value={size.width} axis="width" onCommit={(w) => onPatch({ w })} />
+        <BoxDimensionInput label="Height · px" value={size.height} axis="height" onCommit={(h) => onPatch({ h })} />
+      </div>
+      <div className="hint">These values update with drag resizing and can also be entered precisely here.</div>
     </ISection>
   );
 }
@@ -832,14 +973,98 @@ function CharacterTemplateEditor({ template, onPatch }) {
   );
 }
 
-function CharacterCardInspector({ node, onPatch, template, onTemplatePatch = null }) {
-  const card = normalizeCharacterCard(node, template);
+function CharacterArchetypeFields({ node, onChange }) {
+  const enabled = !!node.archetypeEnabled;
+  const toggle = (archetypeEnabled) => onChange({
+    archetypeEnabled,
+    archetypeDarkSideUp: node.archetypeDarkSideUp || '',
+    archetypeDarkSideBack: node.archetypeDarkSideBack || '',
+  });
+  return (
+    <ISection label="Archetype & Dark Sides">
+      <label className={`checkrow archetype-toggle${enabled ? ' on' : ''}`} title="Show two connected dark-side nodes on the canvas">
+        <input type="checkbox" checked={enabled} onChange={(e) => toggle(e.target.checked)} />
+        <span><b>Archetype</b> <span className="archetype-help" aria-label="Archetype help">?</span></span>
+      </label>
+      {enabled && (
+        <div className="archetype-dark-sides">
+          {CHARACTER_SHADOW_SIDES.map((side) => (
+            <TextField
+              key={side.key}
+              label={`${side.symbol} Dark side`}
+              value={node[side.field] || ''}
+              placeholder={side.fallback}
+              onCommit={(value) => onChange({ [side.field]: value })}
+            />
+          ))}
+          <div className="hint">These fields control the two linked dark-side nodes beside this character.</div>
+        </div>
+      )}
+    </ISection>
+  );
+}
+
+function CharacterArchetypeFacetInspector({ node, onPatch }) {
   return (
     <>
-      <ISection label="Title">
+      <div className="ihead">
+        <div className="ihrow"><span className="sq big" style={{ background: node.color || '#A87BF0' }}><PrimIcon icon="user" color="#fff" size={13} /></span><h3>{node.title}</h3></div>
+        <div className="sub">Archetype detail · <span className="mono">{node.id}</span></div>
+      </div>
+      <ISection label="Title" collapsed={false}>
+        <TextField label="Title" value={node.title} onCommit={(title) => onPatch({ title })} />
+      </ISection>
+      <ISection label="Description" collapsed={false}>
+        <TextField label="Description" textarea value={node.body || ''} onCommit={(body) => onPatch({ body })} />
+      </ISection>
+    </>
+  );
+}
+
+function CharacterArchetypeCombinationsInspector({ node, onPatch }) {
+  const rows = Array.from({ length: 8 }, (_, index) => ({
+    base: node.combinations?.[index]?.base ?? node.title ?? '',
+    plus: node.combinations?.[index]?.plus ?? '',
+    result: node.combinations?.[index]?.result ?? '',
+  }));
+  const updateRow = (index, field, value) => onPatch({
+    combinations: rows.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row),
+  });
+  return (
+    <>
+      <div className="ihead">
+        <div className="ihrow"><span className="sq big" style={{ background: node.color || '#E0A23C' }}><PrimIcon icon="layers" color="#fff" size={13} /></span><h3>{node.title}</h3></div>
+        <div className="sub">Eight archetype combinations · <span className="mono">{node.id}</span></div>
+      </div>
+      <ISection label="Title" collapsed={false}>
+        <TextField label="Title" value={node.title} onCommit={(title) => onPatch({ title })} />
+      </ISection>
+      <ISection label="Combinations" collapsed={false}>
+        <div className="archetype-combinations inspector-combinations">
+          {rows.map((row, index) => (
+            <div className="archetype-combination-row" key={index}>
+              <input aria-label={`Combination ${index + 1} base archetype`} value={row.base} onChange={(e) => updateRow(index, 'base', e.target.value)} />
+              <span>+</span>
+              <input aria-label={`Combination ${index + 1} second archetype`} placeholder="Second archetype" value={row.plus} onChange={(e) => updateRow(index, 'plus', e.target.value)} />
+              <span>=</span>
+              <input aria-label={`Combination ${index + 1} result archetype`} placeholder="Result" value={row.result} onChange={(e) => updateRow(index, 'result', e.target.value)} />
+            </div>
+          ))}
+        </div>
+      </ISection>
+    </>
+  );
+}
+
+function CharacterCardInspector({ node, onPatch, template, onTemplatePatch = null, onArchetypeChange = null }) {
+  const card = normalizeCharacterCard(node, template);
+  const updateArchetype = onArchetypeChange || onPatch;
+  return (
+    <>
+      <ISection label="Title" collapsed={false}>
         <TextField label="Title" value={card.title} onCommit={(title) => onPatch({ title, name: title })} />
       </ISection>
-      <ISection label="Description">
+      <ISection label="Description" collapsed={false}>
         <TextField label="Description" textarea value={card.description} onCommit={(description) => onPatch({ body: description, description })} />
       </ISection>
       <ISection label="Base Questions">
@@ -848,6 +1073,7 @@ function CharacterCardInspector({ node, onPatch, template, onTemplatePatch = nul
       <ISection label="Types & Options">
         <CharacterTypeGroupsEditor groups={card.typeGroups} onChange={(typeGroups) => onPatch({ typeGroups })} />
       </ISection>
+      <CharacterArchetypeFields node={node} onChange={updateArchetype} />
       {onTemplatePatch && <CharacterTemplateEditor template={template} onPatch={onTemplatePatch} />}
     </>
   );
@@ -1498,7 +1724,7 @@ function RelationshipsSection({ node, extra }) {
 }
 
 // ---- Base Node (Event / Character / Story Location / Item / Quest) ----
-function BaseNodePanel({ node }) {
+function BaseNodePanel({ node, onSelect, onNavigate }) {
   const s = useGame();
   const lib = useLibrary();
   const dispatch = useDispatch();
@@ -1507,6 +1733,14 @@ function BaseNodePanel({ node }) {
   const t = baseTemplateMeta(node.kind);
   const color = node.color || t?.color || '#8B92A6';
   const [savedAs, setSavedAs] = useState(null);
+  if (node.kind === LINKING_NODE_KIND) {
+    return <LinkingNodeInspector node={node} onPatch={upd} onNavigate={onNavigate} onInsert={(ref) => {
+      const inserted = buildNarrativeLinkInsertion(lib, ref, s.nodes, { x: node.x + (node.w || 280) + 50, y: node.y }, `${s.meta.prefix}-INS-`);
+      if (!inserted) return;
+      dispatch({ type: 'ADD_NODE', node: inserted });
+      onSelect?.({ kind: 'node', id: inserted.id });
+    }} />;
+  }
   const saveToLibrary = () => {
     const id = genId(lib.narrative || {}, 'LIB-NAR-');
     libDispatch({
@@ -1533,6 +1767,7 @@ function BaseNodePanel({ node }) {
         <CharacterCardInspector
           node={node}
           onPatch={upd}
+          onArchetypeChange={(patch) => dispatch({ type: 'SYNC_CHARACTER_ARCHETYPE', id: node.id, patch })}
           template={s.meta.characterCardTemplate}
           onTemplatePatch={(characterCardTemplate) => dispatch({ type: 'SET_META', patch: { characterCardTemplate } })}
         />
@@ -2050,26 +2285,79 @@ function SubnodePanel({ sn, onSelect }) {
   );
 }
 
+function FrameAppearanceFields({ frame, onPatch }) {
+  const isLine = frame.shape === 'arrow' || frame.shape === 'spline';
+  const supportName = frame.shape === 'spline' ? 'Spline' : frame.shape === 'arrow' ? 'Arrow' : 'Frame';
+  const hasBackground = !isLine;
+  const backgroundOpacity = frameBackgroundOpacity(frame.backgroundOpacity);
+  return (
+    <div className="isect frame-appearance-fields">
+      {!frame.shape && (
+        <label className="frame-sticky-toggle">
+          <input
+            type="checkbox"
+            checked={frame.sticky === true}
+            aria-label="Move contents with frame"
+            onChange={(e) => onPatch({ sticky: e.target.checked })}
+          />
+          <span>
+            <b>Move contents with frame</b>
+            <small>When enabled, dragging the frame carries everything inside it.</small>
+          </span>
+        </label>
+      )}
+      <SectionLabel>{supportName} color</SectionLabel>
+      <div className="chips">
+        {FRAME_SWATCHES.map((c) => <button key={c} className={`swatch${(frame.color || '#8B92A6') === c ? ' on' : ''}`} style={{ background: c }} title={`Use ${c} for the ${isLine ? supportName.toLowerCase() : 'frame border'}`} onClick={() => onPatch({ color: c })} />)}
+        <button className="linkbtn" onClick={() => onPatch({ color: null })}>Default</button>
+      </div>
+      {hasBackground && <>
+        <SectionLabel>Background color</SectionLabel>
+        <div className="chips">
+          <button
+            className={`swatch transparent${!frame.backgroundColor ? ' on' : ''}`}
+            title="Transparent background"
+            onClick={() => onPatch({ backgroundColor: null })}
+          />
+          {FRAME_SWATCHES.map((c) => <button key={c} className={`swatch${frame.backgroundColor === c ? ' on' : ''}`} style={{ background: c }} title={`Use ${c} for the background`} onClick={() => onPatch({ backgroundColor: c })} />)}
+          <button className="linkbtn" onClick={() => onPatch({ backgroundColor: null })}>Transparent</button>
+        </div>
+        <label className={`frame-opacity-row${!frame.backgroundColor ? ' disabled' : ''}`}>
+          <span>Background opacity</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={backgroundOpacity}
+            disabled={!frame.backgroundColor}
+            aria-label="Background opacity"
+            onChange={(e) => onPatch({ backgroundOpacity: Number(e.target.value) })}
+          />
+          <output>{backgroundOpacity}%</output>
+        </label>
+      </>}
+    </div>
+  );
+}
+
 // ---- Frame: purely visual grouping ----
 function FramePanel({ frame, onSelect }) {
   const s = useGame();
   const dispatch = useDispatch();
   const isPlainFrame = !frame.shape;
+  const supportLabel = frame.shape === 'spline' ? 'Spline' : frame.shape === 'arrow' ? 'Arrow' : frame.shape === 'circle' ? 'Circle' : 'Frame';
   const upd = (patch) => dispatch({ type: 'UPDATE_ENTITY', coll: 'frames', id: frame.id, patch });
   return (
     <>
       <div className="ihead">
         <div className="ihrow"><span className="sq big" style={{ background: frame.color || '#8B92A6' }} /><h3>{frame.label}</h3></div>
-        <div className="sub">Frame · visual grouping only — connections and data are unaffected</div>
+        <div className="sub">{supportLabel} · visual support only — connections and data are unaffected</div>
       </div>
       <ISection label="Core Identity">
         <TextField label="Label" value={frame.label} onCommit={(v) => upd({ label: v })} />
-        <SectionLabel>Color</SectionLabel>
-        <div className="chips">
-          {NODE_SWATCHES.map((c) => <button key={c} className={`swatch${frame.color === c ? ' on' : ''}`} style={{ background: c }} onClick={() => upd({ color: c })} />)}
-          <button className="linkbtn" onClick={() => upd({ color: null })}>Auto</button>
-        </div>
       </ISection>
+      <FrameAppearanceFields frame={frame} onPatch={upd} />
       {isPlainFrame && <ISection label="Convert">
         <button className="btn wide" onClick={() => {
           const nodeId = genId(s.nodes, `${s.meta.prefix}-N-`);
@@ -2145,23 +2433,17 @@ function GraphFramePanel({ scope, id, onSelect }) {
   const dispatch = useDispatch();
   const g = locateGraph(s, scope);
   const frame = g.frames?.[id];
-  const supportLabel = frame?.shape === 'arrow' ? 'Arrow' : frame?.shape === 'circle' ? 'Circle' : 'Frame';
+  const supportLabel = frame?.shape === 'spline' ? 'Spline' : frame?.shape === 'arrow' ? 'Arrow' : frame?.shape === 'circle' ? 'Circle' : 'Frame';
   if (!frame) return <div className="empty">Frame not found.</div>;
   const upd = (patch) => dispatch({ type: 'GRAPH_UPDATE_FRAME', scope, id, patch });
   return (
     <>
       <div className="ihead">
         <div className="ihrow"><span className="sq big" style={{ background: frame.color || '#8B92A6' }} /><h3>{frame.label || supportLabel}</h3></div>
-        <div className="sub">Frame · visual grouping only · {frame.id}</div>
+        <div className="sub">{supportLabel} · visual support only · {frame.id}</div>
       </div>
       <TextField label="Label" value={frame.label || 'Frame'} onCommit={(v) => upd({ label: v })} />
-      <div className="isect">
-        <SectionLabel>Frame color</SectionLabel>
-        <div className="chips">
-          {NODE_SWATCHES.map((c) => <button key={c} className={`swatch${(frame.color || '#8B92A6') === c ? ' on' : ''}`} style={{ background: c }} onClick={() => upd({ color: c })} />)}
-          <button className="linkbtn" onClick={() => upd({ color: '#8B92A6' })}>Default</button>
-        </div>
-      </div>
+      <FrameAppearanceFields frame={frame} onPatch={upd} />
       <div className="isect">
         <button className="linkbtn danger" onClick={() => {
           dispatch({ type: 'GRAPH_DELETE_FRAME', scope, id });
@@ -2174,12 +2456,61 @@ function GraphFramePanel({ scope, id, onSelect }) {
 
 function NumberMarkerFields({ marker, onPatch, onDelete }) {
   const color = marker.color || '#E8D25C';
+  const isLetter = marker.markerType === 'letter';
+  const label = visualMarkerLabel(marker);
+  const size = visualMarkerPixelSize(marker);
+  const [sizeDraft, setSizeDraft] = useState(String(size));
+  React.useEffect(() => setSizeDraft(String(size)), [size]);
+  const setSize = (pixels) => onPatch({ scale: visualMarkerScaleFromPixels(pixels, size) });
+  const commitSize = () => {
+    const scale = visualMarkerScaleFromPixels(sizeDraft, size);
+    const nextSize = visualMarkerPixelSize({ scale });
+    setSizeDraft(String(nextSize));
+    if (nextSize !== size) onPatch({ scale });
+  };
   return (
     <>
-      <TextField label="Number" value={String(marker.value ?? 1)} onCommit={(v) => {
-        const parsed = parseInt(v, 10);
-        onPatch({ value: Number.isFinite(parsed) ? parsed : marker.value });
-      }} />
+      {isLetter ? (
+        <div className="isect">
+          <SectionLabel>Letter</SectionLabel>
+          <select className="field-input" value={String(marker.value || 'A').toUpperCase()}
+            onChange={(event) => onPatch({ value: event.target.value })}>
+            {MARKER_LETTERS.map((letter) => <option key={letter} value={letter}>{letter}</option>)}
+          </select>
+        </div>
+      ) : (
+        <TextField label="Number" value={String(marker.value ?? 1)} onCommit={(v) => {
+          const parsed = parseInt(v, 10);
+          onPatch({ value: Number.isFinite(parsed) ? parsed : marker.value });
+        }} />
+      )}
+      <div className="isect">
+        <SectionLabel>Marker size</SectionLabel>
+        <div className="marker-size-controls">
+          <label>
+            <span>Diameter · px</span>
+            <input className="field-input" type="number" min={VISUAL_MARKER_MIN_SIZE} max={VISUAL_MARKER_MAX_SIZE} step="1"
+              value={sizeDraft} onChange={(event) => setSizeDraft(event.target.value)} onBlur={commitSize}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitSize();
+                  event.currentTarget.blur();
+                }
+              }} />
+          </label>
+          <input className="marker-size-slider" aria-label="Marker size slider" type="range"
+            min={VISUAL_MARKER_MIN_SIZE} max={VISUAL_MARKER_MAX_SIZE} step="1"
+            value={Math.max(VISUAL_MARKER_MIN_SIZE, Math.min(VISUAL_MARKER_MAX_SIZE, size))}
+            onChange={(event) => setSize(Number(event.target.value))} />
+        </div>
+        <div className="flow marker-size-presets">
+          {[['Small', 34], ['Medium', 52], ['Large', 72], ['XL', 104]].map(([name, pixels]) => (
+            <button key={name} className={size === pixels ? 'now' : ''} onClick={() => setSize(pixels)}>{name}</button>
+          ))}
+        </div>
+        <div className="hint">The circle and its letter or number scale together.</div>
+      </div>
       <div className="isect">
         <SectionLabel>Marker color</SectionLabel>
         <div className="chips">
@@ -2188,7 +2519,7 @@ function NumberMarkerFields({ marker, onPatch, onDelete }) {
         </div>
       </div>
       <div className="isect">
-        <button className="linkbtn danger" onClick={onDelete}>Delete number marker</button>
+        <button className="linkbtn danger" onClick={onDelete}>Delete {label.toLowerCase()} marker</button>
       </div>
     </>
   );
@@ -2200,7 +2531,7 @@ function NumberMarkerPanel({ marker, onSelect }) {
   return (
     <>
       <div className="ihead">
-        <div className="ihrow"><span className="sq big" style={{ background: marker.color || '#E8D25C', color: '#111' }}>{marker.value ?? 1}</span><h3>Number marker</h3></div>
+        <div className="ihrow"><span className="sq big" style={{ background: marker.color || '#E8D25C', color: '#111' }}>{marker.value ?? 1}</span><h3>{visualMarkerLabel(marker)} marker</h3></div>
         <div className="sub">Visual symbol only Â· {marker.id}</div>
       </div>
       <NumberMarkerFields marker={marker} onPatch={upd} onDelete={() => { dispatch({ type: 'DELETE_ENTITY', coll: 'numberMarkers', id: marker.id }); onSelect(null); }} />
@@ -2213,12 +2544,12 @@ function GraphNumberMarkerPanel({ scope, id, onSelect }) {
   const dispatch = useDispatch();
   const g = locateGraph(s, scope);
   const marker = g.numberMarkers?.[id];
-  if (!marker) return <div className="empty">Number marker not found.</div>;
+  if (!marker) return <div className="empty">Visual marker not found.</div>;
   const upd = (patch) => dispatch({ type: 'GRAPH_UPDATE_NUMBER_MARKER', scope, id, patch });
   return (
     <>
       <div className="ihead">
-        <div className="ihrow"><span className="sq big" style={{ background: marker.color || '#E8D25C', color: '#111' }}>{marker.value ?? 1}</span><h3>Number marker</h3></div>
+        <div className="ihrow"><span className="sq big" style={{ background: marker.color || '#E8D25C', color: '#111' }}>{marker.value ?? 1}</span><h3>{visualMarkerLabel(marker)} marker</h3></div>
         <div className="sub">Visual symbol only Â· {marker.id}</div>
       </div>
       <NumberMarkerFields marker={marker} onPatch={upd} onDelete={() => { dispatch({ type: 'GRAPH_DELETE_NUMBER_MARKER', scope, id }); onSelect(null); }} />
@@ -2283,7 +2614,7 @@ function GraphTitleMarkerPanel({ scope, id, onSelect }) {
 
 // ---- A node inside a located graph: a surface Task, or a nested detail node
 // (of a task or a narrative beat). Edits flow through the generic GRAPH_* path.
-function GraphNodePanel({ scope, id }) {
+function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
   const s = useGame();
   const lib = useLibrary();
   const dispatch = useDispatch();
@@ -2293,6 +2624,14 @@ function GraphNodePanel({ scope, id }) {
   const [savedAs, setSavedAs] = useState(null);
   if (!n) return <div className="empty">Node not found.</div>;
   const upd = (patch) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch });
+  if (n.kind === LINKING_NODE_KIND) {
+    return <LinkingNodeInspector node={n} onPatch={upd} onNavigate={onNavigate} onInsert={(ref) => {
+      const inserted = buildNarrativeLinkInsertion(lib, ref, g.nodes, { x: n.x + (n.w || 280) + 50, y: n.y }, 'INS-');
+      if (!inserted) return;
+      dispatch({ type: 'GRAPH_ADD_NODE', scope, node: inserted });
+      onSelect?.({ kind: 'graphnode', scope, id: inserted.id });
+    }} />;
+  }
   const isBase = !!BASE_NODE_TYPES[n.kind];
   const isConceptInternalNode = !!CONCEPT_INTERNAL_NODE_TYPES[n.kind];
   const t = n.kind === 'travel'
@@ -2339,9 +2678,20 @@ function GraphNodePanel({ scope, id }) {
           <div className="ihrow"><span className="sq big" style={{ background: color }}>{t && <PrimIcon icon={t.icon} color="#fff" size={13} />}</span><h3>{n.title}</h3></div>
           <div className="sub">{t?.label ?? n.kind}{scope.parentId || scope.parentPath ? ' · internal node' : ''} · {n.id}</div>
         </div>
-        <CharacterCardInspector node={n} onPatch={upd} template={s.meta.characterCardTemplate} />
+        <CharacterCardInspector
+          node={n}
+          onPatch={upd}
+          onArchetypeChange={(patch) => dispatch({ type: 'SYNC_CHARACTER_ARCHETYPE', scope, id, patch })}
+          template={s.meta.characterCardTemplate}
+        />
       </>
     );
+  }
+  if (n.kind === CHARACTER_ARCHETYPE_FACET_KIND) {
+    return <CharacterArchetypeFacetInspector node={n} onPatch={upd} />;
+  }
+  if (n.kind === CHARACTER_ARCHETYPE_COMBINATIONS_KIND) {
+    return <CharacterArchetypeCombinationsInspector node={n} onPatch={upd} />;
   }
   if (isConceptInternalNode) {
     return (
@@ -2434,7 +2784,7 @@ function GraphNodePanel({ scope, id }) {
         </div>
       )}
       {n.kind !== 'item' && <TextField label={isTravel ? 'Travel label' : isTask ? 'Task name' : isMasterAct ? 'Act name' : isTaskTemplate ? 'Title' : 'Title'} value={n.title} onCommit={(v) => upd({ title: v })} />}
-      {n.kind !== 'item' && <TextField label={isTravel ? 'Travel notes / route' : isTask ? 'Task description / notes' : isMasterAct ? 'Story description' : (isTaskTemplate || isMechanicSchemaNode) ? 'Description' : 'Detail'} textarea value={n.body} onCommit={(v) => upd({ body: v })} />}
+      {n.kind !== 'item' && n.mechKind !== 'playerFacingInstruction' && <TextField label={isTravel ? 'Travel notes / route' : isTask ? 'Task description / notes' : isMasterAct ? 'Story description' : (isTaskTemplate || isMechanicSchemaNode) ? 'Description' : 'Detail'} textarea value={n.body} onCommit={(v) => upd({ body: v })} />}
       {n.kind === 'item' && <StoryItemInspectorFields node={n} onPatch={upd} game={s} lib={lib} graph={g} />}
       {false && n.kind === 'item' && (
         <div className="isect">
@@ -2492,18 +2842,17 @@ function GraphNodePanel({ scope, id }) {
           <div className="hint">Travel uses one right-side margin: baseline travel time plus possible delay from walking speed, transport, wrong turns, waiting, or getting lost.</div>
         </div>
       )}
-      {n.kind !== 'item' && <>
-      <div className="isect">
+      {n.kind !== 'item' && !['action', ACTION_MECHANISM_NODE_KIND].includes(n.mechKind) && <div className="isect">
         <SectionLabel>Image · optional</SectionLabel>
         <ImageUploader entity={n} label="Node image" onImage={(img) => upd({ image: img })} />
-      </div>
-      <div className="isect">
+      </div>}
+      {n.kind !== 'item' && <div className="isect">
         <SectionLabel>Node color</SectionLabel>
         <div className="chips">
           {NODE_SWATCHES.map((c) => <button key={c} className={`swatch${color === c ? ' on' : ''}`} style={{ background: c }} onClick={() => upd({ color: c })} />)}
           <button className="linkbtn" onClick={() => upd({ color: null })}>Auto</button>
         </div>
-      </div></>}
+      </div>}
       {isTask && <div className="isect"><div className="hint">Double-click this task on the canvas to open its detail graph{subCount > 0 ? ` (${subCount} detail node${subCount === 1 ? '' : 's'})` : ''}.</div></div>}
       {isMasterAct && (
         <div className="isect">
@@ -2658,9 +3007,12 @@ function LibSensorPanel({ template }) {
   );
 }
 
-function LibStoryPanel({ template, onDeleted }) {
+function LibStoryPanel({ template, onDeleted, onOpenConcept }) {
+  const lib = useLibrary();
   const libDispatch = useLibraryDispatch();
   const upd = (patch) => libDispatch({ type: 'UPDATE_ENTITY', coll: 'stories', id: template.id, patch });
+  const usesBaseConcept = template.usesBaseConcept === true;
+  const baseConcept = usesBaseConcept ? lib.concepts?.[template.baseConceptId] : null;
   const remove = () => {
     if (!window.confirm(`Delete story structure "${template.name}"? This cannot be undone.`)) return;
     libDispatch({ type: 'DELETE_ENTITY', coll: 'stories', id: template.id });
@@ -2677,6 +3029,41 @@ function LibStoryPanel({ template, onDeleted }) {
       <TextField label="Name" value={template.name} onCommit={(v) => upd({ name: v })} />
       <TextField label="Description" textarea value={template.description} onCommit={(v) => upd({ description: v })} />
       <TextField label="Estimated duration (minutes)" value={String(template.estMinutes)} onCommit={(v) => upd({ estMinutes: Math.max(1, parseInt(v, 10) || template.estMinutes) })} />
+      <ISection label="Base Concept (optional)" collapsed>
+        <label className="optional-link-toggle">
+          <input
+            type="checkbox"
+            checked={usesBaseConcept}
+            onChange={(e) => upd(e.target.checked
+              ? { usesBaseConcept: true }
+              : { usesBaseConcept: false, baseConceptId: null })}
+          />
+          <span>
+            <b>This structure is based on a concept</b>
+            <small>Enable this only when the structure is a developed version of a Library concept.</small>
+          </span>
+        </label>
+        {usesBaseConcept && <>
+          <SectionLabel>Concept</SectionLabel>
+          <select
+            className="field-input"
+            value={template.baseConceptId || ''}
+            onChange={(e) => upd({ baseConceptId: e.target.value || null })}
+          >
+            <option value="">Select a concept...</option>
+            {Object.values(lib.concepts || {}).map((concept) => (
+              <option key={concept.id} value={concept.id}>{concept.name}</option>
+            ))}
+          </select>
+          {baseConcept ? (
+            <button className="btn wide" style={{ marginTop: 9 }} onClick={() => onOpenConcept?.(baseConcept.id)}>
+              Open concept: {baseConcept.name}
+            </button>
+          ) : (
+            <div className="hint">Choose the concept this story structure was developed from.</div>
+          )}
+        </>}
+      </ISection>
       <div className="isect">
         <button className="linkbtn danger" onClick={remove}>Delete story structure</button>
       </div>
@@ -2736,6 +3123,10 @@ function LibConceptPanel({ template, onDeleted }) {
 function LibMechPrimitivePanel({ template }) {
   const libDispatch = useLibraryDispatch();
   const upd = (patch) => libDispatch({ type: 'UPDATE_ENTITY', coll: 'mechPrimitives', id: template.id, patch });
+  const patchProbability = (patch) => {
+    const { body, ...rest } = patch;
+    upd({ ...rest, ...(body !== undefined ? { defaultBody: body } : {}) });
+  };
   return (
     <>
       <TemplateBadge />
@@ -2755,6 +3146,9 @@ function LibMechPrimitivePanel({ template }) {
       )}
       <TextField label="Name" value={template.name} onCommit={(v) => upd({ name: v })} />
       <TextField label="Default description" textarea value={template.defaultBody} onCommit={(v) => upd({ defaultBody: v })} />
+      {template.mechKind === 'actionProbability' && (
+        <MechanicsNodeFields node={{ ...template, body: template.defaultBody }} onPatch={patchProbability} />
+      )}
       <div className="frow" style={{ padding: '13px 16px 0' }}>
         <div><SectionLabel>Est. minutes</SectionLabel>
           <input className="field-input" defaultValue={template.estMinutes}
@@ -2881,12 +3275,9 @@ const MECHANIC_NODE_FIELD_SECTIONS = {
     { key: 'difficultyPressure', label: 'Difficulty / Pressure', type: 'select', options: ['Low', 'Medium', 'High', 'Extreme'] },
     { key: 'reusableAsLibraryTemplate', label: 'Reusable as Library Template', type: 'checkbox' },
   ],
-  challengeCore: [
-    { key: 'goal', label: 'Goal', type: 'textarea', required: true },
+  cooperation: [
     { key: 'cooperationStyle', label: 'Cooperation Style', type: 'select', required: true, options: ['Solo', 'Parallel', 'Relay', 'Synchronous', 'Asymmetric'] },
-    { key: 'physicalTrackSubnodeIds', label: 'Physical Track', type: 'container', candidate: 'physical', hint: 'Assign physical restrictions, prop interactions, sensors, physical refs, or relevant mechanic subnodes from this graph.' },
-    { key: 'cognitiveTrackSubnodeIds', label: 'Cognitive Track', type: 'container', candidate: 'cognitive', hint: 'Assign cognitive, rule, resource, discussion, outcome, or relevant mechanic subnodes from this graph.' },
-    { key: 'noteColor', label: 'Note Color', type: 'color' },
+    { key: 'attachedSubnodeIds', label: 'Cooperation Modifiers', type: 'container', candidate: 'subnode', hint: 'Attach role, no-solo, discussion, arbitration, or another relevant gameplay modifier.' },
   ],
   physicalRestriction: [
     { key: 'restrictionType', label: 'Restriction Type', type: 'selectCustom', required: true, collection: 'mechanicRestrictionTypes', prompt: 'Restriction type name', idPrefix: 'RST-' },
@@ -2934,6 +3325,15 @@ const MECHANIC_NODE_FIELD_SECTIONS = {
     { key: 'manualOverrideFallback', label: 'Manual Override / Fallback Procedure', type: 'textarea' },
     { key: 'nodeColor', label: 'Node Color', type: 'color' },
   ],
+  action: [],
+  playerFacingInstruction: [
+    { key: 'body', label: 'Player-Facing Instruction', type: 'textarea', required: true },
+  ],
+  actionSequence: [
+    { key: 'sequenceMode', label: 'Sequence Mode', type: 'selectCustom', required: true, collection: 'mechanicSequenceModes', prompt: 'Sequence mode name', idPrefix: 'SQM-' },
+    { key: 'sequenceInstruction', label: 'Sequence Instruction', type: 'textarea' },
+    { key: 'attachedSubnodeIds', label: 'Sequence Modifiers', type: 'container', candidate: 'subnode', hint: 'Attach a modifier to control the economy, availability, order, prompt, or physical behavior of this sequence.' },
+  ],
   characterState: [
     { key: 'emotionalState', label: 'Emotional State', type: 'selectCustom', collection: 'mechanicCharacterEmotionTypes', prompt: 'Emotional state name', idPrefix: 'CEM-' },
     { key: 'behavioralNotes', label: 'Behavioral Notes', type: 'textarea' },
@@ -2960,7 +3360,7 @@ const isPhysicalTrackCandidate = (n) => {
 const isCognitiveTrackCandidate = (n) => {
   if (!n) return false;
   if (n.kind === 'mechanicSubnode') return true;
-  if (['challengeCore', 'characterState'].includes(n.mechKind)) return true;
+  if (['cooperation', 'characterState'].includes(n.mechKind)) return true;
   if (n.mechKind === 'progressState') return true;
   return ['rule', 'effect', 'objective', 'power'].includes(n.kind);
 };
@@ -3107,6 +3507,44 @@ function MechanicsNodeField({ field, value, onChange, node, graph }) {
       </div>
     );
   }
+  if (field.type === 'repeatableShortText') {
+    const entries = Array.isArray(value) && value.length ? value : [''];
+    const updateEntry = (index, nextValue) => {
+      const next = [...entries];
+      next[index] = nextValue;
+      onChange(next);
+    };
+    const removeEntry = (index) => {
+      if (entries.length <= 1) return;
+      onChange(entries.filter((_, entryIndex) => entryIndex !== index));
+    };
+    return (
+      <div className="isect compact action-repeat-group">
+        <SectionLabel>{field.label}</SectionLabel>
+        <div className="action-repeat-list">
+          {entries.map((entry, index) => (
+            <div className="action-repeat-entry" key={`${field.key}-${index}`}>
+              <div className="action-repeat-head">
+                <span>{field.label}{entries.length > 1 ? ` ${index + 1}` : ''}</span>
+                {entries.length > 1 && (
+                  <button className="iconbtn danger" title={`Remove ${field.label.toLowerCase()}`} onClick={() => removeEntry(index)}>×</button>
+                )}
+              </div>
+              <textarea
+                className="field-input action-repeat-text"
+                rows="2"
+                maxLength="320"
+                value={entry || ''}
+                placeholder={field.placeholder}
+                onChange={(event) => updateEntry(index, event.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+        <button className="btn small action-repeat-add" onClick={() => onChange([...entries, ''])}>+ {field.addLabel}</button>
+      </div>
+    );
+  }
   if (field.type === 'selectCustom') {
     const options = Object.values(lib[field.collection] || {}).map((x) => x.label).filter(Boolean);
     const current = value || options[0] || '';
@@ -3219,7 +3657,16 @@ function MechanicsNodeFields({ node, onPatch, lib, graph }) {
   const isMechanicSubnode = node.kind === 'mechanicSubnode';
   const subMeta = isMechanicSubnode ? MECHANIC_SUBNODE_TYPES[node.subnodeKind] : null;
   const fields = isMechanicSubnode ? (subMeta?.fields || []) : (MECHANIC_NODE_FIELD_SECTIONS[mechKind] || []);
-  if (!isMechanicSubnode && !fields.length && !node.physicalKind) return null;
+  if (isMechanicSubnode && node.subnodeKind === 'actionTypePattern') {
+    return <ActionTypePatternEditor node={node} onPatch={onPatch} />;
+  }
+  if (!isMechanicSubnode && mechKind === 'actionProbability') {
+    return <ActionProbabilityEditor node={node} onPatch={onPatch} />;
+  }
+  if (!isMechanicSubnode && mechKind === ACTION_MECHANISM_NODE_KIND) {
+    return <ActionMechanismEditor node={node} onPatch={onPatch} />;
+  }
+  if (!isMechanicSubnode && !fields.length && !node.physicalKind && mechKind !== 'action') return null;
   const patchField = (field, value) => {
     if (field.type === 'range') onPatch(value);
     else if (isMechanicSubnode) onPatch({ fields: { ...(node.fields || {}), [field.key]: value } });
@@ -3227,13 +3674,13 @@ function MechanicsNodeFields({ node, onPatch, lib, graph }) {
   };
   return (
     <>
-      {isMechanicSubnode && (
-        <ISection label="Purpose">
+      {isMechanicSubnode && node.subnodeKind !== 'actionTypePattern' && (
+        <ISection key={`${node.id}-purpose`} label="Purpose" collapsed={false}>
           <div className="hint">{node.body || subMeta?.purpose}</div>
         </ISection>
       )}
       {node.physicalKind && (
-        <ISection label="Physical Reference">
+        <ISection key={`${node.id}-physical-reference`} label="Physical Reference" collapsed={false}>
           <div className="chips">
             {node.physicalKind === 'item' && lib.items?.[node.itemId] && <Chip color={node.color || ENTITY_COLORS.item}>{lib.items[node.itemId].name}</Chip>}
             {node.physicalKind === 'sensor' && lib.sensors?.[node.sensorId] && <Chip color={ENTITY_COLORS.sensor}>{lib.sensors[node.sensorId].kind}</Chip>}
@@ -3243,7 +3690,7 @@ function MechanicsNodeFields({ node, onPatch, lib, graph }) {
         </ISection>
       )}
       {fields.length > 0 && (
-        <ISection label={isMechanicSubnode ? 'Focused Fields' : mechKind === 'taskTemplate' ? 'Task Template Details' : 'Node Details'}>
+        <ISection key={`${node.id}-node-details`} label={isMechanicSubnode ? 'Focused Fields' : mechKind === 'taskTemplate' ? 'Task Template Details' : 'Node Details'} collapsed={false}>
           {fields.filter((field) => !field.showWhen || field.showWhen(node)).map((field) => (
             <MechanicsNodeField
               key={field.key}
@@ -3255,6 +3702,340 @@ function MechanicsNodeFields({ node, onPatch, lib, graph }) {
             />
           ))}
         </ISection>
+      )}
+      {!isMechanicSubnode && mechKind === 'action' && <ActionSystemsEditor node={node} onPatch={onPatch} />}
+    </>
+  );
+}
+
+function ActionSystemsEditor({ node, onPatch }) {
+  const lib = useLibrary();
+  const libDispatch = useLibraryDispatch();
+  const mechanisms = Object.values(lib.actionPatternMechanisms || {});
+  const [browserFilter, setBrowserFilter] = useState(null);
+  const selectMechanism = (record) => {
+    const patch = actionMechanismNodePatch(record);
+    if (patch) onPatch(patch);
+    setBrowserFilter(null);
+  };
+  const selectedMechanisms = Object.values(ACTION_PATTERN_SYSTEMS)
+    .map((system) => ({ system, record: lib.actionPatternMechanisms?.[node[`${system.id}MechanismId`]] }))
+    .filter((entry) => entry.record);
+  const legacyDetails = {
+    advantages: (node.advantages || []).filter(Boolean),
+    effects: (node.effects || []).filter(Boolean),
+    variations: (node.variations || []).filter(Boolean),
+  };
+  const hasLegacyDetails = Object.values(legacyDetails).some((entries) => entries.length);
+  const readOnlyList = (label, values) => {
+    const entries = (Array.isArray(values) ? values : []).map((value) => `${value || ''}`.trim()).filter(Boolean);
+    if (!entries.length) return null;
+    return (
+      <div className="action-mechanism-readonly-field">
+        <b>{label}</b>
+        {entries.map((entry, index) => <span key={`${label}-${index}`}>{entry}</span>)}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <ISection key={`${node.id}-action-systems`} label="Action Systems" collapsed={false}>
+        <div className="mechanism-slot-list">
+          {Object.values(ACTION_PATTERN_SYSTEMS).map((system) => {
+            const selected = lib.actionPatternMechanisms?.[node[`${system.id}MechanismId`]];
+            return (
+              <div className="mechanism-slot" key={system.id}>
+                <span>{system.id}</span>
+                <b title={selected?.label || 'Not selected'}>{selected?.label || 'Not selected'}</b>
+                <div className="mechanism-slot-actions">
+                  <button className="btn tiny" onClick={() => setBrowserFilter(system.id)}>
+                    {system.id === 'token' ? 'Token' : system.id === 'order' ? 'Order' : 'Special'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </ISection>
+      <ISection key={`${node.id}-action-details`} label="Selected Mechanism Details" collapsed={false}>
+        {selectedMechanisms.length ? (
+          <div className="action-mechanism-readonly-list">
+            {selectedMechanisms.map(({ system, record }) => (
+              <section key={record.id} style={{ '--accent': record.color || '#58C7A6' }}>
+                {record.image?.dataUrl && (
+                  <span className="action-mechanism-readonly-image">
+                    <img src={record.image.dataUrl} alt="" style={{ transform: `translate(${record.imagePositionX || 0}%, ${record.imagePositionY || 0}%) scale(${record.imageScale || 1})` }} />
+                  </span>
+                )}
+                <small>{system.label}</small>
+                <strong>{record.label}</strong>
+                {record.description && <p>{record.description}</p>}
+                {readOnlyList('Advantage', record.advantages)}
+                {readOnlyList('Effect', record.effects)}
+                {readOnlyList('Variation', record.variations)}
+              </section>
+            ))}
+          </div>
+        ) : <div className="hint">Choose a Token, Order, or Special mechanism to see its details.</div>}
+        {hasLegacyDetails && (
+          <div className="action-mechanism-legacy">
+            <b>Existing node details</b>
+            <small>Preserved from this Action node’s earlier editable fields.</small>
+            {readOnlyList('Advantage', legacyDetails.advantages)}
+            {readOnlyList('Effect', legacyDetails.effects)}
+            {readOnlyList('Variation', legacyDetails.variations)}
+          </div>
+        )}
+        <div className="hint">Use the Token, Order, or Special buttons above to edit these details in Mechanism Browser.</div>
+      </ISection>
+      {browserFilter && (
+        <MechanismBrowser
+          initialFilter={browserFilter}
+          patternMechanisms={mechanisms}
+          probabilityMechanisms={Object.values(lib.actionProbabilityMechanisms || {})}
+          selectedPatternIds={Object.keys(ACTION_PATTERN_SYSTEMS).map((system) => node[`${system}MechanismId`])}
+          allowedKind="pattern"
+          onPick={selectMechanism}
+          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: record.kind === 'probability' ? 'actionProbabilityMechanisms' : 'actionPatternMechanisms', id: record.id, patch: record })}
+          onClose={() => setBrowserFilter(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function ActionMechanismEditor({ node, onPatch }) {
+  const lib = useLibrary();
+  const libDispatch = useLibraryDispatch();
+  const [browsing, setBrowsing] = useState(false);
+  const mechanisms = Object.values(lib.actionPatternMechanisms || {});
+  const stored = lib.actionPatternMechanisms?.[node.actionMechanismId];
+  const system = node.mechanismSystem || stored?.system || 'token';
+  const image = node.image || stored?.image;
+  const imageScale = Number(node.imageScale ?? stored?.imageScale) || 1;
+  const imagePositionX = Number(node.imagePositionX ?? stored?.imagePositionX) || 0;
+  const imagePositionY = Number(node.imagePositionY ?? stored?.imagePositionY) || 0;
+  const detailList = (label, values) => {
+    const entries = (Array.isArray(values) ? values : []).map((value) => `${value || ''}`.trim()).filter(Boolean);
+    return (
+      <div className="action-mechanism-readonly-field">
+        <b>{label}</b>
+        <span>{entries.length ? entries.map((entry, index) => <i key={`${label}-${index}`}>{entry}</i>) : <i className="dim">Not defined.</i>}</span>
+      </div>
+    );
+  };
+  const choose = (record) => {
+    const patch = actionMechanismNodePatch(record);
+    if (patch) onPatch(patch);
+    setBrowsing(false);
+  };
+
+  return (
+    <>
+      <ISection key={`${node.id}-applied-mechanism`} label="Applied Mechanism" collapsed={false}>
+        {image?.dataUrl && (
+          <span className="action-mechanism-inspector-image">
+            <img src={image.dataUrl} alt="" style={{ transform: `translate(${imagePositionX}%, ${imagePositionY}%) scale(${imageScale})` }} />
+          </span>
+        )}
+        <div className="mechanism-applied-summary">
+          <small>{node.mechanismCategory || ACTION_PATTERN_SYSTEMS[system]?.label || 'Action Mechanism'}</small>
+          <strong>{node.title}</strong>
+          <span>This node is the selected mechanism itself, not a generic Action container.</span>
+        </div>
+        <button className="btn wide" onClick={() => setBrowsing(true)}>Change Mechanism</button>
+      </ISection>
+      <ISection key={`${node.id}-mechanism-details`} label="Mechanism Details" collapsed={false}>
+        <div className="action-mechanism-readonly-list single">
+          <section style={{ '--accent': node.color || stored?.color || '#58C7A6' }}>
+            {detailList('Advantage', node.advantages ?? stored?.advantages)}
+            {detailList('Effect', node.effects ?? stored?.effects)}
+            {detailList('Variation', node.variations ?? stored?.variations)}
+          </section>
+        </div>
+        <div className="hint">Edit this mechanism's picture and descriptive fields in Mechanism Browser, then choose it again to refresh this node.</div>
+      </ISection>
+      {browsing && (
+        <MechanismBrowser
+          initialFilter={system}
+          patternMechanisms={mechanisms}
+          probabilityMechanisms={Object.values(lib.actionProbabilityMechanisms || {})}
+          selectedPatternIds={[node.actionMechanismId]}
+          allowedKind="pattern"
+          onPick={choose}
+          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: record.kind === 'probability' ? 'actionProbabilityMechanisms' : 'actionPatternMechanisms', id: record.id, patch: record })}
+          onClose={() => setBrowsing(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function ActionTypePatternEditor({ node, onPatch, manageLibrary = false }) {
+  const lib = useLibrary();
+  const libDispatch = useLibraryDispatch();
+  const fields = node.fields || {};
+  const mechanisms = Object.values(lib.actionPatternMechanisms || {});
+  const [browserFilter, setBrowserFilter] = useState(null);
+  const patchFields = (patch) => onPatch({ fields: { ...fields, ...patch } });
+  const selectMechanism = (record) => {
+    const catalogue = { ...(lib.actionPatternMechanisms || {}), [record.id]: record };
+    const nextFields = updateActionPatternSelection(fields, record.system, record.id, catalogue);
+    onPatch({
+      fields: nextFields,
+      body: record.description || 'Select and configure the human-readable action pattern used by this action.',
+      image: record.image || null,
+    });
+    setBrowserFilter(null);
+  };
+  const addMechanism = (system) => {
+    const label = String(window.prompt(`New ${ACTION_PATTERN_SYSTEMS[system].label} mechanism name`, '') || '').trim();
+    if (!label) return;
+    const id = genId(lib.actionPatternMechanisms || {}, 'APM-');
+    libDispatch({ type: 'ADD_ENTITY', coll: 'actionPatternMechanisms', entity: { id, system, label, description: '', image: null, imageScale: 1, advantages: [''], effects: [''], variations: [''], custom: true } });
+    patchFields({ [`${system}MechanismId`]: id, activeMechanismId: id });
+  };
+  const deleteMechanism = (mechanism) => {
+    if (!window.confirm(`Delete the mechanism "${mechanism.label}"? This cannot be undone.`)) return;
+    libDispatch({ type: 'DELETE_ENTITY', coll: 'actionPatternMechanisms', id: mechanism.id });
+    const patch = {};
+    if (fields.activeMechanismId === mechanism.id) patch.activeMechanismId = '';
+    if (fields[`${mechanism.system}MechanismId`] === mechanism.id) patch[`${mechanism.system}MechanismId`] = '';
+    if (Object.keys(patch).length) patchFields(patch);
+  };
+
+  return (
+    <>
+      <ISection key={`${node.id}-action-pattern-systems`} label="Action Systems" collapsed={false}>
+        <div className="mechanism-slot-list">
+          {Object.values(ACTION_PATTERN_SYSTEMS).map((system) => {
+            const selectedId = fields[`${system.id}MechanismId`] || '';
+            const selected = lib.actionPatternMechanisms?.[selectedId];
+            return (
+              <div className="mechanism-slot" key={system.id}>
+                <span>{system.id}</span>
+                <b title={selected?.label || 'None'}>{selected?.label || 'None'}</b>
+                <div className="mechanism-slot-actions">
+                  <button className="btn tiny" onClick={() => setBrowserFilter(system.id)}>{system.id === 'token' ? 'Token' : system.id === 'order' ? 'Order' : 'Special'}</button>
+                  {manageLibrary && <button className="btn tiny" title={`Add ${system.label} mechanism`} onClick={() => addMechanism(system.id)}>+</button>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </ISection>
+      {manageLibrary && (
+        <ISection key={`${node.id}-manage-mechanisms`} label="Manage Mechanisms" collapsed={false}>
+          {Object.values(ACTION_PATTERN_SYSTEMS).map((system) => (
+            <div className="isect compact" key={system.id}>
+              <SectionLabel>{system.label}</SectionLabel>
+              <div className="trackbucket">
+                {mechanisms.filter((mechanism) => mechanism.system === system.id).map((mechanism) => (
+                  <div className="trackchip on" key={mechanism.id}>
+                    <b>{mechanism.label}</b>
+                    <button className="linkbtn danger" onClick={() => deleteMechanism(mechanism)}>Delete</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </ISection>
+      )}
+      {browserFilter && (
+        <MechanismBrowser
+          initialFilter={browserFilter}
+          patternMechanisms={mechanisms}
+          probabilityMechanisms={Object.values(lib.actionProbabilityMechanisms || {})}
+          selectedPatternIds={Object.keys(ACTION_PATTERN_SYSTEMS).map((system) => fields[`${system}MechanismId`])}
+          allowedKind="pattern"
+          onPick={selectMechanism}
+          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: record.kind === 'probability' ? 'actionProbabilityMechanisms' : 'actionPatternMechanisms', id: record.id, patch: record })}
+          onClose={() => setBrowserFilter(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function ActionProbabilityEditor({ node, onPatch }) {
+  const lib = useLibrary();
+  const libDispatch = useLibraryDispatch();
+  const [browsing, setBrowsing] = useState(false);
+  const probabilityMechanisms = Object.values(lib.actionProbabilityMechanisms || {});
+  const selected = lib.actionProbabilityMechanisms?.[node.resolutionMechanismId]
+    || probabilityMechanisms.find((record) => record.label === node.resolutionType)
+    || probabilityMechanisms[0]
+    || { id: '', label: 'Choose resolution', description: '', variations: [''], emotionalSpike: '', effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0 };
+  const variations = Array.isArray(node.variations) && node.variations.length ? node.variations : (selected.variations || ['']);
+  const effects = Array.isArray(node.effects) && node.effects.length ? node.effects : (selected.effects || ['']);
+  const emotionalSpike = node.emotionalSpike ?? selected.emotionalSpike ?? '';
+  const imageScale = Math.min(3, Math.max(0.5, Number(node.imageScale ?? selected.imageScale) || 1));
+  const imagePositionX = Math.min(100, Math.max(-100, Number(node.imagePositionX ?? selected.imagePositionX) || 0));
+  const imagePositionY = Math.min(100, Math.max(-100, Number(node.imagePositionY ?? selected.imagePositionY) || 0));
+  const displayImage = node.image || selected.image;
+  const choose = (record) => {
+    onPatch({
+      resolutionMechanismId: record.id,
+      resolutionType: record.label,
+      body: record.description,
+      image: record.image,
+      variations: [...(record.variations || [''])],
+      emotionalSpike: record.emotionalSpike || '',
+      effects: [...(record.effects || [''])],
+      imageScale: record.imageScale || 1,
+      imagePositionX: record.imagePositionX || 0,
+      imagePositionY: record.imagePositionY || 0,
+      color: record.color || node.color,
+    });
+    setBrowsing(false);
+  };
+  return (
+    <>
+      <ISection key={`${node.id}-resolution-mechanism`} label="Resolution Mechanism" collapsed={false}>
+        <div className="mechanism-selection-preview">
+          {displayImage?.dataUrl && <span className="mechanism-selection-image"><img src={displayImage.dataUrl} alt="" style={{ transform: `translate(${imagePositionX}%, ${imagePositionY}%) scale(${imageScale})` }} /></span>}
+          <div>
+            <b>{selected.label}</b>
+            <small>{selected.description}</small>
+          </div>
+        </div>
+        <button className="btn wide" onClick={() => setBrowsing(true)}>Browse Resolutions</button>
+      </ISection>
+      <ISection key={`${node.id}-resolution-details`} label="Resolution Details" collapsed={false}>
+        <MechanicsNodeField
+          field={{ key: 'variations', label: 'Variation', type: 'repeatableShortText', addLabel: 'Add variation', placeholder: 'Describe one variation in one or two sentences.' }}
+          value={variations}
+          onChange={(next) => onPatch({ variations: next })}
+          node={node}
+        />
+        <TextField label="Emotional Spike" textarea value={emotionalSpike} onCommit={(value) => onPatch({ emotionalSpike: value })} />
+        <MechanicsNodeField
+          field={{ key: 'effects', label: 'Effect', type: 'repeatableShortText', addLabel: 'Add effect', placeholder: 'Describe one effect in one or two sentences.' }}
+          value={effects}
+          onChange={(next) => onPatch({ effects: next })}
+          node={node}
+        />
+      </ISection>
+      {displayImage?.dataUrl && (
+        <ISection key={`${node.id}-resolution-image`} label="Image Framing" collapsed={false}>
+          <SectionLabel>Image scale · {imageScale.toFixed(2)}×</SectionLabel>
+          <input className="wide-range" type="range" min="0.5" max="3" step="0.05" value={imageScale}
+            onChange={(event) => onPatch({ imageScale: Number(event.target.value) })} />
+          <div className="hint">Scale the image within the node frame without resizing the node itself.</div>
+        </ISection>
+      )}
+      {browsing && (
+        <MechanismBrowser
+          initialFilter="probability"
+          patternMechanisms={Object.values(lib.actionPatternMechanisms || {})}
+          probabilityMechanisms={probabilityMechanisms}
+          selectedProbability={selected.id}
+          allowedKind="probability"
+          onPick={choose}
+          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: record.kind === 'probability' ? 'actionProbabilityMechanisms' : 'actionPatternMechanisms', id: record.id, patch: record })}
+          onClose={() => setBrowsing(false)}
+        />
       )}
     </>
   );
@@ -3280,16 +4061,25 @@ function LibMechSubnodePanel({ template }) {
         <SectionLabel>Subnode type</SectionLabel>
         <div className="hint">{meta.label}</div>
       </div>
-      <div className="isect">
-        <SectionLabel>Purpose · read-only</SectionLabel>
-        <div className="hint">{template.purpose || meta.purpose}</div>
-      </div>
-      <ISection label="Focused Fields">
-        {(meta.fields || []).map((field) => (
-          <MechanicSubnodeField key={field.key} field={field} value={(template.fields || {})[field.key]} onChange={(value) => updateField(field.key, value)} />
-        ))}
-      </ISection>
-      <ISection label="Attach Rules">
+      {template.kind === 'actionTypePattern' ? (
+        <>
+          <TextField label="Description" textarea value={template.description || ''} onCommit={(description) => upd({ description })} />
+          <ActionTypePatternEditor node={template} onPatch={upd} manageLibrary />
+        </>
+      ) : (
+        <>
+          <div className="isect">
+            <SectionLabel>Purpose · read-only</SectionLabel>
+            <div className="hint">{template.purpose || meta.purpose}</div>
+          </div>
+          <ISection key={`${template.id}-focused-fields`} label="Focused Fields" collapsed={false}>
+            {(meta.fields || []).map((field) => (
+              <MechanicSubnodeField key={field.key} field={field} value={(template.fields || {})[field.key]} onChange={(value) => updateField(field.key, value)} />
+            ))}
+          </ISection>
+        </>
+      )}
+      <ISection key={`${template.id}-attach-rules`} label="Attach Rules" collapsed={false}>
         <div className="chips">
           {(template.attachesTo || meta.attachesTo || ['*']).map((target) => <span key={target} className="pill">{target === '*' ? 'Any mechanic node' : target}</span>)}
         </div>
@@ -3490,6 +4280,30 @@ function LibBuilderNodePanel({ selection }) {
   const color = n.color
     || (isSub ? SUBNODE_TYPES[n.kind]?.color : isFramework ? type.color : n.kind === 'concept' ? ADDITIONAL_NODE_TYPES[n.conceptKind]?.color : BASE_NODE_TYPES[n.kind]?.color)
     || '#8B92A6';
+  if (n.kind === LINKING_NODE_KIND) {
+    return (
+      <>
+        <div className="scopebadge template">Unsaved builder draft · save the structure to keep it in the Library.</div>
+        <LinkingNodeInspector node={n} onPatch={patch} onNavigate={selection.onNavigate} onInsert={selection.onInsert} />
+      </>
+    );
+  }
+  if (n.kind === CHARACTER_ARCHETYPE_FACET_KIND) {
+    return (
+      <>
+        <div className="scopebadge template">Unsaved builder draft · save the structure to keep it in the Library.</div>
+        <CharacterArchetypeFacetInspector node={n} onPatch={patch} />
+      </>
+    );
+  }
+  if (n.kind === CHARACTER_ARCHETYPE_COMBINATIONS_KIND) {
+    return (
+      <>
+        <div className="scopebadge template">Unsaved builder draft · save the structure to keep it in the Library.</div>
+        <CharacterArchetypeCombinationsInspector node={n} onPatch={patch} />
+      </>
+    );
+  }
   if (n.kind === 'character') {
     return (
       <>
@@ -3501,7 +4315,7 @@ function LibBuilderNodePanel({ selection }) {
           </div>
           <div className="sub mono">{n.id} · character</div>
         </div>
-        <CharacterCardInspector node={n} onPatch={patch} template={DEFAULT_CHARACTER_CARD_TEMPLATE} />
+        <CharacterCardInspector node={n} onPatch={patch} onArchetypeChange={selection.onArchetypeChange || patch} template={DEFAULT_CHARACTER_CARD_TEMPLATE} />
       </>
     );
   }
@@ -3516,7 +4330,7 @@ function LibBuilderNodePanel({ selection }) {
         <div className="sub mono">{n.id} · {isSub ? 'subnode' : isFramework ? 'reference framework' : n.kind}</div>
       </div>
       {n.kind !== 'item' && <TextField label={isFramework ? 'Framework title' : 'Node title'} value={n.title} onCommit={(v) => patch({ title: v })} />}
-      {n.kind !== 'item' && !isFramework && <TextField label="Description" textarea value={n.body} onCommit={(v) => patch({ body: v })} />}
+      {n.kind !== 'item' && !isFramework && n.mechKind !== 'playerFacingInstruction' && <TextField label="Description" textarea value={n.body} onCommit={(v) => patch({ body: v })} />}
       {n.kind === 'item' && <StoryItemInspectorFields node={n} onPatch={patch} lib={lib} graph={{ nodes: { [n.id]: n } }} />}
       {false && n.kind === 'item' && (
         <>
@@ -3570,7 +4384,7 @@ function LibBuilderNodePanel({ selection }) {
 
 function LibBuilderFramePanel({ selection }) {
   const f = selection.frame;
-  const isArrow = f.shape === 'arrow';
+  const isLine = f.shape === 'arrow' || f.shape === 'spline';
   const patch = selection.onPatch || (() => {});
   return (
     <>
@@ -3581,15 +4395,10 @@ function LibBuilderFramePanel({ selection }) {
       </div>
       <TextField label="Frame label" value={f.label || 'Frame'} onCommit={(v) => patch({ label: v })} />
       <div className="frow" style={{ padding: '0 16px 13px' }}>
-        <div><SectionLabel>{isArrow ? 'Horizontal reach' : 'Width'}</SectionLabel><input className="field-input" defaultValue={f.w} onBlur={(e) => patch({ w: isArrow ? (parseInt(e.target.value, 10) || f.w) : Math.max(160, parseInt(e.target.value, 10) || f.w) })} /></div>
-        <div><SectionLabel>{isArrow ? 'Vertical reach' : 'Height'}</SectionLabel><input className="field-input" defaultValue={f.h} onBlur={(e) => patch({ h: isArrow ? (parseInt(e.target.value, 10) || f.h) : Math.max(100, parseInt(e.target.value, 10) || f.h) })} /></div>
+        <div><SectionLabel>{isLine ? 'Horizontal reach' : 'Width'}</SectionLabel><input className="field-input" defaultValue={f.w} onBlur={(e) => patch({ w: isLine ? (parseInt(e.target.value, 10) || f.w) : Math.max(160, parseInt(e.target.value, 10) || f.w) })} /></div>
+        <div><SectionLabel>{isLine ? 'Vertical reach' : 'Height'}</SectionLabel><input className="field-input" defaultValue={f.h} onBlur={(e) => patch({ h: isLine ? (parseInt(e.target.value, 10) || f.h) : Math.max(100, parseInt(e.target.value, 10) || f.h) })} /></div>
       </div>
-      <div className="isect">
-        <SectionLabel>Color</SectionLabel>
-        <div className="chips">
-          {NODE_SWATCHES.map((c) => <button key={c} className={`swatch${(f.color || '#8B92A6') === c ? ' on' : ''}`} style={{ background: c }} onClick={() => patch({ color: c })} />)}
-        </div>
-      </div>
+      <FrameAppearanceFields frame={f} onPatch={patch} />
       <div className="isect">
         <button className="linkbtn danger" onClick={() => selection.onDelete?.()}>Delete {f.shape || 'frame'}</button>
       </div>
@@ -3602,9 +4411,9 @@ function LibBuilderNumberPanel({ selection }) {
   const patch = selection.onPatch || (() => {});
   return (
     <>
-      <div className="scopebadge template">Unsaved builder number Â· save the structure to keep it in the Library.</div>
+      <div className="scopebadge template">Unsaved builder {visualMarkerLabel(marker).toLowerCase()} · save the structure to keep it in the Library.</div>
       <div className="ihead">
-        <div className="ihrow"><span className="sq big" style={{ background: marker.color || '#E8D25C', color: '#111' }}>{marker.value ?? 1}</span><h3>Number marker</h3></div>
+        <div className="ihrow"><span className="sq big" style={{ background: marker.color || '#E8D25C', color: '#111' }}>{marker.value ?? 1}</span><h3>{visualMarkerLabel(marker)} marker</h3></div>
         <div className="sub mono">{marker.id} Â· visual symbol</div>
       </div>
       <NumberMarkerFields marker={marker} onPatch={patch} onDelete={selection.onDelete || (() => {})} />
@@ -3674,7 +4483,7 @@ function LibStructFramePanel({ storyId, frameId, coll = 'stories', graphPath = [
   const st = lib[coll]?.[storyId];
   const graph = libStructureGraphAtPath(st, graphPath);
   const f = graph.frames?.[frameId];
-  const isArrow = f?.shape === 'arrow';
+  const isLine = f?.shape === 'arrow' || f?.shape === 'spline';
   if (!f) return <div className="empty">Frame not found in this structure.</div>;
   const patchGraph = (p) => {
     if (!graphPath.length) {
@@ -3698,9 +4507,10 @@ function LibStructFramePanel({ storyId, frameId, coll = 'stories', graphPath = [
       </div>
       <TextField label="Frame label" value={f.label || 'Frame'} onCommit={(v) => upd({ label: v })} />
       <div className="frow" style={{ padding: '0 16px 13px' }}>
-        <div><SectionLabel>{isArrow ? 'Horizontal reach' : 'Width'}</SectionLabel><input className="field-input" defaultValue={f.w} onBlur={(e) => upd({ w: isArrow ? (parseInt(e.target.value, 10) || f.w) : Math.max(160, parseInt(e.target.value, 10) || f.w) })} /></div>
-        <div><SectionLabel>{isArrow ? 'Vertical reach' : 'Height'}</SectionLabel><input className="field-input" defaultValue={f.h} onBlur={(e) => upd({ h: isArrow ? (parseInt(e.target.value, 10) || f.h) : Math.max(100, parseInt(e.target.value, 10) || f.h) })} /></div>
+        <div><SectionLabel>{isLine ? 'Horizontal reach' : 'Width'}</SectionLabel><input className="field-input" defaultValue={f.w} onBlur={(e) => upd({ w: isLine ? (parseInt(e.target.value, 10) || f.w) : Math.max(160, parseInt(e.target.value, 10) || f.w) })} /></div>
+        <div><SectionLabel>{isLine ? 'Vertical reach' : 'Height'}</SectionLabel><input className="field-input" defaultValue={f.h} onBlur={(e) => upd({ h: isLine ? (parseInt(e.target.value, 10) || f.h) : Math.max(100, parseInt(e.target.value, 10) || f.h) })} /></div>
       </div>
+      <FrameAppearanceFields frame={f} onPatch={upd} />
       <div className="isect">
         <button className="linkbtn danger" onClick={remove}>Delete {f.shape || 'frame'}</button>
       </div>
@@ -3763,7 +4573,7 @@ function LibStructNumberMarkerPanel({ storyId, markerId, coll = 'stories', graph
   const st = lib[coll]?.[storyId];
   const graph = libStructureGraphAtPath(st, graphPath);
   const marker = graph.numberMarkers?.[markerId];
-  if (!marker) return <div className="empty">Number marker not found in this structure.</div>;
+  if (!marker) return <div className="empty">Visual marker not found in this structure.</div>;
   const patchGraph = (p) => {
     if (!graphPath.length) {
       libDispatch({ type: 'UPDATE_ENTITY', coll, id: storyId, patch: p });
@@ -3781,7 +4591,7 @@ function LibStructNumberMarkerPanel({ storyId, markerId, coll = 'stories', graph
     <>
       <TemplateBadge />
       <div className="ihead">
-        <div className="ihrow"><span className="sq big" style={{ background: marker.color || '#E8D25C', color: '#111' }}>{marker.value ?? 1}</span><h3>Number marker</h3></div>
+        <div className="ihrow"><span className="sq big" style={{ background: marker.color || '#E8D25C', color: '#111' }}>{marker.value ?? 1}</span><h3>{visualMarkerLabel(marker)} marker</h3></div>
         <div className="sub mono">{marker.id} Â· visual symbol in {st.name}</div>
       </div>
       <NumberMarkerFields marker={marker} onPatch={upd} onDelete={remove} />
@@ -3823,7 +4633,7 @@ function LibStructTitleMarkerPanel({ storyId, markerId, coll = 'stories', graphP
 
 // A node inside a structure's master graph (library editor selection). Works
 // for both story and mechanic structures via the `coll` on the selection.
-function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [] }) {
+function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [], onSelect, onNavigate }) {
   const lib = useLibrary();
   const libDispatch = useLibraryDispatch();
   const st = lib[coll]?.[storyId];
@@ -3831,19 +4641,55 @@ function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [] 
   const n = graph.nodes?.[nodeId];
   if (!n) return <div className="empty">Node not found in this structure.</div>;
   const upd = (nodePatch) => {
-    const nextNodes = { ...(graph.nodes || {}), [nodeId]: { ...n, ...nodePatch } };
+    const nextGraph = Object.keys(nodePatch).some((key) => key === 'archetypeEnabled' || key.startsWith('archetypeDarkSide'))
+      ? syncCharacterArchetypeGraph(graph, nodeId, nodePatch)
+      : { ...graph, nodes: { ...(graph.nodes || {}), [nodeId]: { ...n, ...nodePatch } } };
     if (!graphPath.length) {
-      libDispatch({ type: 'UPDATE_ENTITY', coll, id: storyId, patch: { nodes: nextNodes } });
+      libDispatch({ type: 'UPDATE_ENTITY', coll, id: storyId, patch: { nodes: nextGraph.nodes, edges: nextGraph.edges } });
       return;
     }
     libDispatch({
       type: 'UPDATE_ENTITY', coll, id: storyId,
-      patch: { nodes: libPatchSubgraphAtPath(st.nodes || {}, graphPath, { ...graph, nodes: nextNodes }) },
+      patch: { nodes: libPatchSubgraphAtPath(st.nodes || {}, graphPath, nextGraph) },
     });
   };
   const prim = n.primitiveId ? (lib.narrative[n.primitiveId] || lib.mechPrimitives[n.primitiveId] || lib.mechSubnodes?.[n.primitiveId]) : null;
   const conceptInternal = CONCEPT_INTERNAL_NODE_TYPES[n.kind];
   const isMechanicSchemaNode = coll === 'mechStructures' && (!!n.mechKind || n.kind === 'mechanicSubnode' || !!n.physicalKind);
+  if (n.kind === LINKING_NODE_KIND) {
+    return (
+      <>
+        <TemplateBadge />
+        <LinkingNodeInspector node={n} onPatch={upd} onNavigate={onNavigate} onInsert={(ref) => {
+          const inserted = buildNarrativeLinkInsertion(lib, ref, graph.nodes, { x: n.x + (n.w || 280) + 50, y: n.y }, 'INS-');
+          if (!inserted) return;
+          const nextGraph = { ...graph, nodes: { ...graph.nodes, [inserted.id]: inserted } };
+          if (!graphPath.length) {
+            libDispatch({ type: 'UPDATE_ENTITY', coll, id: storyId, patch: { nodes: nextGraph.nodes } });
+          } else {
+            libDispatch({ type: 'UPDATE_ENTITY', coll, id: storyId, patch: { nodes: libPatchSubgraphAtPath(st.nodes || {}, graphPath, nextGraph) } });
+          }
+          onSelect?.({ kind: 'lib-structnode', id: inserted.id, storyId, coll, graphPath });
+        }} />
+      </>
+    );
+  }
+  if (n.kind === CHARACTER_ARCHETYPE_FACET_KIND) {
+    return (
+      <>
+        <TemplateBadge />
+        <CharacterArchetypeFacetInspector node={n} onPatch={upd} />
+      </>
+    );
+  }
+  if (n.kind === CHARACTER_ARCHETYPE_COMBINATIONS_KIND) {
+    return (
+      <>
+        <TemplateBadge />
+        <CharacterArchetypeCombinationsInspector node={n} onPatch={upd} />
+      </>
+    );
+  }
   if (n.kind === 'character') {
     return (
       <>
@@ -3881,7 +4727,7 @@ function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [] 
         <div className="sub">node in <b>{st.name}</b> · {n.kind}</div>
       </div>
       {n.kind !== 'item' && <TextField label="Node title" value={n.title} onCommit={(v) => upd({ title: v })} />}
-      {n.kind !== 'item' && <TextField label="Description" textarea value={n.body} onCommit={(v) => upd({ body: v })} />}
+      {n.kind !== 'item' && n.mechKind !== 'playerFacingInstruction' && <TextField label="Description" textarea value={n.body} onCommit={(v) => upd({ body: v })} />}
       {n.kind === 'item' && <StoryItemInspectorFields node={n} onPatch={upd} lib={lib} graph={graph} />}
       {false && n.kind === 'item' && (
         <>
@@ -3905,7 +4751,7 @@ function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [] 
         </>
       )}
       {isMechanicSchemaNode && <MechanicsNodeFields node={n} onPatch={upd} lib={lib} graph={graph} />}
-      {n.kind !== 'item' && <div className="isect">
+      {n.kind !== 'item' && !['action', ACTION_MECHANISM_NODE_KIND].includes(n.mechKind) && <div className="isect">
         <SectionLabel>Node image · optional</SectionLabel>
         <ImageUploader entity={n} label="Node image" onImage={(img) => upd({ image: img })} />
       </div>}
@@ -3919,18 +4765,130 @@ function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [] 
   );
 }
 
+function inspectorNodeSizeBinding({ selection, game, library, dispatch, libraryDispatch }) {
+  const { kind, id } = selection;
+  if (kind === 'node' && game.nodes?.[id]) {
+    return { entity: game.nodes[id], onPatch: (patch) => dispatch({ type: 'UPDATE_ENTITY', coll: 'nodes', id, patch }) };
+  }
+  if (kind === 'subnode' && game.subnodes?.[id]) {
+    return {
+      entity: game.subnodes[id], role: 'subnode',
+      onPatch: (patch) => dispatch({ type: 'UPDATE_ENTITY', coll: 'subnodes', id, patch }),
+    };
+  }
+  if (kind === 'framework' && game.frameworks?.[id]) {
+    return { entity: game.frameworks[id], onPatch: (patch) => dispatch({ type: 'UPDATE_ENTITY', coll: 'frameworks', id, patch }) };
+  }
+  if (kind === 'graphnode') {
+    const entity = locateGraph(game, selection.scope).nodes?.[id];
+    return entity ? {
+      entity,
+      onPatch: (patch) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope: selection.scope, id, patch }),
+    } : null;
+  }
+  if (kind === 'lib-buildernode' && selection.node) {
+    return {
+      entity: selection.node,
+      role: selection.node._sub || selection.node.kind === 'mechanicSubnode' ? 'subnode' : undefined,
+      onPatch: selection.onPatch || (() => {}),
+    };
+  }
+  if (kind === 'lib-structnode') {
+    const coll = selection.coll || 'stories';
+    const structure = library[coll]?.[selection.storyId];
+    const path = selection.graphPath || [];
+    const graph = libStructureGraphAtPath(structure, path);
+    const entity = graph.nodes?.[id];
+    if (!entity) return null;
+    const onPatch = (patch) => {
+      const nextNodes = { ...(graph.nodes || {}), [id]: { ...entity, ...patch } };
+      const structurePatch = path.length
+        ? { nodes: libPatchSubgraphAtPath(structure.nodes || {}, path, { ...graph, nodes: nextNodes }) }
+        : { nodes: nextNodes };
+      libraryDispatch({ type: 'UPDATE_ENTITY', coll, id: selection.storyId, patch: structurePatch });
+    };
+    return { entity, onPatch };
+  }
+  if (kind === 'lib-structframework') {
+    const coll = selection.coll || 'stories';
+    const structure = library[coll]?.[selection.storyId];
+    const entity = structure?.frameworks?.[id];
+    if (!entity) return null;
+    return {
+      entity,
+      onPatch: (patch) => libraryDispatch({
+        type: 'UPDATE_ENTITY', coll, id: selection.storyId,
+        patch: { frameworks: { ...(structure.frameworks || {}), [id]: { ...entity, ...patch } } },
+      }),
+    };
+  }
+  return null;
+}
+
 // The shared right-hand details panel. Project selections show game instances;
 // lib-* selections show master templates with the import bridge.
-export default function Inspector({ selection, onSelect, collapsed = false, onCollapsedChange }) {
+export default function Inspector({ selection, onSelect, onNavigate, collapsed = false, onCollapsedChange, width = 320, onWidthChange }) {
   const s = useGame();
   const lib = useLibrary();
+  const dispatch = useDispatch();
+  const libDispatch = useLibraryDispatch();
+  const resizeRef = React.useRef(null);
+  React.useEffect(() => () => {
+    resizeRef.current?.cleanup?.();
+    document.body.classList.remove('inspector-resizing');
+  }, []);
+  const beginResize = (e) => {
+    e.preventDefault();
+    const pointerId = e.pointerId;
+    const startX = e.clientX;
+    const startWidth = width;
+    const move = (moveEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      onWidthChange?.(startWidth + startX - moveEvent.clientX);
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+    };
+    const finish = (finishEvent) => {
+      if (finishEvent.pointerId !== pointerId) return;
+      cleanup();
+      resizeRef.current = null;
+      document.body.classList.remove('inspector-resizing');
+    };
+    resizeRef.current?.cleanup?.();
+    resizeRef.current = { pointerId, cleanup };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+    document.body.classList.add('inspector-resizing');
+  };
+  const resizeHandle = (
+    <div
+      className="inspector-resizer"
+      role="separator"
+      aria-label="Resize inspector"
+      aria-orientation="vertical"
+      aria-valuemin="280"
+      aria-valuemax="720"
+      aria-valuenow={Math.round(width)}
+      tabIndex={0}
+      title="Drag to resize inspector"
+      onPointerDown={beginResize}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); onWidthChange?.(width + 20); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); onWidthChange?.(width - 20); }
+      }}
+    />
+  );
   if (collapsed) return (
     <aside className="inspector collapsed">
       <button className="inspector-toggle inspector-open" onClick={() => onCollapsedChange?.(false)} title="Open inspector" aria-label="Open inspector">‹</button>
     </aside>
   );
   const toggle = <button className="inspector-toggle inspector-close" onClick={() => onCollapsedChange?.(true)} title="Collapse inspector" aria-label="Collapse inspector">›</button>;
-  if (!selection) return <aside className="inspector">{toggle}<div className="empty">Select an item, node, location or player to inspect it.</div></aside>;
+  if (!selection) return <aside className="inspector">{resizeHandle}{toggle}<div className="empty">Select an item, node, location or player to inspect it.</div></aside>;
 
   let body = null;
   const { kind, id } = selection;
@@ -3944,7 +4902,7 @@ export default function Inspector({ selection, onSelect, collapsed = false, onCo
   else if (kind === 'graphframe') body = <GraphFramePanel scope={selection.scope} id={id} onSelect={onSelect} />;
   else if (kind === 'graphnumber') body = <GraphNumberMarkerPanel scope={selection.scope} id={id} onSelect={onSelect} />;
   else if (kind === 'graphtitle') body = <GraphTitleMarkerPanel scope={selection.scope} id={id} onSelect={onSelect} />;
-  else if (kind === 'graphnode') body = <GraphNodePanel scope={selection.scope} id={id} />;
+  else if (kind === 'graphnode') body = <GraphNodePanel scope={selection.scope} id={id} onSelect={onSelect} onNavigate={onNavigate} />;
   else if (kind === 'location' && s.locations[id]) body = <LocationPanel location={s.locations[id]} />;
   else if (kind === 'player' && s.players[id]) body = <PlayerPanel player={s.players[id]} />;
   else if (kind === 'team' && s.teams[id]) body = <TeamPanel team={s.teams[id]} />;
@@ -3952,7 +4910,11 @@ export default function Inspector({ selection, onSelect, collapsed = false, onCo
   else if (kind === 'lib-locations' && lib.locations[id]) body = <LibLocationPanel template={lib.locations[id]} />;
   else if (kind === 'lib-mechanics' && lib.mechanics[id]) body = <LibMechanicPanel template={lib.mechanics[id]} />;
   else if (kind === 'lib-sensors' && lib.sensors[id]) body = <LibSensorPanel template={lib.sensors[id]} />;
-  else if (kind === 'lib-stories' && lib.stories[id]) body = <LibStoryPanel template={lib.stories[id]} onDeleted={() => onSelect?.(null)} />;
+  else if (kind === 'lib-stories' && lib.stories[id]) body = <LibStoryPanel
+    template={lib.stories[id]}
+    onDeleted={() => onSelect?.(null)}
+    onOpenConcept={(conceptId) => onSelect?.({ kind: 'lib-concepts', id: conceptId, openEditor: true })}
+  />;
   else if (kind === 'lib-concepts' && lib.concepts?.[id]) body = <LibConceptPanel template={lib.concepts[id]} onDeleted={() => onSelect?.(null)} />;
   else if (kind === 'lib-mechPrimitives' && lib.mechPrimitives[id]) body = <LibMechPrimitivePanel template={lib.mechPrimitives[id]} />;
   else if (kind === 'lib-mechSubnodes' && lib.mechSubnodes?.[id]) body = <LibMechSubnodePanel template={lib.mechSubnodes[id]} />;
@@ -3960,12 +4922,12 @@ export default function Inspector({ selection, onSelect, collapsed = false, onCo
   else if (kind === 'lib-narrative' && lib.narrative[id]) body = lib.narrative[id].nodeClass
     ? <LibNodeTemplatePanel template={lib.narrative[id]} onDeleted={() => onSelect?.(null)} />
     : <LibNarrativePanel template={lib.narrative[id]} />;
-  else if (kind === 'lib-structnode') body = <LibStructNodePanel storyId={selection.storyId} nodeId={id} coll={selection.coll} graphPath={selection.graphPath || []} />;
+  else if (kind === 'lib-structnode') body = <LibStructNodePanel storyId={selection.storyId} nodeId={id} coll={selection.coll} graphPath={selection.graphPath || []} onSelect={onSelect} onNavigate={onNavigate} />;
   else if (kind === 'lib-structframe') body = <LibStructFramePanel storyId={selection.storyId} frameId={id} coll={selection.coll} graphPath={selection.graphPath || []} />;
   else if (kind === 'lib-structnumber') body = <LibStructNumberMarkerPanel storyId={selection.storyId} markerId={id} coll={selection.coll} graphPath={selection.graphPath || []} />;
   else if (kind === 'lib-structtitle') body = <LibStructTitleMarkerPanel storyId={selection.storyId} markerId={id} coll={selection.coll} graphPath={selection.graphPath || []} />;
   else if (kind === 'lib-structframework') body = <LibStructFrameworkPanel storyId={selection.storyId} frameworkId={id} coll={selection.coll} />;
-  else if (kind === 'lib-buildernode') body = <LibBuilderNodePanel selection={selection} />;
+  else if (kind === 'lib-buildernode') body = <LibBuilderNodePanel selection={{ ...selection, onNavigate }} />;
   else if (kind === 'lib-builderframe') body = <LibBuilderFramePanel selection={selection} />;
   else if (kind === 'lib-buildernumber') body = <LibBuilderNumberPanel selection={selection} />;
   else if (kind === 'lib-buildertitle') body = <LibBuilderTitlePanel selection={selection} />;
@@ -3976,11 +4938,32 @@ export default function Inspector({ selection, onSelect, collapsed = false, onCo
     // legacy typed kinds keep the old editor; mechanical nodes linked to an
     // item/location surface that live record instead.
     else if (r.node.kind === 'concept') body = <ConceptPanel node={r.node} />;
-    else if (BASE_KINDS.includes(r.node.kind)) body = <BaseNodePanel node={r.node} />;
-    else if (NARRATIVE_KINDS.includes(r.node.kind)) body = <NodePanel node={r.node} />;
+    else if (BASE_KINDS.includes(r.node.kind) || r.node.kind === LINKING_NODE_KIND) body = <BaseNodePanel node={r.node} onSelect={onSelect} onNavigate={onNavigate} />;
+    else if (NARRATIVE_KINDS.includes(r.node.kind)) body = <NodePanel node={r.node} onSelect={onSelect} onNavigate={onNavigate} />;
     else if (r.item) body = <ItemPanel item={r.item} viaNode={r.node} />;
     else if (r.location) body = <LocationPanel location={r.location} viaNode={r.node} />;
-    else body = <NodePanel node={r.node} />;
+    else body = <NodePanel node={r.node} onSelect={onSelect} onNavigate={onNavigate} />;
   }
-  return <aside className="inspector" key={`${kind}:${id}`}>{toggle}{body ?? <div className="empty">Record not found in this game.</div>}</aside>;
+  const boxSize = inspectorNodeSizeBinding({
+    selection, game: s, library: lib, dispatch, libraryDispatch: libDispatch,
+  });
+  const selectionKey = [
+    kind,
+    id,
+    selection.storyId || '',
+    selection.coll || '',
+    selection.scope?.coll || '',
+    ...(selection.scope?.parentPath || (selection.scope?.parentId ? [selection.scope.parentId] : [])),
+    ...(selection.graphPath || []),
+  ].join(':');
+  return (
+    <aside className="inspector">
+      {resizeHandle}
+      {toggle}
+      <React.Fragment key={selectionKey}>
+        {body ?? <div className="empty">Record not found in this game.</div>}
+        {body && boxSize && <NodeBoxSizeFields entity={boxSize.entity} role={boxSize.role} onPatch={boxSize.onPatch} />}
+      </React.Fragment>
+    </aside>
+  );
 }

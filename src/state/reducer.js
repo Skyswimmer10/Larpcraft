@@ -1,3 +1,7 @@
+import { applyFrameScale } from '../lib/frameScale.js';
+import { moveFrameContents } from '../lib/frameContents.js';
+import { includeGeneratedCharacterNodes, syncCharacterArchetypeGraph } from '../lib/characterArchetype.js';
+
 // Pure state transitions. Every view dispatches through here, so an edit made
 // anywhere (inspector, teams screen, uploader) is visible everywhere on the
 // next render — there is exactly one copy of each entity.
@@ -214,18 +218,26 @@ export function reducer(state, action) {
       return { ...state, storyDynamicsGraph: action.graph };
     }
 
+    case 'SYNC_CHARACTER_ARCHETYPE': {
+      const scope = action.scope || { coll: 'nodes' };
+      const graph = locateGraph(state, scope);
+      const next = syncCharacterArchetypeGraph(graph, action.id, action.patch);
+      return next === graph ? state : writeGraph(state, scope, next);
+    }
+
     // Delete a node and every connection (and Weaver alignment) touching it.
     // Subnodes attached to it are detached (set floating), never destroyed.
     case 'DELETE_NODE': {
       const { nodeId } = action;
       if (!state.nodes[nodeId]) return state;
       const nodes = { ...state.nodes };
-      delete nodes[nodeId];
+      const removed = includeGeneratedCharacterNodes(nodes, [nodeId]);
+      removed.forEach((id) => delete nodes[id]);
       const subnodes = Object.fromEntries(Object.entries(state.subnodes || {}).map(([id, sn]) =>
         [id, sn.parentRef?.nodeId === nodeId ? { ...sn, parentRef: null } : sn]));
       return {
         ...state, nodes, subnodes,
-        edges: state.edges.filter((e) => e.from !== nodeId && e.to !== nodeId),
+        edges: state.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)),
         alignments: (state.alignments || []).filter((a) => a.story !== nodeId && a.task !== nodeId),
       };
     }
@@ -307,20 +319,12 @@ export function reducer(state, action) {
     // whose top-left sits inside the frame, and frames fully inside it.
     case 'FRAME_MOVE': {
       const { frameId, dx, dy } = action;
-      const fr = state.frames?.[frameId];
-      if (!fr) return state;
-      if (fr.shape === 'circle' || fr.shape === 'arrow') {
-        return { ...state, frames: { ...state.frames, [frameId]: { ...fr, x: fr.x + dx, y: fr.y + dy } } };
-      }
-      const inside = (x, y) => x >= fr.x && x <= fr.x + fr.w && y >= fr.y && y <= fr.y + fr.h;
-      const shift = (coll) => Object.fromEntries(Object.entries(coll).map(([id, n]) =>
-        [id, inside(n.x, n.y) ? { ...n, x: n.x + dx, y: n.y + dy } : n]));
-      const frames = Object.fromEntries(Object.entries(state.frames).map(([id, f]) => {
-        if (id === frameId) return [id, { ...f, x: f.x + dx, y: f.y + dy }];
-        return [id, inside(f.x, f.y) && inside(f.x + f.w, f.y + f.h) ? { ...f, x: f.x + dx, y: f.y + dy } : f];
-      }));
-      return { ...state, frames, nodes: shift(state.nodes), subnodes: shift(state.subnodes || {}), frameworks: shift(state.frameworks || {}), numberMarkers: shift(state.numberMarkers || {}), titleMarkers: shift(state.titleMarkers || {}) };
+      const moved = moveFrameContents(state, frameId, dx, dy);
+      return moved ? { ...state, ...moved } : state;
     }
+
+    case 'FRAME_SCALE':
+      return applyFrameScale(state, action.frameId, action.transform);
 
     // Convert a Frame into a Composite (concept node): member nodes move into
     // the new node's sub-graph; interior edges follow; edges crossing the
@@ -407,8 +411,9 @@ export function reducer(state, action) {
       const g = locateGraph(state, scope);
       if (!g.nodes[id]) return state;
       const nodes = { ...g.nodes };
-      delete nodes[id];
-      const next = writeGraph(state, scope, { nodes, edges: g.edges.filter((e) => e.from !== id && e.to !== id) });
+      const removed = includeGeneratedCharacterNodes(nodes, [id]);
+      removed.forEach((nodeId) => delete nodes[nodeId]);
+      const next = writeGraph(state, scope, { nodes, edges: g.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)) });
       // Deleting a top-level task also clears its Weaver alignments.
       if ((scope.coll === 'taskNodes' || scope.coll === 'storyboardNodes') && !scopePath(scope).length) {
         next.alignments = (next.alignments || []).filter((a) => a.task !== id);
@@ -462,6 +467,11 @@ export function reducer(state, action) {
       if (!g.frames?.[id]) return state;
       return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames: { ...g.frames, [id]: { ...g.frames[id], ...patch } } });
     }
+    case 'GRAPH_SCALE_FRAME': {
+      const { scope, id, transform } = action;
+      const g = locateGraph(state, scope);
+      return writeGraph(state, scope, applyFrameScale(g, id, transform));
+    }
     case 'GRAPH_DELETE_FRAME': {
       const { scope, id } = action;
       const g = locateGraph(state, scope);
@@ -513,26 +523,8 @@ export function reducer(state, action) {
     case 'GRAPH_MOVE_FRAME': {
       const { scope, id, dx, dy } = action;
       const g = locateGraph(state, scope);
-      const fr = g.frames?.[id];
-      if (!fr) return state;
-      if (fr.shape === 'circle' || fr.shape === 'arrow') {
-        return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges, frames: { ...g.frames, [id]: { ...fr, x: fr.x + dx, y: fr.y + dy } } });
-      }
-      const inside = (x, y) => x >= fr.x && x <= fr.x + fr.w && y >= fr.y && y <= fr.y + fr.h;
-      const nodes = Object.fromEntries(Object.entries(g.nodes).map(([nodeId, n]) => (
-        [nodeId, inside(n.x, n.y) ? { ...n, x: n.x + dx, y: n.y + dy } : n]
-      )));
-      const frames = Object.fromEntries(Object.entries(g.frames || {}).map(([frameId, f]) => {
-        if (frameId === id) return [frameId, { ...f, x: f.x + dx, y: f.y + dy }];
-        return [frameId, inside(f.x, f.y) && inside(f.x + f.w, f.y + f.h) ? { ...f, x: f.x + dx, y: f.y + dy } : f];
-      }));
-      const numberMarkers = Object.fromEntries(Object.entries(g.numberMarkers || {}).map(([markerId, marker]) => (
-        [markerId, inside(marker.x, marker.y) ? { ...marker, x: marker.x + dx, y: marker.y + dy } : marker]
-      )));
-      const titleMarkers = Object.fromEntries(Object.entries(g.titleMarkers || {}).map(([markerId, marker]) => (
-        [markerId, inside(marker.x, marker.y) ? { ...marker, x: marker.x + dx, y: marker.y + dy } : marker]
-      )));
-      return writeGraph(state, scope, { nodes, edges: g.edges, frames, numberMarkers, titleMarkers });
+      const moved = moveFrameContents(g, id, dx, dy);
+      return moved ? writeGraph(state, scope, { ...g, ...moved }) : state;
     }
 
     case 'SET_IMAGE': {

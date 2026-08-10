@@ -13,6 +13,7 @@ import GameMasterRules from './views/GameMasterRules.jsx';
 import Weaver from './views/Weaver.jsx';
 import TasksView from './views/TasksView.jsx';
 import StoryDynamics from './views/StoryDynamics.jsx';
+import NarrativeLinkSourceModal from './components/NarrativeLinkSourceModal.jsx';
 
 const BUILD_VIEWS = [
   { id: 'weaver', label: 'Master Story', color: 'var(--c-sensor)', comp: Weaver, count: (p) => Object.keys(p.masterNodes ?? {}).length },
@@ -34,6 +35,12 @@ const LIB_GROUPS = [
   { id: 'story', label: 'Story & Narrative', color: 'var(--c-narrative)', colls: ['concepts', 'narrative', 'stories'] },
 ];
 
+const INSPECTOR_WIDTH_KEY = 'larpcraft:inspectorWidth';
+const inspectorWidthFromStorage = () => {
+  const saved = Number(window.localStorage.getItem(INSPECTOR_WIDTH_KEY));
+  return Number.isFinite(saved) ? Math.max(280, Math.min(720, saved)) : 320;
+};
+
 function Shell() {
   const proj = useGame();
   const lib = useLibrary();
@@ -44,6 +51,8 @@ function Shell() {
   const [selection, setSelection] = useState(null);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [inspectorWidth, setInspectorWidth] = useState(inspectorWidthFromStorage);
+  const [linkSource, setLinkSource] = useState(null);
 
   if (!proj || !lib) return <div className="boot">Loading library &amp; game...</div>;
 
@@ -60,8 +69,36 @@ function Shell() {
 
   const backdrops = proj.meta.backdrops || {};
   const contentBackdrop = backdrops.content;
+  const resizeInspector = (requestedWidth) => {
+    const navWidth = navCollapsed ? 38 : 216;
+    const available = Math.max(280, window.innerWidth - navWidth - 320);
+    const nextWidth = Math.round(Math.max(280, Math.min(720, available, requestedWidth)));
+    setInspectorWidth(nextWidth);
+    window.localStorage.setItem(INSPECTOR_WIDTH_KEY, `${nextWidth}`);
+  };
+  const navigateToNarrativeLibraryEditor = ({ type, id }) => {
+    const collection = type === 'concepts' ? lib.concepts : type === 'stories' ? lib.stories : lib.narrative;
+    if (!collection?.[id]) {
+      window.alert('This linked library record no longer exists. Choose a replacement in the Linking Node inspector.');
+      return;
+    }
+    setView('library');
+    setLibGroup('story');
+    setSelection({ kind: `lib-${type}`, id, openEditor: true });
+  };
+  const showNarrativeLibrarySource = (targetRef) => {
+    const collection = targetRef?.type === 'concepts' ? lib.concepts : targetRef?.type === 'stories' ? lib.stories : lib.narrative;
+    if (!collection?.[targetRef?.id]) {
+      window.alert('This linked library record no longer exists. Choose a replacement in the Linking Node inspector.');
+      return;
+    }
+    setLinkSource(targetRef);
+  };
   return (
-    <div className={`chrome${navCollapsed ? ' nav-collapsed' : ''}${inspectorCollapsed ? ' inspector-collapsed' : ''}${contentBackdrop?.image?.dataUrl ? ' has-content-backdrop' : ''}`}>
+    <div
+      className={`chrome${navCollapsed ? ' nav-collapsed' : ''}${inspectorCollapsed ? ' inspector-collapsed' : ''}${contentBackdrop?.image?.dataUrl ? ' has-content-backdrop' : ''}`}
+      style={{ '--insp-w': inspectorCollapsed ? '38px' : `${inspectorWidth}px` }}
+    >
       {contentBackdrop?.image?.dataUrl && (
         <div className="contentbg"
           style={{ backgroundImage: `url(${contentBackdrop.image.dataUrl})`, opacity: contentBackdrop.opacity ?? 0.25 }} />
@@ -95,15 +132,26 @@ function Shell() {
         </div>
       </div>
       {isLibrary
-        ? <Library group={libGroup} selection={selection} onSelect={setSelection} />
+        ? <Library group={libGroup} selection={selection} onSelect={setSelection} onNavigate={showNarrativeLibrarySource} />
         : isRules
           ? <GameMasterRules />
-          : <ActiveView selection={selection} onSelect={setSelection} />}
+          : <ActiveView selection={selection} onSelect={setSelection} onNavigate={showNarrativeLibrarySource} />}
       <Inspector
         selection={isRules ? null : selection}
         onSelect={setSelection}
+        onNavigate={showNarrativeLibrarySource}
         collapsed={inspectorCollapsed}
         onCollapsedChange={setInspectorCollapsed}
+        width={inspectorWidth}
+        onWidthChange={resizeInspector}
+      />
+      <NarrativeLinkSourceModal
+        targetRef={linkSource}
+        onClose={() => setLinkSource(null)}
+        onOpenEditor={(targetRef) => {
+          setLinkSource(null);
+          navigateToNarrativeLibraryEditor(targetRef);
+        }}
       />
     </div>
   );

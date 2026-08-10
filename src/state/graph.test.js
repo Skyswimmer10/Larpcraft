@@ -146,4 +146,37 @@ describe('migrateProject backfills the task graph', () => {
     expect(m.storyDynamicsEdges).toBeUndefined();
     expect(m.storyDynamicsGraph.curves.length).toBeGreaterThan(0);
   });
+
+  it('repairs an accidentally emptied Operation Chimera mechanics schedule from its independent storyboard', () => {
+    const old = makeProjectSeed();
+    old.rev = 9;
+    old.taskNodes = {
+      KEEP: { id: 'KEEP', kind: 'mechanic', mechKind: 'action', title: 'Keep me', advantages: [''], effects: [''], variations: [''] },
+    };
+    old.taskEdges = [];
+    const migrated = migrateProject(old);
+    expect(migrated.taskNodes.KEEP.title).toBe('Keep me');
+    expect(migrated.taskNodes['TSK-1'].title).toBe('Assemble at Sector 7');
+    expect(migrated.taskNodes['TSK-4'].title).toBe('Score the extraction beacon');
+    expect(Object.values(migrated.taskNodes).filter((node) => node.kind === 'task')).toHaveLength(4);
+    expect(migrated.rev).toBe(11);
+  });
+
+  it('replaces a temporary verification Action with the preserved MacroDroid physical reference', () => {
+    const old = makeProjectSeed();
+    old.taskNodes = {
+      TEMP: {
+        id: 'TEMP', kind: 'mechanic', mechKind: 'action', title: 'Action',
+        body: 'One atomic physical, cognitive, or social step performed by a player or team.',
+        advantages: [''], effects: [''], variations: [''],
+      },
+      ...Object.fromEntries(Object.entries(old.storyboardNodes).filter(([, node]) => node.kind === 'task')),
+    };
+    const migrated = migrateProject(old);
+    expect(migrated.taskNodes.TEMP).toBeUndefined();
+    expect(migrated.taskNodes['CHM-TSK-MACRODROID']).toMatchObject({
+      physicalKind: 'item', itemId: 'LIB-ITM-MACRODROID-PHONE', title: 'MacroDroid Phone Bridge',
+    });
+    expect(Object.values(migrated.taskNodes).filter((node) => node.kind !== 'travel')).toHaveLength(5);
+  });
 });

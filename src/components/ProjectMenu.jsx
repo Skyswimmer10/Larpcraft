@@ -1,16 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useGame, useDispatch, newGame } from '../state/store.jsx';
+import { useGame, useDispatch, useLibrary, useLibraryDispatch, newGame } from '../state/store.jsx';
 import { makeEmptyProject, SEED_REV } from '../data/seed.js';
 import { downloadText } from '../lib/csv.js';
+import { createWorkspaceBackup, readWorkspaceBackup } from '../lib/workspaceTransfer.js';
 
-// File menu: the active game's lifecycle. The Library is untouched by all of
-// these — only the ActiveProjectState is created / serialized / replaced.
+// File menu: game-only files remain available; complete workspace files
+// transfer the active game and reusable master library together.
 export default function ProjectMenu() {
   const proj = useGame();
   const dispatch = useDispatch();
+  const lib = useLibrary();
+  const libDispatch = useLibraryDispatch();
   const [open, setOpen] = useState(false);
   const [backdropOpen, setBackdropOpen] = useState(false);
   const fileRef = useRef(null);
+  const workspaceFileRef = useRef(null);
   const rootRef = useRef(null);
 
   useEffect(() => {
@@ -34,6 +38,26 @@ export default function ProjectMenu() {
   });
 
   const doOpen = act(() => fileRef.current?.click());
+
+  const doSaveWorkspace = act(() => {
+    const slug = proj.meta.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace';
+    const backup = createWorkspaceBackup(lib, proj);
+    downloadText(`${slug}.larpcraft-workspace.json`, JSON.stringify(backup, null, 2), 'application/json');
+  });
+
+  const doOpenWorkspace = act(() => workspaceFileRef.current?.click());
+
+  async function openWorkspaceFile(file) {
+    try {
+      const restored = readWorkspaceBackup(await file.text());
+      if (!window.confirm("Replace this browser's complete Larpcraft workspace? This restores both the master library and active game.")) return;
+      libDispatch({ type: 'RESET', seed: restored.library });
+      dispatch({ type: 'RESET', seed: restored.project });
+      window.alert('Complete workspace restored. The master library and active game are now available on this computer.');
+    } catch (err) {
+      window.alert(err?.message || "Couldn't read this Larpcraft workspace file.");
+    }
+  }
 
   async function openFile(file) {
     try {
@@ -63,6 +87,9 @@ export default function ProjectMenu() {
       <button className={`menubtn${open ? ' on' : ''}`} onClick={() => setOpen(!open)}>File</button>
       {open && (
         <div className="menudrop">
+          <button onClick={doOpenWorkspace}>Open complete workspace...</button>
+          <button onClick={doSaveWorkspace}>Save complete workspace</button>
+          <div className="menusep" />
           <button onClick={doNew}>New game…</button>
           <button onClick={doOpen}>Open game (JSON)…</button>
           <button onClick={doSave}>Save game as JSON</button>
@@ -75,6 +102,8 @@ export default function ProjectMenu() {
       )}
       <input ref={fileRef} hidden type="file" accept=".json,application/json"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) openFile(f); e.target.value = ''; }} />
+      <input ref={workspaceFileRef} hidden type="file" accept=".json,application/json"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) openWorkspaceFile(f); e.target.value = ''; }} />
       {backdropOpen && <BackdropSettings onClose={() => setBackdropOpen(false)} />}
     </div>
   );

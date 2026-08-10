@@ -5,6 +5,8 @@ import FlowCanvas, { visibleCanvasPlacement } from '../components/FlowCanvas.jsx
 import { storyTrackToStructure } from '../state/bridge.js';
 import { genId } from '../data/csvSchemas.js';
 import { LIB_PREFIX } from '../data/seed.js';
+import { nextVisualMarkerValue } from '../lib/visualMarkers.js';
+import { remapCanvasClipboard } from '../lib/canvasClipboard.js';
 
 const TASK_COLOR = ENTITY_COLORS.task || '#5BC0BE';
 const TRAVEL_COLOR = ENTITY_COLORS.travel || '#E0A23C';
@@ -138,10 +140,16 @@ export default function Weaver({ selection, onSelect = () => {} }) {
     dispatch({ type: 'GRAPH_ADD_FRAME', scope: { coll: 'masterNodes' }, frame });
     onSelect({ kind: 'graphframe', scope: { coll: 'masterNodes' }, id });
   };
-  const addNumberMarker = () => {
-    const id = genId(masterNumberMarkers, 'MNUM-');
-    const values = Object.values(masterNumberMarkers).map((m) => Number(m.value)).filter(Number.isFinite);
-    const marker = { id, value: values.length ? Math.max(...values) + 1 : 1, ...visibleCanvasPlacement({ x: 120, y: 120 }, { w: 34, h: 34 }), color: '#E8D25C' };
+  const addSpline = () => {
+    const id = genId(masterFrames, 'MSPL-');
+    const pos = visibleCanvasPlacement({ x: 110, y: 160 }, { w: 220, h: 80 });
+    const frame = { id, label: 'Spline', shape: 'spline', ...pos, w: 220, h: 80, curveX: 0, curveY: -70, color: '#5CA8F5' };
+    dispatch({ type: 'GRAPH_ADD_FRAME', scope: { coll: 'masterNodes' }, frame });
+    onSelect({ kind: 'graphframe', scope: { coll: 'masterNodes' }, id });
+  };
+  const addVisualMarker = (markerType = 'number') => {
+    const id = genId(masterNumberMarkers, markerType === 'letter' ? 'MLTR-' : 'MNUM-');
+    const marker = { id, markerType, value: nextVisualMarkerValue(masterNumberMarkers, markerType), ...visibleCanvasPlacement({ x: 120, y: 120 }, { w: 34, h: 34 }), color: '#E8D25C' };
     dispatch({ type: 'GRAPH_ADD_NUMBER_MARKER', scope: { coll: 'masterNodes' }, marker });
     onSelect({ kind: 'graphnumber', scope: { coll: 'masterNodes' }, id });
   };
@@ -294,9 +302,11 @@ export default function Weaver({ selection, onSelect = () => {} }) {
               <div className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
               <button className="btn ghost small" onClick={addFrame}>+ Frame</button>
               <button className="btn ghost small" onClick={addCircle}>+ Circle</button>
-              <button className="btn ghost small" onClick={addNumberMarker}>+ Number</button>
+              <button className="btn ghost small" onClick={() => addVisualMarker('number')}>+ Number</button>
+              <button className="btn ghost small" onClick={() => addVisualMarker('letter')}>+ Letter</button>
               <button className="btn ghost small" onClick={addTitleMarker}>+ Title</button>
               <button className="btn ghost small" onClick={addArrow}>+ Arrow</button>
+              <button className="btn ghost small" onClick={addSpline}>+ Spline</button>
               </div>
               <button className="btn ghost small" onClick={saveTemplate}>Save as Template</button>
             </div>
@@ -305,10 +315,20 @@ export default function Weaver({ selection, onSelect = () => {} }) {
             nodes={masterNodes} edges={masterEdges} selId={armed || masterSelId} colorOf={(n) => n.color || MASTER_COLOR}
             onSelect={(id) => { setArmed((cur) => (cur === id ? null : id)); onSelect({ kind: 'graphnode', scope: { coll: 'masterNodes' }, id }); }}
             onMove={(id, x, y) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope: { coll: 'masterNodes' }, id, patch: { x, y } })}
+            onUpdateNode={(id, patch) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope: { coll: 'masterNodes' }, id, patch })}
             onMoveNodes={(positions, meta) => dispatch({
               type: 'BATCH',
               undoGroup: meta?.undoGroup,
               actions: Object.entries(positions).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_NODE', scope: { coll: 'masterNodes' }, id, patch })),
+            })}
+            onMoveSelection={(patches, meta) => dispatch({
+              type: 'BATCH', undoGroup: meta?.undoGroup,
+              actions: [
+                ...Object.entries(patches.nodes).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_NODE', scope: { coll: 'masterNodes' }, id, patch })),
+                ...Object.entries(patches.frames).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_FRAME', scope: { coll: 'masterNodes' }, id, patch })),
+                ...Object.entries(patches.numberMarkers).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_NUMBER_MARKER', scope: { coll: 'masterNodes' }, id, patch })),
+                ...Object.entries(patches.titleMarkers).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_TITLE_MARKER', scope: { coll: 'masterNodes' }, id, patch })),
+              ],
             })}
             onResizeNode={(id, patch) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope: { coll: 'masterNodes' }, id, patch })}
             onConnect={(from, to, edgePatch = {}) => dispatch({ type: 'GRAPH_ADD_EDGE', scope: { coll: 'masterNodes' }, from, to, color: MASTER_COLOR, ...edgePatch })}
@@ -317,6 +337,16 @@ export default function Weaver({ selection, onSelect = () => {} }) {
             onDeleteNode={(id) => { dispatch({ type: 'GRAPH_DELETE_NODE', scope: { coll: 'masterNodes' }, id }); setArmed(null); onSelect(null); }}
             onDeleteNodes={(ids) => {
               dispatch({ type: 'BATCH', actions: ids.map((id) => ({ type: 'GRAPH_DELETE_NODE', scope: { coll: 'masterNodes' }, id })) });
+              setArmed(null);
+              onSelect(null);
+            }}
+            onDeleteSelection={(selection) => {
+              dispatch({ type: 'BATCH', actions: [
+                ...selection.nodes.map((id) => ({ type: 'GRAPH_DELETE_NODE', scope: { coll: 'masterNodes' }, id })),
+                ...selection.frames.map((id) => ({ type: 'GRAPH_DELETE_FRAME', scope: { coll: 'masterNodes' }, id })),
+                ...selection.numberMarkers.map((id) => ({ type: 'GRAPH_DELETE_NUMBER_MARKER', scope: { coll: 'masterNodes' }, id })),
+                ...selection.titleMarkers.map((id) => ({ type: 'GRAPH_DELETE_TITLE_MARKER', scope: { coll: 'masterNodes' }, id })),
+              ] });
               setArmed(null);
               onSelect(null);
             }}
@@ -329,8 +359,11 @@ export default function Weaver({ selection, onSelect = () => {} }) {
             frames={masterFrames}
             selFrame={masterFrameSelId}
             onFrameSelect={(id) => onSelect({ kind: 'graphframe', scope: { coll: 'masterNodes' }, id })}
+            onFrameDelete={(id) => { dispatch({ type: 'GRAPH_DELETE_FRAME', scope: { coll: 'masterNodes' }, id }); onSelect(null); }}
             onFrameMove={(id, dx, dy) => dispatch({ type: 'GRAPH_MOVE_FRAME', scope: { coll: 'masterNodes' }, id, dx, dy })}
             onFrameResize={(id, w, h) => dispatch({ type: 'GRAPH_UPDATE_FRAME', scope: { coll: 'masterNodes' }, id, patch: { w, h } })}
+            onFrameGeometry={(id, patch) => dispatch({ type: 'GRAPH_UPDATE_FRAME', scope: { coll: 'masterNodes' }, id, patch })}
+            onFrameScale={(id, transform) => dispatch({ type: 'GRAPH_SCALE_FRAME', scope: { coll: 'masterNodes' }, id, transform })}
             numberMarkers={masterNumberMarkers}
             selNumberMarker={selection?.kind === 'graphnumber' && selection.scope?.coll === 'masterNodes' ? selection.id : null}
             onNumberMarkerSelect={(id) => onSelect({ kind: 'graphnumber', scope: { coll: 'masterNodes' }, id })}
@@ -338,6 +371,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
               const marker = masterNumberMarkers[id];
               if (marker) dispatch({ type: 'GRAPH_UPDATE_NUMBER_MARKER', scope: { coll: 'masterNodes' }, id, patch: { x: marker.x + dx, y: marker.y + dy } });
             }}
+            onNumberMarkerUpdate={(id, patch) => dispatch({ type: 'GRAPH_UPDATE_NUMBER_MARKER', scope: { coll: 'masterNodes' }, id, patch })}
             onNumberMarkerDelete={(id) => { dispatch({ type: 'GRAPH_DELETE_NUMBER_MARKER', scope: { coll: 'masterNodes' }, id }); onSelect(null); }}
             titleMarkers={masterTitleMarkers}
             selTitleMarker={selection?.kind === 'graphtitle' && selection.scope?.coll === 'masterNodes' ? selection.id : null}
@@ -351,6 +385,17 @@ export default function Weaver({ selection, onSelect = () => {} }) {
               const id = genId(masterNodes, 'ACT-');
               dispatch({ type: 'GRAPH_ADD_NODE', scope: { coll: 'masterNodes' }, node: { id, kind: 'masterAct', title: p.title, body: p.body ?? '', phaseNotes: p.phaseNotes ?? '', color: p.color ?? null, x: p.x, y: p.y, w: p.w ?? undefined, h: p.h ?? undefined } });
               onSelect({ kind: 'graphnode', scope: { coll: 'masterNodes' }, id });
+            }}
+            onPasteNodes={(clipboard) => {
+              const pasted = remapCanvasClipboard(clipboard, masterNodes, 'ACT-COPY-');
+              dispatch({
+                type: 'BATCH',
+                actions: [
+                  ...Object.values(pasted.nodes).map((node) => ({ type: 'GRAPH_ADD_NODE', scope: { coll: 'masterNodes' }, node })),
+                  ...pasted.edges.map((edge) => ({ type: 'GRAPH_ADD_EDGE', scope: { coll: 'masterNodes' }, ...edge })),
+                ],
+              });
+              onSelect({ kind: 'graphnode', scope: { coll: 'masterNodes' }, id: pasted.ids[pasted.ids.length - 1] });
             }}
           />
         </div>

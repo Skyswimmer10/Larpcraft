@@ -1,10 +1,14 @@
 export const MECHANIC_NODE_KINDS = [
   'taskTemplate',
-  'challengeCore',
+  'cooperation',
   'physicalRestriction',
   'propInteraction',
   'sensorNode',
   'actuatorNode',
+  'action',
+  'playerFacingInstruction',
+  'actionSequence',
+  'actionProbability',
   'characterState',
   'progressState',
 ] as const;
@@ -88,13 +92,10 @@ export interface TaskTemplateNode extends MechanicNodeBase {
   sub: MechanicSubgraph;
 }
 
-export interface ChallengeCoreNode extends MechanicNodeBase {
-  kind: 'challengeCore';
-  goal: string;
+export interface CooperationNode extends MechanicNodeBase {
+  kind: 'cooperation';
   cooperationStyle: 'Solo' | 'Parallel' | 'Relay' | 'Synchronous' | 'Asymmetric';
-  physicalTrackSubnodeIds?: string[];
-  cognitiveTrackSubnodeIds?: string[];
-  noteColor?: string | null;
+  attachedSubnodeIds?: string[];
 }
 
 export interface PhysicalRestrictionNode extends MechanicNodeBase {
@@ -164,6 +165,55 @@ export interface ActuatorNode extends MechanicNodeBase {
   nodeColor?: string | null;
 }
 
+export interface ActionNode extends MechanicNodeBase {
+  kind: 'action';
+  advantages?: string[];
+  effects?: string[];
+  variations?: string[];
+  tokenMechanismId?: string;
+  orderMechanismId?: string;
+  specialMechanismId?: string;
+  attachedSubnodeIds?: string[];
+}
+
+export interface ActionMechanismNode extends Omit<MechanicNodeBase, 'kind'> {
+  kind: 'actionMechanism';
+  actionMechanismId: string;
+  mechanismSystem: 'token' | 'order' | 'special' | string;
+  mechanismCategory: string;
+  advantages: string[];
+  effects: string[];
+  variations: string[];
+  imageScale?: number;
+  imagePositionX?: number;
+  imagePositionY?: number;
+}
+
+export interface PlayerFacingInstructionNode extends MechanicNodeBase {
+  kind: 'playerFacingInstruction';
+  body: string;
+}
+
+export interface ActionSequenceNode extends MechanicNodeBase {
+  kind: 'actionSequence';
+  sequenceMode: 'Custom' | string;
+  sequenceInstruction?: string;
+  attachedSubnodeIds?: string[];
+  sub: MechanicSubgraph;
+}
+
+export interface ResolutionNode extends MechanicNodeBase {
+  kind: 'actionProbability';
+  resolutionMechanismId?: string;
+  resolutionType: string;
+  variations: string[];
+  emotionalSpike?: string;
+  effects: string[];
+  imageScale?: number;
+  imagePositionX?: number;
+  imagePositionY?: number;
+}
+
 export interface CharacterStateNode extends MechanicNodeBase {
   kind: 'characterState';
   body: string;
@@ -182,11 +232,16 @@ export interface ProgressStateNode extends MechanicNodeBase {
 
 export type MechanicNode =
   | TaskTemplateNode
-  | ChallengeCoreNode
+  | CooperationNode
   | PhysicalRestrictionNode
   | PropInteractionNode
   | SensorNode
   | ActuatorNode
+  | ActionNode
+  | ActionMechanismNode
+  | PlayerFacingInstructionNode
+  | ActionSequenceNode
+  | ResolutionNode
   | CharacterStateNode
   | ProgressStateNode;
 
@@ -214,11 +269,11 @@ export const MECHANIC_NODE_TYPE_META: Record<MechanicNodeKind, {
     icon: 'layers',
     blurb: 'Reusable collapsed container that opens into a full editable mechanics graph.',
   },
-  challengeCore: {
-    label: 'Challenge Core',
+  cooperation: {
+    label: 'Cooperation',
     color: '#A87BF0',
-    icon: 'cog',
-    blurb: 'Central task engine: goal, physical/cognitive tracks, and cooperation style. Advanced behavior comes from attached subnodes.',
+    icon: 'users',
+    blurb: 'Defines how players cooperate, coordinate, divide roles, or act together.',
   },
   physicalRestriction: {
     label: 'Physical Restriction',
@@ -243,6 +298,30 @@ export const MECHANIC_NODE_TYPE_META: Record<MechanicNodeKind, {
     color: '#5CA8F5',
     icon: 'flag',
     blurb: 'Gameplay output that defines what effect happens in the world.',
+  },
+  action: {
+    label: 'Action',
+    color: '#58C7A6',
+    icon: 'zap',
+    blurb: 'One atomic physical, cognitive, or social step performed by a player or team.',
+  },
+  playerFacingInstruction: {
+    label: 'Player-Facing Instruction',
+    color: '#E8D25C',
+    icon: 'book',
+    blurb: 'The exact instruction presented or read to players for an action.',
+  },
+  actionSequence: {
+    label: 'Action Sequence',
+    color: '#3EC6D6',
+    icon: 'layers',
+    blurb: 'Collapsible container for a custom sequence of actions.',
+  },
+  actionProbability: {
+    label: 'Resolution',
+    color: '#F08CB4',
+    icon: 'pin',
+    blurb: 'Selects and explains the resolution mechanism used to turn uncertainty into an outcome.',
   },
   characterState: {
     label: 'Character State',
@@ -280,6 +359,7 @@ export const MECHANIC_SUBNODE_KINDS = [
   'team',
   'comment',
   'coreMechanicModifier',
+  'actionTypePattern',
 ] as const;
 
 export type MechanicSubnodeKind = typeof MECHANIC_SUBNODE_KINDS[number];
@@ -465,6 +545,14 @@ export interface CoreMechanicModifierMod extends MechanicSubnodeBase {
   canBeCombined?: boolean;
 }
 
+export interface ActionMechanicModifierMod extends MechanicSubnodeBase {
+  kind: 'actionTypePattern';
+  tokenMechanismId?: string;
+  orderMechanismId?: string;
+  specialMechanismId?: string;
+  activeMechanismId?: string;
+}
+
 export type MechanicSubnode =
   | ProgressiveFeedbackMod
   | FailSafeScaffoldingMod
@@ -486,7 +574,8 @@ export type MechanicSubnode =
   | PlayerSupportMod
   | TeamSupportMod
   | CommentMod
-  | CoreMechanicModifierMod;
+  | CoreMechanicModifierMod
+  | ActionMechanicModifierMod;
 
 export const MECHANIC_SUBNODE_TYPE_META: Record<MechanicSubnodeKind, {
   label: string;
@@ -663,5 +752,9 @@ export const MECHANIC_SUBNODE_TYPE_META: Record<MechanicSubnodeKind, {
     reusable: false,
     category: 'gameplayModifiers',
     purpose: 'Allows the designer to deliberately change one core aspect of the task to create a meaningfully different experience or difficulty level.',
+  },
+  actionTypePattern: {
+    label: 'Action Type Pattern', color: '#58C7A6', icon: 'cog', reusable: true, category: 'gameplayModifiers',
+    purpose: 'Choose a human-readable action pattern, then define and save its advantages, effects, and variations.',
   },
 };

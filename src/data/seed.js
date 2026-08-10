@@ -1,4 +1,7 @@
 import { cloneDefaultStoryDynamicsGraph } from './storyDynamics.js';
+import { actionPatternMechanismId, actionPatternSystemForCode, ACTION_MECHANISMS, makeActionMechanicTemplates, makeActionPatternMechanisms } from './actionMechanics.js';
+import { ACTION_PROBABILITY_RESOLUTIONS, ACTION_PROBABILITY_RESOLUTION_TYPES, actionProbabilityResolution } from './actionProbability.js';
+import { CURRENT_MECHANIC_PRIMITIVE_KINDS, CURRENT_MECHANIC_SUBNODE_KINDS } from '../mechanics/nodeArchive.js';
 
 // Two separate stores:
 //
@@ -13,8 +16,8 @@ import { cloneDefaultStoryDynamicsGraph } from './storyDynamics.js';
 //      game-state fields (build status, availability, placement, assignment,
 //      sensor battery) · edits affect only this game
 
-export const LIB_REV = 16;
-export const SEED_REV = 9;
+export const LIB_REV = 29;
+export const SEED_REV = 11;
 
 // Default item types — seeds the editable lib.itemTypes collection.
 export const DEFAULT_ITEM_TYPES = {
@@ -115,6 +118,14 @@ export const BASE_NODE_TYPES = {
 };
 export const BASE_KINDS = Object.keys(BASE_NODE_TYPES);
 
+export const LINKING_NODE_TYPE = {
+  id: 'linkingNode',
+  label: 'Linking Node',
+  color: '#68D7C0',
+  icon: 'link',
+  blurb: 'Links to a saved narrative node, concept, or story structure without duplicating it until requested.',
+};
+
 // Concept-internal planning nodes. These stay out of the main base-node
 // palette and only appear when editing a concept's inner graph.
 export const CONCEPT_INTERNAL_NODE_TYPES = {
@@ -188,6 +199,7 @@ export const cloneCharacterCardTemplateForSettings = (template = DEFAULT_CHARACT
 const characterCardReserved = new Set([
   'id', 'kind', 'title', 'name', 'body', 'description', 'questions', 'typeGroups', 'x', 'y', 'color', 'teamId',
   'sets', 'locationId', 'itemId', 'mechanicIds', 'sensorIds', 'history', 'primitiveId', 'image', 'sub', 'collapsed',
+  'archetypeEnabled', 'archetypeDarkSideUp', 'archetypeDarkSideBack',
 ]);
 const characterFieldLabel = (key) => key
   .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -435,6 +447,176 @@ export const FRAMEWORK_TYPES = {
       },
     ],
   },
+  descentAndRecovery: {
+    id: 'descentAndRecovery',
+    label: 'Descent and Recovery Arc',
+    title: 'Descent and Recovery Arc',
+    color: '#F08C6A',
+    icon: 'swap',
+    layout: 'storyArc',
+    blurb: 'A five-stage story arc that turns disruption and crisis into learning, recovery, and lasting growth.',
+    summary: 'Move from unrealized potential through a trigger and crisis, then climb toward recovery and a wiser new normal.',
+    phases: [
+      {
+        key: '1',
+        name: 'Comfort Zone',
+        short: 'Life is not bad, but something is missing and some potential remains unused.',
+        detail: 'Establish a stable starting point that feels incomplete rather than disastrous. The character or group has room to grow, even if they do not yet recognize it.',
+      },
+      {
+        key: '2',
+        name: 'Trigger',
+        short: 'A setback knocks the character down through misfortune, inattention, or an avoidable mistake.',
+        detail: 'Introduce the disruption that breaks the old balance. The trigger should create a problem that cannot be solved simply by returning to the comfort zone.',
+      },
+      {
+        key: '3',
+        name: 'Crisis',
+        short: 'At the lowest point, the character discovers or learns something valuable in the dark.',
+        detail: 'The crisis is both danger and opportunity. Place the insight, resource, relationship, or truth needed for change inside the difficult experience itself.',
+      },
+      {
+        key: '4',
+        name: 'Recovery',
+        short: 'The character applies what was learned and begins climbing back toward stability.',
+        detail: 'Make growth visible through action. Recovery should test whether the new knowledge can be used effectively rather than merely understood in theory.',
+      },
+      {
+        key: '5',
+        name: 'Better Place',
+        short: 'The character reaches a wiser and more resilient new normal.',
+        detail: 'End with meaningful improvement rather than a simple reset. The character is better prepared and less likely to be defeated by the same kind of challenge again.',
+      },
+    ],
+  },
+  homeVoyageReturn: {
+    id: 'homeVoyageReturn',
+    label: 'Home, Voyage, Return',
+    title: 'Home, Voyage, Return Story Circle',
+    color: '#78C6A3',
+    icon: 'swap',
+    layout: 'storyCircle8',
+    blurb: 'An eight-stage story circle that carries a hero from an incomplete home through chaos and back home transformed.',
+    summary: 'Begin in safe but limited order, cross into an unfamiliar voyage, pay for what is gained, and return able to improve home.',
+    phases: [
+      {
+        key: '1',
+        name: 'Comfort Zone',
+        short: 'Home is safe and familiar, but it is dull, incomplete, or wasting potential.',
+        detail: 'Ask how Home is less than it could be, why the hero feels anxious for adventure, what they want, and what unfamiliar world waits beyond their present life.',
+      },
+      {
+        key: '2',
+        name: 'Need or Desire',
+        short: 'The hero recognizes a want, lack, problem, or possibility that makes remaining at Home insufficient.',
+        detail: 'Give the hero a concrete pull toward change. The need may be practical, social, emotional, or psychological, but it should make the familiar world feel too small.',
+      },
+      {
+        key: '3',
+        name: 'Unfamiliar Situation',
+        short: 'The hero enters a strange new world through a deliberate choice, force, or accident.',
+        detail: 'Clarify how the journey begins, what dangers and opportunities define the new environment, and how strongly the hero still feels the pull of Home.',
+      },
+      {
+        key: '4',
+        name: 'Adaptation',
+        short: 'The hero learns the rules, skills, relationships, and perspective needed to function in the new world.',
+        detail: 'The voyage should teach something Home could not. Let attempts, mistakes, allies, opposition, and discovery reshape how the hero approaches the central problem.',
+      },
+      {
+        key: '5',
+        name: 'Get What They Want',
+        short: 'The hero reaches the apparent goal or obtains the thing that originally motivated the voyage.',
+        detail: 'Deliver meaningful success, but do not treat acquisition as the end. What the hero gains should expose a deeper cost, responsibility, or truth.',
+      },
+      {
+        key: '6',
+        name: 'Pay a Price',
+        short: 'The desired gain carries a sacrifice, consequence, reversal, or difficult recognition.',
+        detail: 'Make the price proportionate to the value of the goal. It can be material, relational, moral, physical, social, or a surrender of the hero\'s former identity.',
+      },
+      {
+        key: '7',
+        name: 'Return to Comfort',
+        short: 'The hero returns to the old world, bringing the voyage and its consequences back into familiar life.',
+        detail: 'Ask how the hero changed during the voyage and how Home now looks different. The return should test whether the transformation survives outside the strange world.',
+      },
+      {
+        key: '8',
+        name: 'Having Changed',
+        short: 'The hero completes the circle wiser, altered, and capable of making Home better.',
+        detail: 'Show the difference through action. The final state should answer how the hero will improve Home and why they can no longer live exactly as they did before.',
+      },
+    ],
+  },
+  storyBuildingSystem: {
+    id: 'storyBuildingSystem',
+    label: 'Story Building System',
+    title: 'Story Building System',
+    color: '#FF8F63',
+    icon: 'layers',
+    layout: 'decisionPath',
+    blurb: 'A diagnostic sequence for finding what a story needs next, from its central idea through delivery and combined tactics.',
+    summary: 'Ask seven practical questions to identify the missing story-building discipline, then combine the useful answers into a working recipe.',
+    phases: [
+      {
+        key: '1',
+        name: 'Concept',
+        question: 'Do you know why you need a story?',
+        short: 'Define the central idea and the change in perspective the story should create.',
+        detail: 'Stories shape how people understand themselves and the world around them. Frame the work as an adventure with a clear reason for being told.',
+      },
+      {
+        key: '2',
+        name: 'Explore',
+        question: 'Do you know where to find your story?',
+        short: 'Map the unfamiliar situation, uncertainty, and discoveries that give the story movement.',
+        detail: 'Stories help people navigate confusing and changing situations. Explore the territory ahead and identify the route, obstacles, and discoveries worth following.',
+      },
+      {
+        key: '3',
+        name: 'Character',
+        question: 'Do you know your role in the story?',
+        short: 'Choose whose experience carries the story and why the audience should trust or care about them.',
+        detail: 'Stories connect people through recognizable motives and relationships. Clarify who acts, what role they play, and why others should place trust in them.',
+      },
+      {
+        key: '4',
+        name: 'Function',
+        question: 'Do you know what your story needs to do?',
+        short: 'State the practical effect the story should have on understanding, feeling, or action.',
+        detail: 'A story should perform a useful job rather than merely present information. Decide whether it must persuade, teach, warn, unite, motivate, or help people choose.',
+      },
+      {
+        key: '5',
+        name: 'Structure',
+        question: 'Do you know how to plan your story?',
+        short: 'Select a pattern that gives events a clear sequence, rhythm, and direction.',
+        detail: 'A few durable patterns can carry an audience through complex material. Arrange the important moments so ideas build naturally and the progression feels story-shaped.',
+      },
+      {
+        key: '6',
+        name: 'Style',
+        question: 'Do you know how to tell your story?',
+        short: 'Choose the voice, imagery, tone, and emphasis that will make the story memorable.',
+        detail: 'Style helps useful information stay with the audience. Match the telling to the people, setting, and emotion without allowing decoration to obscure the central idea.',
+      },
+      {
+        key: '7',
+        name: 'Organise',
+        question: 'Do you know how to share your story?',
+        short: 'Plan where, when, and how the story will reach people and support its intended use.',
+        detail: 'Even a strong story needs deliberate delivery. Decide who should encounter it, in what form, at which moment, and how it fits the larger experience.',
+      },
+      {
+        key: '8',
+        name: 'Recipe',
+        question: 'Which story tactics solve this problem together?',
+        short: 'Combine the most useful decisions from the earlier stages into one reusable approach.',
+        detail: 'Stories can change how people understand and act. Assemble the concept, exploration, character, function, structure, style, and organisation choices that best serve this specific problem.',
+      },
+    ],
+  },
   jungianMasculineArchetypes: {
     id: 'jungianMasculineArchetypes',
     label: 'Jungian Masculine Archetypes',
@@ -621,7 +803,7 @@ export const MECHANIC_SUBNODE_TYPES = {
   progressiveFeedback: {
     id: 'progressiveFeedback', label: 'Progressive Feedback Mod', color: '#58C7A6', icon: 'zap',
     purpose: 'Forces the designer to define how success in one part of the task makes the next part easier or more obvious. Creates a positive feedback loop so players feel progress.',
-    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    attachesTo: ['cooperation', 'taskTemplate'], category: 'gameplayModifiers',
     fields: [
       { key: 'feedbackType', label: 'Feedback Type', type: 'multiselect', required: true, options: ['Visual cue', 'Audio cue', 'Physical unlock', 'Information reveal', 'Reduced difficulty', 'Time bonus'] },
       { key: 'triggerCondition', label: 'Trigger Condition', type: 'text', required: true },
@@ -633,7 +815,7 @@ export const MECHANIC_SUBNODE_TYPES = {
   failSafeScaffolding: {
     id: 'failSafeScaffolding', label: 'Fail-Safe + Scaffolding Mod', color: '#E8D25C', icon: 'layers',
     purpose: 'Provides structured ways to recover from failure or near-failure. Prevents players from feeling like total failures when they were close to succeeding.',
-    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    attachesTo: ['cooperation', 'taskTemplate'], category: 'gameplayModifiers',
     fields: [
       { key: 'hintLevelCount', label: 'Hint Levels', type: 'number', required: true },
       { key: 'hintTrigger', label: 'Hint Trigger', type: 'select', required: true, options: ['Time passed', 'Failed attempts', 'Facilitator call', 'Player request', 'Custom'] },
@@ -648,7 +830,7 @@ export const MECHANIC_SUBNODE_TYPES = {
   escalatingPressure: {
     id: 'escalatingPressure', label: 'Escalating Pressure Mod', color: '#E86464', icon: 'clock',
     purpose: 'Creates growing urgency and difficulty during the task. Pressure can increase through time, physical demand, environmental changes, or other escalating factors.',
-    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    attachesTo: ['cooperation', 'taskTemplate'], category: 'gameplayModifiers',
     fields: [
       { key: 'pressureType', label: 'Pressure Type', type: 'multiselect', required: true, options: ['Time', 'Physical demand', 'Environmental change', 'Noise/light', 'Resource drain', 'NPC pressure'] },
       { key: 'baseDurationMinutes', label: 'Base Duration', type: 'number', required: true, suffix: 'minutes' },
@@ -660,7 +842,7 @@ export const MECHANIC_SUBNODE_TYPES = {
   cooperativeEthosRole: {
     id: 'cooperativeEthosRole', label: 'Cooperative Ethos / Role Mod', color: '#A87BF0', icon: 'user',
     purpose: 'Defines how cooperation should emerge in the task, either through differentiated roles or synchronized team actions, and sets the expected social tone of play.',
-    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    attachesTo: ['cooperation', 'taskTemplate'], category: 'gameplayModifiers',
     fields: [
       { key: 'cooperationStyle', label: 'Cooperation Style', type: 'select', required: true, options: ['Differentiated roles', 'Synchronized action', 'Relay', 'Parallel tracks', 'Shared planning'] },
       { key: 'roleSuggestions', label: 'Role Suggestions', type: 'textarea' },
@@ -672,7 +854,7 @@ export const MECHANIC_SUBNODE_TYPES = {
   noSoloEnforcer: {
     id: 'noSoloEnforcer', label: 'No-Solo Enforcer', color: '#F08CB4', icon: 'cross',
     purpose: 'Structurally prevents a single player from completing the task alone by enforcing physical, spatial, or timing requirements.',
-    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    attachesTo: ['cooperation', 'taskTemplate'], category: 'gameplayModifiers',
     fields: [
       { key: 'enforcementType', label: 'Enforcement Type', type: 'multiselect', required: true, options: ['Simultaneous actions', 'Physical distance', 'Different information', 'Multiple props', 'Timing split', 'Role lock'] },
       { key: 'minimumPlayers', label: 'Minimum Players', type: 'number', required: true },
@@ -681,7 +863,7 @@ export const MECHANIC_SUBNODE_TYPES = {
   arbitration: {
     id: 'arbitration', label: 'Arbitration Mod', color: '#5CA8F5', icon: 'flag',
     purpose: 'Handles situations where real-world conditions create uncertainty or variance. Provides tolerance and fallback rules.',
-    attachesTo: ['challengeCore', 'taskTemplate', '*'], category: 'gameplayModifiers',
+    attachesTo: ['cooperation', 'taskTemplate', '*'], category: 'gameplayModifiers',
     fields: [
       { key: 'varianceHandling', label: 'Variance Handling', type: 'select', required: true, options: ['Strict', 'Small tolerance', 'Generous tolerance', 'Facilitator judgment'] },
       { key: 'toleranceDescription', label: 'Tolerance Description', type: 'text' },
@@ -693,7 +875,7 @@ export const MECHANIC_SUBNODE_TYPES = {
   teamDiscussionPrompt: {
     id: 'teamDiscussionPrompt', label: 'Team Discussion Prompt', color: '#43BF87', icon: 'book',
     purpose: 'Allows the designer to insert a specific question or prompt that the team should discuss before, during, or after a task. This subnode is reusable across many different tasks.',
-    attachesTo: ['challengeCore', 'taskTemplate', '*'], reusable: true, category: 'gameplayModifiers',
+    attachesTo: ['cooperation', 'taskTemplate', '*'], reusable: true, category: 'gameplayModifiers',
     fields: [
       { key: 'discussionPrompt', label: 'Discussion Prompt', type: 'textarea', required: true },
       { key: 'whenToUse', label: 'When to Use', type: 'select', options: ['Before task', 'During task', 'After task', 'Between attempts'] },
@@ -703,7 +885,7 @@ export const MECHANIC_SUBNODE_TYPES = {
   facilitatorNote: {
     id: 'facilitatorNote', label: 'Facilitator Note', color: '#8B92A6', icon: 'pin',
     purpose: 'A simple, reusable note that can be attached to any task or subnode. It contains guidance for the person running the game.',
-    attachesTo: ['challengeCore', 'taskTemplate', '*'], reusable: true, category: 'supporting',
+    attachesTo: ['cooperation', 'taskTemplate', '*'], reusable: true, category: 'supporting',
     fields: [
       { key: 'facilitatorGuidance', label: 'Facilitator Guidance', type: 'textarea', required: true },
     ],
@@ -784,7 +966,7 @@ export const MECHANIC_SUBNODE_TYPES = {
   spectrumOfYesOutcomes: {
     id: 'spectrumOfYesOutcomes', label: 'Spectrum of Yes Outcomes', color: '#8B7BF5', icon: 'layers',
     purpose: 'Defines the graduated outcome levels for the task, from best to worst.',
-    attachesTo: ['challengeCore', 'taskTemplate', '*'], reusable: true, category: 'gameplayModifiers',
+    attachesTo: ['cooperation', 'taskTemplate', '*'], reusable: true, category: 'gameplayModifiers',
     fields: [
       { key: 'purpose', label: 'Purpose', type: 'readonly', required: true },
       { key: 'outcomeLevels', label: 'Outcome Levels', type: 'textarea', required: true },
@@ -836,12 +1018,18 @@ export const MECHANIC_SUBNODE_TYPES = {
   coreMechanicModifier: {
     id: 'coreMechanicModifier', label: 'Core Mechanic Modifier', color: '#E0A23C', icon: 'cog',
     purpose: 'Allows the designer to deliberately change one core aspect of the task to create a meaningfully different experience or difficulty level.',
-    attachesTo: ['challengeCore', 'taskTemplate'], category: 'gameplayModifiers',
+    attachesTo: ['cooperation', 'taskTemplate'], category: 'gameplayModifiers',
     fields: [
       { key: 'variationCategory', label: 'Variation Category', type: 'select', required: true, options: ['Timing', 'Space', 'Body limit', 'Information', 'Props', 'Sensors', 'Resources', 'Difficulty'] },
       { key: 'variationDescription', label: 'Variation Description', type: 'textarea', required: true },
       { key: 'canBeCombined', label: 'Can Be Combined', type: 'checkbox' },
     ],
+  },
+  actionTypePattern: {
+    id: 'actionTypePattern', label: 'Action Type Pattern', color: '#58C7A6', icon: 'cog',
+    description: 'Choose a human-readable action pattern, then define its advantages, effects, and variations. Saved values can be recalled whenever that mechanism is selected again.',
+    attachesTo: ['action', 'actionSequence', 'cooperation', 'taskTemplate', '*'], reusable: true, category: 'gameplayModifiers',
+    fields: [],
   },
 };
 
@@ -851,7 +1039,7 @@ export const MECHANIC_SUBNODE_KINDS = Object.keys(MECHANIC_SUBNODE_TYPES);
 export const LIB_PREFIX = {
   items: 'LIB-ITM-', locations: 'LIB-LOC-', mechanics: 'LIB-MECH-N', sensors: 'LIB-SEN-N',
   narrative: 'LIB-NAR-', mechPrimitives: 'LIB-MPRIM-', mechSubnodes: 'LIB-MSUB-', mechanicRestrictionTypes: 'RST-', mechanicInteractionTypes: 'PIT-', mechanicSensorTypes: 'SNT-', mechanicActuatorTypes: 'ACT-', stories: 'LIB-STORY-N',
-  mechanicCharacterEmotionTypes: 'CEM-', mechStructures: 'LIB-MSTRUCT-N', gmRules: 'LIB-GMR-', concepts: 'LIB-CPT-N',
+  mechanicCharacterEmotionTypes: 'CEM-', mechanicSequenceModes: 'SQM-', actionPatternMechanisms: 'APM-', actionProbabilityMechanisms: 'APR-', mechStructures: 'LIB-MSTRUCT-N', gmRules: 'LIB-GMR-', concepts: 'LIB-CPT-N',
 };
 
 const mechanicSubnodeFieldDefault = (field) => {
@@ -865,18 +1053,27 @@ const mechanicSubnodeFieldDefault = (field) => {
 
 export const MECHANIC_SUBNODE_BLANK = (id, kind = 'progressiveFeedback') => {
   const t = MECHANIC_SUBNODE_TYPES[kind] || MECHANIC_SUBNODE_TYPES.progressiveFeedback;
-  const fields = Object.fromEntries((t.fields || []).map((field) => [
+  let fields = Object.fromEntries((t.fields || []).map((field) => [
     field.key,
     field.type === 'readonly' && field.key === 'purpose' ? t.purpose
       : t.id === 'spectrumOfYesOutcomes' && field.key === 'outcomeLevels' ? 'Yes and\nYes\nYes but\nNo but\nNo\nNo and'
         : t.id === 'spectrumOfYesOutcomes' && field.key === 'defaultSelection' ? ['Yes and', 'Yes', 'Yes but', 'No but', 'No', 'No and']
           : mechanicSubnodeFieldDefault(field),
   ]));
+  if (t.id === 'actionTypePattern') {
+    fields = {
+      tokenMechanismId: '',
+      orderMechanismId: '',
+      specialMechanismId: '',
+      activeMechanismId: '',
+    };
+  }
   return {
     id,
     kind: t.id,
     name: t.label,
     purpose: t.purpose,
+    description: t.description || t.purpose || '',
     color: t.color,
     icon: t.icon,
     category: t.category || 'gameplayModifiers',
@@ -897,14 +1094,17 @@ export const LIB_BLANK = {
   // Reusable node templates saved from the new Node Builder.
   narrative: (id) => ({ id, nodeClass: 'base', nodeKind: 'event', name: 'New event template', category: 'event', color: '#5CA8F5', icon: 'zap', body: '', tags: [], inputs: ['in'], outputs: ['out'] }),
   // Mechanic node type (sensor/physical/task) for the Game Mechanics node tree.
-  mechPrimitives: (id) => ({ id, name: 'New mechanic node', mechKind: 'challengeCore', baseKind: 'mechanic', color: '#A87BF0', icon: 'cog', inputs: ['in'], outputs: ['out'], defaultBody: '', estMinutes: 5, crew: 0, refs: {}, collapseDepth: 0 }),
-  mechSubnodes: (id) => MECHANIC_SUBNODE_BLANK(id),
+  mechPrimitives: (id) => ({ id, name: 'New mechanic node', mechKind: 'cooperation', baseKind: 'mechanic', color: '#A87BF0', icon: 'users', inputs: ['in'], outputs: ['out'], defaultBody: '', estMinutes: 5, crew: 0, refs: {}, collapseDepth: 0, oldNode: false }),
+  mechSubnodes: (id) => ({ ...MECHANIC_SUBNODE_BLANK(id), oldNode: false }),
   mechanicRestrictionTypes: (id) => ({ id, label: 'Custom restriction', custom: true }),
   mechanicInteractionTypes: (id) => ({ id, label: 'Custom interaction', custom: true }),
   mechanicSensorTypes: (id) => ({ id, label: 'Custom sensor', custom: true }),
   mechanicActuatorTypes: (id) => ({ id, label: 'Custom actuator', custom: true }),
   mechanicCharacterEmotionTypes: (id) => ({ id, label: 'Custom emotion', custom: true }),
-  stories: (id) => ({ id, name: 'New structure', description: '', estMinutes: 15, nodes: {}, edges: [], frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {} }),
+  mechanicSequenceModes: (id) => ({ id, label: 'Custom', custom: true }),
+  actionPatternMechanisms: (id) => ({ id, system: 'special', label: 'New mechanism', description: '', image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, advantages: [''], effects: [''], variations: [''], custom: true }),
+  actionProbabilityMechanisms: (id) => ({ id, kind: 'probability', label: 'New resolution', description: '', variations: [''], emotionalSpike: '', effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, custom: true }),
+  stories: (id) => ({ id, name: 'New structure', description: '', estMinutes: 15, usesBaseConcept: false, baseConceptId: null, nodes: {}, edges: [], frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {} }),
   mechStructures: (id) => ({ id, name: 'New mechanic structure', description: '', estMinutes: 10, nodes: {}, edges: [], numberMarkers: {}, titleMarkers: {} }),
   gmRules: (id) => ({ id, title: 'New game master rule', principle: '', implementation: '', rationale: '', aiRule: '' }),
   // Additional Node ("concept") template: starts completely empty — the
@@ -914,6 +1114,155 @@ export const LIB_BLANK = {
     conceptType: 'unset', status: 'seed', onePromise: '', referenceFrameworkIds: [],
     premade: false, questions: [], example: {}, nodes: {}, edges: [], frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {}
   }),
+};
+
+const migrateChallengeCoreNode = (node) => {
+  if (!node || typeof node !== 'object') return node;
+  const nestedNodes = node.sub?.nodes
+    ? Object.fromEntries(Object.entries(node.sub.nodes).map(([id, child]) => [id, migrateChallengeCoreNode(child)]))
+    : null;
+  const withNested = nestedNodes ? { ...node, sub: { ...node.sub, nodes: nestedNodes } } : node;
+  if (withNested.mechKind !== 'challengeCore' && withNested.primitiveId !== 'LIB-MPRIM-CHALLENGE-CORE') return withNested;
+
+  const attachedSubnodeIds = [...new Set([
+    ...(withNested.attachedSubnodeIds || []),
+    ...(withNested.physicalTrackSubnodeIds || []),
+    ...(withNested.cognitiveTrackSubnodeIds || []),
+  ])];
+  const legacyGoal = `${withNested.goal || ''}`.trim();
+  const existingBody = `${withNested.body || ''}`.trim();
+  const body = legacyGoal && !existingBody.includes(legacyGoal)
+    ? [existingBody, `Goal: ${legacyGoal}`].filter(Boolean).join('\n\n')
+    : existingBody;
+  const title = `${withNested.title || 'Cooperation'}`.replace(/Challenge Core/gi, 'Cooperation');
+  const {
+    goal: _goal,
+    physicalTrackSubnodeIds: _physicalTrackSubnodeIds,
+    cognitiveTrackSubnodeIds: _cognitiveTrackSubnodeIds,
+    noteColor: _noteColor,
+    ...rest
+  } = withNested;
+  return {
+    ...rest,
+    primitiveId: 'LIB-MPRIM-COOPERATION',
+    mechKind: 'cooperation',
+    title,
+    body,
+    cooperationStyle: withNested.cooperationStyle || 'Parallel',
+    attachedSubnodeIds,
+  };
+};
+
+const migrateActionGraph = (graph = {}, ensureInstruction = false) => {
+  const sourceNodes = graph.nodes || {};
+  const nodes = {};
+  const edges = [...(graph.edges || [])];
+  const instructionTargets = new Set(edges
+    .filter((edge) => sourceNodes[edge.from]?.mechKind === 'action' && sourceNodes[edge.to]?.mechKind === 'playerFacingInstruction')
+    .map((edge) => edge.from));
+
+  for (const [nodeId, originalNode] of Object.entries(sourceNodes)) {
+    let node = migrateChallengeCoreNode(originalNode);
+    if (node?.sub?.nodes) node = { ...node, sub: migrateActionGraph(node.sub) };
+    if (node?.kind === 'mechanicSubnode' && ['actionEconomy', 'actionFlow', 'actionAccess', 'actionPrompt', 'physicalActionPattern'].includes(node.subnodeKind)) {
+      const oldFields = node.fields || {};
+      const visibleName = `${oldFields.mechanism || ''}`.replace(/^ACT-\d+\s+/i, '').trim();
+      const mechanism = ACTION_MECHANISMS.find((candidate) => candidate.name.toLowerCase() === visibleName.toLowerCase());
+      const mechanismId = mechanism ? actionPatternMechanismId(mechanism.name) : '';
+      const system = mechanism ? actionPatternSystemForCode(mechanism.code) : 'special';
+      const coreRule = oldFields.rule || '';
+      const budgetLimit = oldFields.budgetOrLimit || oldFields.uses || oldFields.resolutionOrder || oldFields.promptSource || oldFields.physicalRule || oldFields.accessCondition || '';
+      const availability = oldFields.availabilityRule || oldFields.participationRule || oldFields.unlockOrImprovement || oldFields.choiceOrResultRule || oldFields.interpretationRule || '';
+      node = {
+        ...node,
+        primitiveId: 'LIB-MSUB-actionTypePattern',
+        subnodeKind: 'actionTypePattern',
+        title: 'Action Type Pattern',
+        body: node.body || MECHANIC_SUBNODE_TYPES.actionTypePattern.description,
+        color: '#58C7A6',
+        icon: 'cog',
+        fields: {
+          tokenMechanismId: system === 'token' ? mechanismId : '',
+          orderMechanismId: system === 'order' ? mechanismId : '',
+          specialMechanismId: system === 'special' ? mechanismId : '',
+          activeMechanismId: mechanismId,
+          coreRule,
+          budgetLimit,
+          availability,
+        },
+      };
+    }
+    if (node?.mechKind === 'action') {
+      const {
+        playerInstruction: _playerInstruction,
+        actionMode: _actionMode,
+        completionCondition: _completionCondition,
+        performer: _performer,
+        numberOfPlayers: _numberOfPlayers,
+        advantage: _advantage,
+        effect: _effect,
+        variation: _variation,
+        ...rest
+      } = node;
+      const hasLegacyDetails = Array.isArray(node.advantages) || Array.isArray(node.effects) || Array.isArray(node.variations)
+        || node.advantage != null || node.effect != null || node.variation != null;
+      node = {
+        ...rest,
+        ...(hasLegacyDetails ? {
+          advantages: Array.isArray(node.advantages) && node.advantages.length ? node.advantages : [node.advantage || ''],
+          effects: Array.isArray(node.effects) && node.effects.length ? node.effects : [node.effect || ''],
+          variations: Array.isArray(node.variations) && node.variations.length ? node.variations : [node.variation || ''],
+        } : {}),
+        tokenMechanismId: node.tokenMechanismId || '',
+        orderMechanismId: node.orderMechanismId || '',
+        specialMechanismId: node.specialMechanismId || '',
+      };
+      const instruction = `${originalNode.playerInstruction || ''}`.trim();
+      if ((instruction || ensureInstruction) && !instructionTargets.has(nodeId)) {
+        let instructionId = `${nodeId}-INSTRUCTION`;
+        let suffix = 2;
+        while (sourceNodes[instructionId] || nodes[instructionId]) instructionId = `${nodeId}-INSTRUCTION-${suffix++}`;
+        nodes[instructionId] = {
+          id: instructionId,
+          primitiveId: 'LIB-MPRIM-PLAYER-INSTRUCTION',
+          kind: 'mechanic',
+          mechKind: 'playerFacingInstruction',
+          title: `${node.title || 'Action'} Instruction`,
+          body: instruction,
+          x: Number(node.x || 0) + 320,
+          y: Number(node.y || 0),
+          color: '#E8D25C',
+        };
+        edges.push({ from: nodeId, to: instructionId, label: 'present as', color: '#E8D25C' });
+      }
+    }
+    if (node?.mechKind === 'actionSequence') {
+      const { completionCondition: _completionCondition, ...rest } = node;
+      node = { ...rest, sequenceMode: 'Custom' };
+    }
+    if (node?.mechKind === 'playerFacingInstruction') {
+      node = { ...node, category: 'supporting' };
+    }
+    if (node?.mechKind === 'actionProbability') {
+      const {
+        resolutionCategory: _resolutionCategory,
+        resolutionProcedure: _resolutionProcedure,
+        ...currentNode
+      } = node;
+      node = {
+        ...currentNode,
+        title: !node.title || node.title === 'Action Probability' ? 'Resolution' : node.title,
+        variations: Array.isArray(node.variations) && node.variations.length ? node.variations : [''],
+        emotionalSpike: node.emotionalSpike || '',
+        effects: Array.isArray(node.effects) && node.effects.length ? node.effects : [''],
+        imageScale: Math.min(3, Math.max(0.5, Number(node.imageScale) || 1)),
+        imagePositionX: Math.min(100, Math.max(-100, Number(node.imagePositionX) || 0)),
+        imagePositionY: Math.min(100, Math.max(-100, Number(node.imagePositionY) || 0)),
+      };
+    }
+    nodes[nodeId] = node;
+  }
+  return { ...graph, nodes, edges };
 };
 
 // Migration: preserve user-authored library data across schema bumps.
@@ -975,6 +1324,52 @@ export function migrateLibrary(saved) {
     if (merged[key] === undefined) merged[key] = seed[key];
   }
   merged.itemTypes = { ...seed.itemTypes, ...(merged.itemTypes || {}) };
+  merged.actionPatternMechanisms = Object.fromEntries(Object.entries({
+    ...(seed.actionPatternMechanisms || {}),
+    ...(merged.actionPatternMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seed.actionPatternMechanisms?.[id] || {};
+    return [id, {
+      ...seeded,
+      ...mechanism,
+      kind: 'pattern',
+      category: mechanism.category || seeded.category || 'Action Type Pattern',
+      color: mechanism.color || seeded.color || '#58C7A6',
+      icon: mechanism.icon || seeded.icon || 'cog',
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+      advantages: Array.isArray(mechanism.advantages) && mechanism.advantages.length ? mechanism.advantages : [''],
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+    }];
+  }));
+  const seededProbabilityMechanisms = Object.fromEntries(ACTION_PROBABILITY_RESOLUTIONS.map((record) => [record.id, record]));
+  merged.actionProbabilityMechanisms = Object.fromEntries(Object.entries({
+    ...seededProbabilityMechanisms,
+    ...(merged.actionProbabilityMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seededProbabilityMechanisms[id] || {};
+    const {
+      resolutionProcedure: _resolutionProcedure,
+      ...currentMechanism
+    } = mechanism;
+    return [id, {
+      ...seeded,
+      ...currentMechanism,
+      kind: 'probability',
+      category: mechanism.category || seeded.category || 'Custom',
+      description: mechanism.description || seeded.description || '',
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+      emotionalSpike: mechanism.emotionalSpike || '',
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+    }];
+  }));
   merged.mechPrimitives = Object.fromEntries(Object.entries({ ...seed.mechPrimitives, ...(merged.mechPrimitives || {}) }).map(([id, node]) => {
     if (id === 'LIB-MPRIM-SENSOR') {
       return [id, {
@@ -1033,13 +1428,90 @@ export function migrateLibrary(saved) {
         manualOverrideFallback: node.manualOverrideFallback || '',
       }];
     }
-    if (node?.mechKind !== 'physicalRestriction') return [id, node];
+    if (node?.mechKind === 'action') {
+      const {
+        playerInstruction: _playerInstruction,
+        actionMode: _actionMode,
+        completionCondition: _completionCondition,
+        performer: _performer,
+        numberOfPlayers: _numberOfPlayers,
+        advantage: _advantage,
+        effect: _effect,
+        variation: _variation,
+        ...rest
+      } = node;
+      const hasLegacyDetails = Array.isArray(node.advantages) || Array.isArray(node.effects) || Array.isArray(node.variations)
+        || node.advantage != null || node.effect != null || node.variation != null;
+      return [id, {
+        ...rest,
+        ...(hasLegacyDetails ? {
+          advantages: Array.isArray(node.advantages) && node.advantages.length ? node.advantages : [node.advantage || ''],
+          effects: Array.isArray(node.effects) && node.effects.length ? node.effects : [node.effect || ''],
+          variations: Array.isArray(node.variations) && node.variations.length ? node.variations : [node.variation || ''],
+        } : {}),
+        tokenMechanismId: node.tokenMechanismId || '',
+        orderMechanismId: node.orderMechanismId || '',
+        specialMechanismId: node.specialMechanismId || '',
+      }];
+    }
+    if (node?.mechKind === 'actionSequence') {
+      const { completionCondition: _completionCondition, ...rest } = node;
+      return [id, { ...rest, defaultBody: 'Collapsible container for a custom sequence of actions.', sequenceMode: 'Custom' }];
+    }
+    if (node?.mechKind === 'playerFacingInstruction') {
+      return [id, { ...node, category: 'supporting' }];
+    }
+    if (node?.mechKind === 'actionProbability') {
+      const resolution = merged.actionProbabilityMechanisms?.[node.resolutionMechanismId]
+        || Object.values(merged.actionProbabilityMechanisms || {}).find((record) => record.label === node.resolutionType)
+        || actionProbabilityResolution(node.resolutionType)
+        || ACTION_PROBABILITY_RESOLUTIONS[0];
+      const {
+        resolutionCategory: _resolutionCategory,
+        resolutionProcedure: _resolutionProcedure,
+        ...currentNode
+      } = node;
+      return [id, {
+        ...currentNode,
+        name: node.name === 'Action Probability' || !node.name ? 'Resolution' : node.name,
+        resolutionMechanismId: node.resolutionMechanismId || resolution.id,
+        resolutionType: resolution.label,
+        variations: Array.isArray(node.variations) && node.variations.length ? node.variations : [...(resolution.variations || [''])],
+        emotionalSpike: node.emotionalSpike || resolution.emotionalSpike || '',
+        effects: Array.isArray(node.effects) && node.effects.length ? node.effects : [...(resolution.effects || [''])],
+        defaultBody: node.defaultBody === 'Defines how uncertainty or competing inputs are resolved into a gameplay outcome.'
+          ? resolution.description
+          : (node.defaultBody || resolution.description),
+        image: node.image || resolution.image,
+        imageScale: Math.min(3, Math.max(0.5, Number(node.imageScale ?? resolution.imageScale) || 1)),
+        imagePositionX: Math.min(100, Math.max(-100, Number(node.imagePositionX ?? resolution.imagePositionX) || 0)),
+        imagePositionY: Math.min(100, Math.max(-100, Number(node.imagePositionY ?? resolution.imagePositionY) || 0)),
+      }];
+    }
+    if (node?.mechKind !== 'physicalRestriction') return [id, {
+      ...node,
+      oldNode: node.oldNode ?? !CURRENT_MECHANIC_PRIMITIVE_KINDS.has(node?.mechKind),
+    }];
     const sourceRefs = node.connectTo || {};
     const connectTo = { nodeIds: sourceRefs.nodeIds || [] };
-    return [id, { ...node, connectTo }];
+    return [id, {
+      ...node,
+      connectTo,
+      oldNode: node.oldNode ?? !CURRENT_MECHANIC_PRIMITIVE_KINDS.has(node?.mechKind),
+    }];
   }));
-  merged.mechSubnodes = Object.fromEntries(Object.entries({ ...seed.mechSubnodes, ...(merged.mechSubnodes || {}) }).map(([id, sn]) => {
+  merged.mechPrimitives = Object.fromEntries(Object.entries(merged.mechPrimitives).map(([id, node]) => [id, {
+    ...node,
+    oldNode: node.oldNode ?? !CURRENT_MECHANIC_PRIMITIVE_KINDS.has(node?.mechKind),
+  }]));
+  const retiredActionSubnodeKinds = new Set(['actionEconomy', 'actionFlow', 'actionAccess', 'actionPrompt', 'physicalActionPattern']);
+  merged.mechSubnodes = Object.fromEntries(Object.entries({ ...seed.mechSubnodes, ...(merged.mechSubnodes || {}) })
+    .filter(([, sn]) => !retiredActionSubnodeKinds.has(sn.kind))
+    .map(([id, sn]) => {
     const type = MECHANIC_SUBNODE_TYPES[sn.kind] || {};
+    const attachesTo = [...new Set((sn.attachesTo || type.attachesTo || ['*']).map((kind) => (
+      kind === 'challengeCore' ? 'cooperation' : kind
+    )))];
     return [id, {
       ...sn,
       name: sn.name || type.label,
@@ -1047,16 +1519,18 @@ export function migrateLibrary(saved) {
       category: sn.category || type.category || 'gameplayModifiers',
       deprecated: !!type.deprecated || !!sn.deprecated,
       hiddenFromPalette: !!type.hiddenFromPalette || !!sn.hiddenFromPalette,
+      oldNode: sn.oldNode ?? !CURRENT_MECHANIC_SUBNODE_KINDS.has(sn.kind),
+      attachesTo,
     }];
   }));
   merged.mechStructures = Object.fromEntries(Object.entries(merged.mechStructures || {}).filter(([, st]) => (
     Object.values(st.nodes || {}).every((n) => !retiredMechIds.has(n.primitiveId))
   )));
-  merged.mechStructures = Object.fromEntries(Object.entries(merged.mechStructures || {}).map(([id, st]) => [
-    id,
-    {
+  merged.mechStructures = Object.fromEntries(Object.entries(merged.mechStructures || {}).map(([id, st]) => {
+    const normalized = {
       ...st,
-      nodes: Object.fromEntries(Object.entries(st.nodes || {}).map(([nodeId, node]) => {
+      nodes: Object.fromEntries(Object.entries(st.nodes || {}).map(([nodeId, originalNode]) => {
+        const node = migrateChallengeCoreNode(originalNode);
         if (node?.mechKind === 'sensorNode') {
           return [nodeId, {
             ...node,
@@ -1085,8 +1559,9 @@ export function migrateLibrary(saved) {
         }
         return [nodeId, node];
       })),
-    },
-  ]));
+    };
+    return [id, migrateActionGraph(normalized, st.templateKind === 'action')];
+  }));
   if (savedRev < 13) {
     merged.stories = { ...seed.stories, ...(merged.stories || {}) };
     merged.mechStructures = { ...seed.mechStructures, ...(merged.mechStructures || {}) };
@@ -1125,6 +1600,11 @@ export function migrateLibrary(saved) {
       'LIB-MSTRUCT-TURTLE-COSTUME-COLLECTION': seed.mechStructures['LIB-MSTRUCT-TURTLE-COSTUME-COLLECTION'],
     };
   }
+  if (savedRev < 17) {
+    const actionTemplates = Object.fromEntries(Object.entries(seed.mechStructures || {}).filter(([, template]) => template.templateKind === 'action'));
+    merged.mechStructures = { ...actionTemplates, ...(merged.mechStructures || {}) };
+  }
+  delete merged.mechPrimitives['LIB-MPRIM-CHALLENGE-CORE'];
   merged.rev = LIB_REV;
   return merged;
 }
@@ -1315,15 +1795,12 @@ function makeTurtleCostumeMechanicsStructure() {
   zones.forEach((zone, zoneIndex) => {
     const y = zone.y;
     nodes[`CC-${zone.key}`] = {
-      id: `CC-${zone.key}`, primitiveId: 'LIB-MPRIM-CHALLENGE-CORE', kind: 'mechanic', mechKind: 'challengeCore',
-      title: `${zone.title} Challenge Core`, x: zone.x, y,
-      body: 'Root task node for one major zone in the turtle costume mechanic.',
+      id: `CC-${zone.key}`, primitiveId: 'LIB-MPRIM-COOPERATION', kind: 'mechanic', mechKind: 'cooperation',
+      title: `${zone.title} Cooperation`, x: zone.x, y,
+      body: 'Players cooperate to collect and equip costume pieces while coordinating the active shell.',
       color: '#A87BF0',
-      goal: 'Collect and equip costume pieces while triggering voice reactions through the active shell.',
       cooperationStyle: 'Asymmetric',
-      physicalTrackSubnodeIds: [`PR-${zone.key}`, `PI-${zone.key}`, `SN-${zone.key}`, `AC-${zone.key}`],
-      cognitiveTrackSubnodeIds: [`DISC-${zone.key}`, `SPEC-${zone.key}`],
-      noteColor: '#A87BF0',
+      attachedSubnodeIds: [`PR-${zone.key}`, `PI-${zone.key}`, `SN-${zone.key}`, `AC-${zone.key}`, `DISC-${zone.key}`, `SPEC-${zone.key}`],
     };
     nodes[`PR-${zone.key}`] = {
       id: `PR-${zone.key}`, primitiveId: 'LIB-MPRIM-PHYSICAL-RESTRICTION', kind: 'mechanic', mechKind: 'physicalRestriction',
@@ -1533,12 +2010,11 @@ export function makeLibrarySeed() {
         estMinutes: 20, minPlayers: 3, maxPlayers: 7, crew: 0, recommendedCrew: '', refs: {}, collapseDepth: 1,
         difficultyPressure: 'Medium', reusableAsLibraryTemplate: true,
       },
-      'LIB-MPRIM-CHALLENGE-CORE': {
-        id: 'LIB-MPRIM-CHALLENGE-CORE', name: 'Challenge Core', mechKind: 'challengeCore',
-        baseKind: 'mechanic', color: '#A87BF0', icon: 'cog', inputs: ['start'], outputs: ['complete', 'branch'],
-        defaultBody: 'Central task controller: goal, physical/cognitive tracks, and cooperation style. Add subnodes for pressure, outcomes, fail-safes, and advanced rules.',
-        estMinutes: 15, crew: 1, refs: {}, collapseDepth: 0, goal: '', cooperationStyle: 'Parallel',
-        physicalTrackSubnodeIds: [], cognitiveTrackSubnodeIds: [], noteColor: '#A87BF0',
+      'LIB-MPRIM-COOPERATION': {
+        id: 'LIB-MPRIM-COOPERATION', name: 'Cooperation', mechKind: 'cooperation',
+        baseKind: 'mechanic', category: 'mechanic', color: '#A87BF0', icon: 'users', inputs: ['in'], outputs: ['out'],
+        defaultBody: 'Define how players coordinate, divide roles, or act together.',
+        estMinutes: 5, crew: 0, refs: {}, collapseDepth: 0, cooperationStyle: 'Parallel', attachedSubnodeIds: [],
       },
       'LIB-MPRIM-PHYSICAL-RESTRICTION': {
         id: 'LIB-MPRIM-PHYSICAL-RESTRICTION', name: 'Physical Restriction', mechKind: 'physicalRestriction',
@@ -1577,6 +2053,34 @@ export function makeLibrarySeed() {
         cooldownEnabled: false, cooldownDuration: '30 seconds',
         manualOverrideFallback: '', nodeColor: '#5CA8F5',
       },
+      'LIB-MPRIM-ACTION': {
+        id: 'LIB-MPRIM-ACTION', name: 'Action', mechKind: 'action', category: 'action',
+        baseKind: 'mechanic', color: '#58C7A6', icon: 'zap', inputs: ['available'], outputs: ['complete'],
+        defaultBody: 'One atomic physical, cognitive, or social step performed by a player or team.',
+        estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0,
+        tokenMechanismId: '', orderMechanismId: '', specialMechanismId: '', attachedSubnodeIds: [],
+      },
+      'LIB-MPRIM-PLAYER-INSTRUCTION': {
+        id: 'LIB-MPRIM-PLAYER-INSTRUCTION', name: 'Player-Facing Instruction', mechKind: 'playerFacingInstruction', category: 'supporting',
+        baseKind: 'mechanic', color: '#E8D25C', icon: 'book', inputs: ['in'], outputs: ['out'],
+        defaultBody: '', estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0,
+      },
+      'LIB-MPRIM-ACTION-SEQUENCE': {
+        id: 'LIB-MPRIM-ACTION-SEQUENCE', name: 'Action Sequence', mechKind: 'actionSequence', category: 'action',
+        baseKind: 'mechanic', color: '#3EC6D6', icon: 'layers', inputs: ['start'], outputs: ['complete'],
+        defaultBody: 'Collapsible container for a custom sequence of actions.',
+        estMinutes: 3, crew: 0, refs: {}, collapseDepth: 1,
+        sequenceMode: 'Custom', sequenceInstruction: '', attachedSubnodeIds: [],
+      },
+      'LIB-MPRIM-ACTION-PROBABILITY': {
+        id: 'LIB-MPRIM-ACTION-PROBABILITY', name: 'Resolution', mechKind: 'actionProbability', category: 'action',
+        baseKind: 'mechanic', color: '#F08CB4', icon: 'pin', inputs: ['attempt'], outputs: ['resolved'],
+        defaultBody: ACTION_PROBABILITY_RESOLUTIONS[0].description,
+        estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0,
+        resolutionMechanismId: ACTION_PROBABILITY_RESOLUTIONS[0].id,
+        resolutionType: ACTION_PROBABILITY_RESOLUTION_TYPES[0], variations: [''], emotionalSpike: '', effects: [''],
+        image: ACTION_PROBABILITY_RESOLUTIONS[0].image, imageScale: 1, imagePositionX: 0, imagePositionY: 0,
+      },
       'LIB-MPRIM-CHARACTER-STATE': {
         id: 'LIB-MPRIM-CHARACTER-STATE', name: 'Character State', mechKind: 'characterState',
         baseKind: 'state', color: '#F08CB4', icon: 'user', inputs: ['observe'], outputs: ['respond', 'change'],
@@ -1603,7 +2107,7 @@ export function makeLibrarySeed() {
     },
 
     // MECHANIC SUBNODES: attachable modifiers for mechanic nodes, especially
-    // Challenge Core and Task Template nodes. They mirror narrative subnodes:
+    // Cooperation and Task Template nodes. They mirror narrative subnodes:
     // separate reusable library records, then attached into a specific task
     // graph when the designer needs that modifier.
     mechSubnodes: Object.fromEntries(MECHANIC_SUBNODE_KINDS.map((kind) => {
@@ -1654,6 +2158,11 @@ export function makeLibrarySeed() {
       'CEM-HOSTILE': { id: 'CEM-HOSTILE', label: 'Hostile', custom: false },
       'CEM-ALLIED': { id: 'CEM-ALLIED', label: 'Allied', custom: false },
     },
+    mechanicSequenceModes: {
+      'SQM-CUSTOM': { id: 'SQM-CUSTOM', label: 'Custom', custom: false },
+    },
+    actionPatternMechanisms: makeActionPatternMechanisms(),
+    actionProbabilityMechanisms: Object.fromEntries(ACTION_PROBABILITY_RESOLUTIONS.map((record) => [record.id, record])),
 
     // GAME MASTER RULES: global design principles that shape the whole game.
     // Each rule leads with a short core principle (≤4 sentences), then carries
@@ -1801,13 +2310,14 @@ export function makeLibrarySeed() {
     // mechanics counterpart to Story Structures. Same node canvas, mechanic
     // palette. Built from Mechanic Nodes.
     mechStructures: {
+      ...makeActionMechanicTemplates(),
       'LIB-MSTRUCT-TURTLE-COSTUME-COLLECTION': makeTurtleCostumeMechanicsStructure(),
       'LIB-MSTRUCT-DOOR': {
         id: 'LIB-MSTRUCT-DOOR', name: 'Cooperative Door Challenge',
-        description: 'A current-system example: challenge core, prop interaction, sensor input, and actuator output.',
+        description: 'A current-system example: cooperation, prop interaction, sensor input, and actuator output.',
         estMinutes: 15,
         nodes: {
-          S1: { id: 'S1', primitiveId: 'LIB-MPRIM-CHALLENGE-CORE', kind: 'mechanic', mechKind: 'challengeCore', title: 'Door Challenge Core', x: 40, y: 120, body: 'Players coordinate to open the sealed door.', color: null, goal: 'Open the door through coordinated action.', cooperationStyle: 'Synchronous', physicalTrackSubnodeIds: [], cognitiveTrackSubnodeIds: [], noteColor: '#A87BF0' },
+          S1: { id: 'S1', primitiveId: 'LIB-MPRIM-COOPERATION', kind: 'mechanic', mechKind: 'cooperation', title: 'Door Cooperation', x: 40, y: 120, body: 'Players coordinate synchronously to open the sealed door.', color: null, cooperationStyle: 'Synchronous', attachedSubnodeIds: [] },
           S2: { id: 'S2', primitiveId: 'LIB-MPRIM-PROP-INTERACTION', kind: 'objective', mechKind: 'propInteraction', title: 'Hold the Switches', x: 360, y: 60, body: 'Players hold separate switches at the same time.', color: null, interactionType: 'Unlock', successCondition: 'All required switches are held together.', failureCondition: '', resetProcedure: '', connectTo: { itemIds: [], sensorIds: [], nodeIds: [], ideas: [] }, noteColor: '#E0A23C', attachedSubnodeIds: [] },
           S3: { id: 'S3', primitiveId: 'LIB-MPRIM-SENSOR-NODE', kind: 'sensor', mechKind: 'sensorNode', title: 'Door Sensor', x: 700, y: 120, body: 'Detects whether the switches are correctly held.', color: null, sensorType: 'Button', inputRequired: 'All switch inputs active at the same time.', triggerCondition: '', nodeColor: '#3EC6D6' },
           S4: { id: 'S4', primitiveId: 'LIB-MPRIM-ACTUATOR-NODE', kind: 'mechanic', mechKind: 'actuatorNode', title: 'Door Opens', x: 1020, y: 120, body: 'Signals that the door opens.', color: null, actuatorType: 'Lock', outputDuration: '', outputIntensity: '', outputRhythm: '', resetBehavior: '', nodeColor: '#5CA8F5' },
@@ -1839,15 +2349,12 @@ export function makeLibrarySeed() {
                 D4: { id: 'D4', kind: 'item', title: 'Weapon', x: 300, y: 240, body: 'Costume Story Item. No active mechanic attached.', color: '#F08CB4', itemType: 'Wearable', origin: 'Team costume collection.', persistsAcrossTasks: true },
                 D5: { id: 'D5', kind: 'item', title: 'Shell', x: 570, y: 150, body: 'Only active costume piece. Physically contains the GPS tracker.', color: '#43BF87', itemType: 'Wearable', origin: 'Team costume collection; carries GPS tracker hardware.', persistsAcrossTasks: true },
                 D6: {
-                  id: 'D6', primitiveId: 'LIB-MPRIM-CHALLENGE-CORE', kind: 'mechanic', mechKind: 'challengeCore',
-                  title: 'Shell Reaction Flow', x: 850, y: 150,
-                  body: 'Coordinates the mechanics-only GPS reaction chain for this shell instance.',
+                  id: 'D6', primitiveId: 'LIB-MPRIM-COOPERATION', kind: 'mechanic', mechKind: 'cooperation',
+                  title: 'Shell Reaction Cooperation', x: 850, y: 150,
+                  body: 'Defines that one player carries this team shell while its automated GPS reaction chain runs.',
                   color: '#A87BF0',
-                  goal: 'When the Shell enters a defined GPS zone and remains there for the dwell time, play the selected MP3 reaction.',
                   cooperationStyle: 'Solo',
-                  physicalTrackSubnodeIds: ['D5', 'D7', 'D8', 'D10', 'D11'],
-                  cognitiveTrackSubnodeIds: [],
-                  noteColor: '#8B7BF5',
+                  attachedSubnodeIds: [],
                 },
                 D7: {
                   id: 'D7', primitiveId: 'LIB-MPRIM-SENSOR-NODE', kind: 'sensor', mechKind: 'sensorNode',
@@ -2049,6 +2556,56 @@ export function migrateProject(saved) {
   for (const key of Object.keys(base)) {
     if (merged[key] === undefined) merged[key] = base[key];
   }
+  const migratedTaskGraph = migrateActionGraph({ nodes: merged.taskNodes || {}, edges: merged.taskEdges || [] });
+  merged.taskNodes = migratedTaskGraph.nodes;
+  merged.taskEdges = migratedTaskGraph.edges;
+  const taskNodeValues = Object.values(merged.taskNodes);
+  const visibleMechanicNodes = taskNodeValues.filter((node) => node.kind !== 'travel');
+  if (
+    saved.taskNodes !== undefined
+    && merged.meta.name === 'Operation Chimera'
+    && !taskNodeValues.some((node) => node.kind === 'task')
+    && visibleMechanicNodes.length <= 2
+    && visibleMechanicNodes.every((node) => node.mechKind === 'action')
+  ) {
+    const storyboardTasks = Object.fromEntries(Object.entries(merged.storyboardNodes || {})
+      .filter(([, node]) => node.kind === 'task'));
+    if (Object.keys(storyboardTasks).length) {
+      merged.taskNodes = { ...storyboardTasks, ...merged.taskNodes };
+      const restoredIds = new Set(Object.keys(merged.taskNodes));
+      const restoredEdges = (merged.storyboardEdges || []).filter((edge) => restoredIds.has(edge.from) && restoredIds.has(edge.to));
+      merged.taskEdges = [...restoredEdges, ...merged.taskEdges];
+    }
+  }
+  const plainTestActions = Object.values(merged.taskNodes).filter((node) => (
+    node.mechKind === 'action'
+    && node.title === 'Action'
+    && node.body === 'One atomic physical, cognitive, or social step performed by a player or team.'
+  ));
+  const hasMacroDroidBridge = Object.values(merged.taskNodes).some((node) => node.itemId === 'LIB-ITM-MACRODROID-PHONE');
+  const restoredTaskCount = Object.values(merged.taskNodes).filter((node) => node.kind === 'task').length;
+  if (merged.meta.name === 'Operation Chimera' && restoredTaskCount === 4 && !hasMacroDroidBridge && plainTestActions.length === 1) {
+    const testActionId = plainTestActions[0].id;
+    const { [testActionId]: _temporaryAction, ...keptNodes } = merged.taskNodes;
+    const macroId = 'CHM-TSK-MACRODROID';
+    merged.taskNodes = {
+      ...keptNodes,
+      [macroId]: {
+        id: macroId,
+        primitiveId: 'LIB-ITM-MACRODROID-PHONE',
+        kind: 'objective',
+        physicalKind: 'item',
+        itemId: 'LIB-ITM-MACRODROID-PHONE',
+        title: 'MacroDroid Phone Bridge',
+        x: 1000,
+        y: 190,
+        body: 'Android phone running MacroDroid to receive the GPS trigger and play the assigned MP3 through a speaker.',
+        color: '#3EC6D6',
+        refs: { itemIds: ['LIB-ITM-MACRODROID-PHONE'], sensorIds: [], mechanicIds: [] },
+      },
+    };
+    merged.taskEdges = merged.taskEdges.filter((edge) => edge.from !== testActionId && edge.to !== testActionId);
+  }
   for (const key of ['storyDynamicsNodes', 'storyDynamicsEdges', 'storyDynamicsFrames', 'storyDynamicsNumberMarkers', 'storyDynamicsTitleMarkers']) {
     delete merged[key];
   }
@@ -2101,6 +2658,7 @@ export function migrateProject(saved) {
       },
     };
   }
+  merged.rev = SEED_REV;
   return merged;
 }
 

@@ -7,9 +7,17 @@ import NodePalette from '../components/NodePalette.jsx';
 import NarrativeLibraryBrowser from '../components/NarrativeLibraryBrowser.jsx';
 import FrameworkPreview from '../components/FrameworkPreview.jsx';
 import { narrativeToStructNode, mechPrimitiveToStructNode } from '../state/bridge.js';
-import { LIB_BLANK, LIB_PREFIX, BASE_NODE_TYPES, CONCEPT_INTERNAL_NODE_TYPES, MASTER_ACT_TYPE, ADDITIONAL_NODE_TYPES, SUBNODE_TYPES, SUBNODE_BLANK, FRAMEWORK_TYPES, MECHANIC_SUBNODE_TYPES, cloneCharacterCardTemplate } from '../data/seed.js';
+import { LIB_BLANK, LIB_PREFIX, BASE_NODE_TYPES, CONCEPT_INTERNAL_NODE_TYPES, MASTER_ACT_TYPE, ADDITIONAL_NODE_TYPES, SUBNODE_TYPES, SUBNODE_BLANK, FRAMEWORK_TYPES, MECHANIC_SUBNODE_TYPES, cloneCharacterCardTemplate, LINKING_NODE_TYPE } from '../data/seed.js';
 import { genId } from '../data/csvSchemas.js';
+import { applyFrameScale } from '../lib/frameScale.js';
+import { moveFrameContents } from '../lib/frameContents.js';
+import { nextVisualMarkerValue } from '../lib/visualMarkers.js';
+import { includeGeneratedCharacterNodes, syncCharacterArchetypeGraph } from '../lib/characterArchetype.js';
 import TypeChips from '../components/TypeChips.jsx';
+import LinkingNodePreview from '../components/LinkingNodePreview.jsx';
+import MechanismNodePreview, { isMechanismPreviewNode } from '../components/MechanismNodePreview.jsx';
+import { buildNarrativeLinkInsertion, createLinkingNode, LINKING_NODE_KIND, STORY_STRUCTURE_CONTAINER_KIND } from '../lib/narrativeLinks.js';
+import { remapCanvasClipboard } from '../lib/canvasClipboard.js';
 import {
   buildMechanicsLibrarySections,
   buildMechanicsPaletteGroups,
@@ -23,6 +31,12 @@ import {
   progressValue,
   supportingMechanicSubnodePreview,
 } from '../mechanics/palette.js';
+import {
+  isCurrentMechanicPrimitive,
+  isCurrentMechanicSubnode,
+  isOldMechanicPrimitive,
+  isOldMechanicSubnode,
+} from '../mechanics/nodeArchive.js';
 
 function useUndoableLocalState(initialValue) {
   const [stack, setStack] = useState({ present: initialValue, past: [] });
@@ -75,6 +89,7 @@ const TABS = [
   { id: 'mechBuilder', label: 'NodeStructureBuilder', color: '#8B7BF5', addLabel: '+ New mechanic draft' },
   { id: 'mechPrimitives', label: 'Mechanic Nodes', color: '#A87BF0', addLabel: '+ New mechanic node' },
   { id: 'mechSubnodes', label: 'Mechanic Subnodes', color: '#F08CB4', addLabel: '+ New mechanic subnode' },
+  { id: 'oldNodes', label: 'Old Nodes', color: '#6F7688' },
   { id: 'mechStructures', label: 'Mechanic Structures', color: 'var(--c-mechanic)', addLabel: '+ New mechanic structure' },
   { id: 'sensors', label: 'Sensor hardware', color: 'var(--c-sensor)', addLabel: '+ New sensor type' },
   { id: 'narrative', label: 'NodeStructureBuilder', color: '#F08CB4', addLabel: '+ New draft' },
@@ -88,7 +103,7 @@ const TABS = [
 // only story content; the mechanic node tree lives under Game Mechanics.
 const GROUP_META = {
   physical: { label: 'Physical', tabs: ['items', 'locations', 'sensors'] },
-  mechanics: { label: 'Game Mechanics', tabs: ['mechBuilder', 'mechPrimitives', 'mechSubnodes', 'mechStructures'] },
+  mechanics: { label: 'Game Mechanics', tabs: ['mechBuilder', 'mechPrimitives', 'mechSubnodes', 'oldNodes', 'mechStructures'] },
   story: { label: 'Story & Narrative', tabs: ['narrative', 'baseNodes', 'concepts', 'stories', 'frameworks'] },
 };
 
@@ -105,27 +120,40 @@ const MECHANIC_SUBNODE_CATEGORY_SECTIONS = [
 ];
 
 function moveFrameGraphPatch(graph, frameId, dx, dy) {
-  const fr = graph.frames?.[frameId];
-  if (!fr) return null;
-  if (fr.shape === 'circle' || fr.shape === 'arrow') {
-    return { frames: { ...(graph.frames || {}), [frameId]: { ...fr, x: fr.x + dx, y: fr.y + dy } } };
-  }
-  const inside = (x, y) => x >= fr.x && x <= fr.x + fr.w && y >= fr.y && y <= fr.y + fr.h;
-  const shift = (coll = {}) => Object.fromEntries(Object.entries(coll).map(([id, item]) => (
-    [id, inside(item.x, item.y) ? { ...item, x: item.x + dx, y: item.y + dy } : item]
-  )));
-  const frames = Object.fromEntries(Object.entries(graph.frames || {}).map(([id, frame]) => {
-    if (id === frameId) return [id, { ...frame, x: frame.x + dx, y: frame.y + dy }];
-    const fullyInside = inside(frame.x, frame.y) && inside(frame.x + frame.w, frame.y + frame.h);
-    return [id, fullyInside ? { ...frame, x: frame.x + dx, y: frame.y + dy } : frame];
-  }));
+  return moveFrameContents(graph, frameId, dx, dy);
+}
+
+const patchCanvasCollection = (collection = {}, patches = {}) => Object.fromEntries(
+  Object.entries(collection).map(([id, item]) => [id, patches[id] ? { ...item, ...patches[id] } : item]),
+);
+
+function moveCanvasSelectionPatch(graph, patches) {
   return {
-    nodes: shift(graph.nodes || {}),
-    subnodes: shift(graph.subnodes || {}),
-    frameworks: shift(graph.frameworks || {}),
-    frames,
-    numberMarkers: shift(graph.numberMarkers || {}),
-    titleMarkers: shift(graph.titleMarkers || {}),
+    nodes: patchCanvasCollection(graph.nodes, patches.nodes),
+    subnodes: patchCanvasCollection(graph.subnodes, patches.nodes),
+    frameworks: patchCanvasCollection(graph.frameworks, patches.nodes),
+    frames: patchCanvasCollection(graph.frames, patches.frames),
+    numberMarkers: patchCanvasCollection(graph.numberMarkers, patches.numberMarkers),
+    titleMarkers: patchCanvasCollection(graph.titleMarkers, patches.titleMarkers),
+  };
+}
+
+function deleteCanvasSelectionPatch(graph, selection) {
+  const removedNodes = includeGeneratedCharacterNodes(graph.nodes, selection.nodes);
+  const removedTitles = new Set(selection.titleMarkers);
+  const without = (collection = {}, ids = []) => {
+    const next = { ...collection };
+    ids.forEach((id) => delete next[id]);
+    return next;
+  };
+  return {
+    nodes: without(graph.nodes, [...removedNodes]),
+    subnodes: without(graph.subnodes, selection.nodes),
+    frameworks: without(graph.frameworks, selection.nodes),
+    frames: without(graph.frames, selection.frames),
+    numberMarkers: without(graph.numberMarkers, selection.numberMarkers),
+    titleMarkers: without(graph.titleMarkers, selection.titleMarkers),
+    edges: (graph.edges || []).filter((edge) => !removedNodes.has(edge.from) && !removedNodes.has(edge.to) && !removedTitles.has(edge.from) && !removedTitles.has(edge.to)),
   };
 }
 
@@ -257,81 +285,131 @@ function ConceptPreview({ concept, onClose, onEdit }) {
 
 // Dedicated editing viewport for a concept template's internal structure —
 // same canvas engine, base-node palette. Edits update the master template.
-function ConceptEditor({ concept, selection, onSelect, onBack }) {
+function ConceptEditor({ concept, selection, onSelect, onBack, onNavigate }) {
+  const lib = useLibrary();
   const libDispatch = useLibraryDispatch();
+  const [openPath, setOpenPath] = useState([]);
   const patch = (p) => libDispatch({ type: 'UPDATE_ENTITY', coll: 'concepts', id: concept.id, patch: p });
-  const selId = (selection?.kind === 'lib-structnode' || selection?.kind === 'lib-structframework') && selection.storyId === concept.id ? selection.id : null;
+  const currentGraph = structureGraphAtPath(concept, openPath);
+  const nested = openPath.length > 0;
+  const sameGraphPath = JSON.stringify(selection?.graphPath || []) === JSON.stringify(openPath);
+  const patchCurrentGraph = (graphPatch) => {
+    if (!nested) {
+      patch(graphPatch);
+      return;
+    }
+    patch({ nodes: patchSubgraphAtPath(concept.nodes || {}, openPath, { ...currentGraph, ...graphPatch }) });
+  };
+  const selId = (selection?.kind === 'lib-structnode' || selection?.kind === 'lib-structframework') && selection.storyId === concept.id && sameGraphPath ? selection.id : null;
   const colorOf = (n) => n.color || CONCEPT_GRAPH_NODE_TYPES[n.kind]?.color || '#8B92A6';
   const meta = ADDITIONAL_NODE_TYPES[concept.category] || { label: 'Concept' };
   const conceptCanvasNodes = {
-    ...concept.nodes,
-    ...Object.fromEntries(Object.values(concept.frameworks || {}).map((fw) => {
+    ...currentGraph.nodes,
+    ...(!nested ? Object.fromEntries(Object.values(concept.frameworks || {}).map((fw) => {
       const type = FRAMEWORK_TYPES[fw.frameworkId] || FRAMEWORK_TYPES.fate;
       return [fw.id, { ...fw, kind: 'framework', title: fw.title || type.title, body: type.summary }];
-    })),
+    })) : {}),
   };
-  const canvasColorOf = (n) => n.kind === 'framework' ? (n.color || FRAMEWORK_TYPES[n.frameworkId]?.color || '#E8D25C') : colorOf(n);
-  const canvasIconOf = (n) => n.kind === 'framework' ? (FRAMEWORK_TYPES[n.frameworkId]?.icon || 'target') : (CONCEPT_GRAPH_NODE_TYPES[n.kind]?.icon || null);
+  const canvasColorOf = (n) => n.kind === 'framework'
+    ? (n.color || FRAMEWORK_TYPES[n.frameworkId]?.color || '#E8D25C')
+    : n.kind === LINKING_NODE_KIND
+      ? (n.color || LINKING_NODE_TYPE.color)
+      : colorOf(n);
+  const canvasIconOf = (n) => n.kind === 'framework'
+    ? (FRAMEWORK_TYPES[n.frameworkId]?.icon || 'target')
+    : n.kind === LINKING_NODE_KIND
+      ? LINKING_NODE_TYPE.icon
+      : n.kind === STORY_STRUCTURE_CONTAINER_KIND
+        ? 'layers'
+        : (CONCEPT_GRAPH_NODE_TYPES[n.kind]?.icon || null);
   const addBase = (kind) => {
     const type = CONCEPT_GRAPH_NODE_TYPES[kind] || { label: kind };
-    const id = genId(concept.nodes, 'S');
+    const id = genId(currentGraph.nodes, nested ? 'D' : 'S');
     const nodePos = visibleCanvasPlacement({ x: 80, y: 70 });
     const node = {
       id, kind, title: `New ${type.label.toLowerCase()}`, ...nodePos, body: '', color: null,
       ...(kind === 'character' ? cloneCharacterCardTemplate() : {}),
     };
-    patch({ nodes: { ...concept.nodes, [id]: node } });
-    onSelect({ kind: 'lib-structnode', id, storyId: concept.id, coll: 'concepts' });
+    patchCurrentGraph({ nodes: { ...currentGraph.nodes, [id]: node } });
+    onSelect({ kind: 'lib-structnode', id, storyId: concept.id, coll: 'concepts', graphPath: openPath });
   };
-  const addNumberMarker = () => {
-    const markers = concept.numberMarkers || {};
-    const id = genId(markers, 'NUM-');
-    const values = Object.values(markers).map((m) => Number(m.value)).filter(Number.isFinite);
-    const marker = { id, value: values.length ? Math.max(...values) + 1 : 1, ...visibleCanvasPlacement({ x: 120, y: 120 }, { w: 34, h: 34 }), color: '#E8D25C' };
-    patch({ numberMarkers: { ...markers, [id]: marker } });
-    onSelect({ kind: 'lib-structnumber', id, storyId: concept.id, coll: 'concepts' });
+  const addVisualMarker = (markerType = 'number') => {
+    const markers = currentGraph.numberMarkers || {};
+    const id = genId(markers, markerType === 'letter' ? 'LTR-' : 'NUM-');
+    const marker = { id, markerType, value: nextVisualMarkerValue(markers, markerType), ...visibleCanvasPlacement({ x: 120, y: 120 }, { w: 34, h: 34 }), color: '#E8D25C' };
+    patchCurrentGraph({ numberMarkers: { ...markers, [id]: marker } });
+    onSelect({ kind: 'lib-structnumber', id, storyId: concept.id, coll: 'concepts', graphPath: openPath });
   };
   const addFrame = () => {
-    const frames = concept.frames || {};
+    const frames = currentGraph.frames || {};
     const id = genId(frames, 'FR-');
     const size = { w: 360, h: 220 };
     const pos = visibleCanvasPlacement({ x: 90, y: 90 }, size);
     const frame = { id, label: 'Frame', ...pos, ...size, color: '#8B92A6' };
-    patch({ frames: { ...frames, [id]: frame } });
-    onSelect({ kind: 'lib-structframe', id, storyId: concept.id, coll: 'concepts' });
+    patchCurrentGraph({ frames: { ...frames, [id]: frame } });
+    onSelect({ kind: 'lib-structframe', id, storyId: concept.id, coll: 'concepts', graphPath: openPath });
   };
   const addCircle = () => {
-    const frames = concept.frames || {};
+    const frames = currentGraph.frames || {};
     const id = genId(frames, 'CIR-');
     const size = { w: 160, h: 160 };
     const pos = visibleCanvasPlacement({ x: 100, y: 100 }, size);
     const frame = { id, label: 'Circle', shape: 'circle', ...pos, ...size, color: '#5CA8F5' };
-    patch({ frames: { ...frames, [id]: frame } });
-    onSelect({ kind: 'lib-structframe', id, storyId: concept.id, coll: 'concepts' });
+    patchCurrentGraph({ frames: { ...frames, [id]: frame } });
+    onSelect({ kind: 'lib-structframe', id, storyId: concept.id, coll: 'concepts', graphPath: openPath });
   };
   const addArrow = () => {
-    const frames = concept.frames || {};
+    const frames = currentGraph.frames || {};
     const id = genId(frames, 'ARR-');
     const pos = visibleCanvasPlacement({ x: 110, y: 110 }, { w: 200, h: 80 });
     const frame = { id, label: 'Arrow', shape: 'arrow', ...pos, w: 200, h: 80, color: '#5CA8F5' };
-    patch({ frames: { ...frames, [id]: frame } });
-    onSelect({ kind: 'lib-structframe', id, storyId: concept.id, coll: 'concepts' });
+    patchCurrentGraph({ frames: { ...frames, [id]: frame } });
+    onSelect({ kind: 'lib-structframe', id, storyId: concept.id, coll: 'concepts', graphPath: openPath });
+  };
+  const addSpline = () => {
+    const frames = currentGraph.frames || {};
+    const id = genId(frames, 'SPL-');
+    const pos = visibleCanvasPlacement({ x: 110, y: 160 }, { w: 220, h: 80 });
+    const frame = { id, label: 'Spline', shape: 'spline', ...pos, w: 220, h: 80, curveX: 0, curveY: -70, color: '#5CA8F5' };
+    patchCurrentGraph({ frames: { ...frames, [id]: frame } });
+    onSelect({ kind: 'lib-structframe', id, storyId: concept.id, coll: 'concepts', graphPath: openPath });
   };
   const addTitleMarker = () => {
-    const markers = concept.titleMarkers || {};
+    const markers = currentGraph.titleMarkers || {};
     const id = genId(markers, 'TTL-');
     const marker = { id, text: 'Title', ...visibleCanvasPlacement({ x: 140, y: 110 }, { w: 120, h: 42 }), fontSize: 28, color: '#E9EBF3' };
-    patch({ titleMarkers: { ...markers, [id]: marker } });
-    onSelect({ kind: 'lib-structtitle', id, storyId: concept.id, coll: 'concepts' });
+    patchCurrentGraph({ titleMarkers: { ...markers, [id]: marker } });
+    onSelect({ kind: 'lib-structtitle', id, storyId: concept.id, coll: 'concepts', graphPath: openPath });
+  };
+  const addLinkingNode = () => {
+    const node = createLinkingNode(
+      currentGraph.nodes,
+      visibleCanvasPlacement({ x: 110, y: 110 }, { w: 280, h: 150 }),
+      'CLINK-',
+    );
+    patchCurrentGraph({ nodes: { ...currentGraph.nodes, [node.id]: node } });
+    onSelect({ kind: 'lib-structnode', id: node.id, storyId: concept.id, coll: 'concepts', graphPath: openPath });
+  };
+  const insertLinkedTarget = (linkNode, ref) => {
+    const inserted = buildNarrativeLinkInsertion(
+      lib,
+      ref,
+      currentGraph.nodes,
+      { x: linkNode.x + (linkNode.w || 280) + 50, y: linkNode.y },
+      'CINS-',
+    );
+    if (!inserted) return;
+    patchCurrentGraph({ nodes: { ...currentGraph.nodes, [inserted.id]: inserted } });
+    onSelect({ kind: 'lib-structnode', id: inserted.id, storyId: concept.id, coll: 'concepts', graphPath: openPath });
   };
   return (
     <div className="main">
       <div className="mhead">
         <div>
-          <div className="crumb"><button className="linkbtn" onClick={onBack}>← Concepts</button></div>
-          <h2>{concept.name} <span className="libbadge inline">master template · {meta.label}</span></h2>
+          <div className="crumb"><button className="linkbtn" onClick={onBack}>← Concepts</button>{nested && <> / <button className="crumblink" onClick={() => { setOpenPath([]); onSelect(null); }}>{concept.name}</button> / <b>Linked structure</b></>}</div>
+          <h2>{nested ? 'Inside linked structure' : concept.name} <span className="libbadge inline">master template · {meta.label}</span></h2>
         </div>
-        <div className="right"><span className="mono dim">{Object.keys(concept.nodes).length} nodes · {concept.edges.length} links</span></div>
+        <div className="right">{nested && <button className="btn" onClick={() => { setOpenPath(openPath.slice(0, -1)); onSelect(null); }}>Back one level</button>}<span className="mono dim">{Object.keys(currentGraph.nodes).length} nodes · {currentGraph.edges.length} links</span></div>
       </div>
       <div className="toolrow">
         <div className="canvas-tool-group node-tool-group"><span className="tool-kind-label">Nodes</span>
@@ -339,7 +417,10 @@ function ConceptEditor({ concept, selection, onSelect, onBack }) {
           <button key={t.id} className="addnode" title={t.blurb} onClick={() => addBase(t.id)}>
             <span className="sq" style={{ background: t.color }}><PrimIcon icon={t.icon} color="#fff" size={11} /></span>{t.label}
           </button>
-        ))}</div>
+        ))}
+        <button className="addnode" title={LINKING_NODE_TYPE.blurb} onClick={addLinkingNode}>
+          <span className="sq" style={{ background: LINKING_NODE_TYPE.color }}><PrimIcon icon={LINKING_NODE_TYPE.icon} color="#fff" size={11} /></span>{LINKING_NODE_TYPE.label}
+        </button></div>
         <div className="canvas-tool-group support-tool-group"><span className="tool-kind-label">Support</span>
         <button className="addnode frameadd" title="Add a visual grouping frame" onClick={addFrame}>
           <span className="sq" style={{ background: '#8B92A6' }}><PrimIcon icon="layers" color="#fff" size={11} /></span>Frame
@@ -347,8 +428,11 @@ function ConceptEditor({ concept, selection, onSelect, onBack }) {
         <button className="addnode frameadd" title="Add a resizable circle" onClick={addCircle}>
           <span className="sq shapecircle" style={{ borderColor: '#5CA8F5' }} />Circle
         </button>
-        <button className="addnode frameadd" title="Add a visual number marker" onClick={addNumberMarker}>
+        <button className="addnode frameadd" title="Add a visual number marker" onClick={() => addVisualMarker('number')}>
           <span className="sq" style={{ background: '#E8D25C', color: '#111' }}>1</span>Number
+        </button>
+        <button className="addnode frameadd" title="Add a visual letter marker (A-Z)" onClick={() => addVisualMarker('letter')}>
+          <span className="sq" style={{ background: '#E8D25C', color: '#111' }}>A</span>Letter
         </button>
         <button className="addnode frameadd" title="Add a draggable title label" onClick={addTitleMarker}>
           <span className="sq" style={{ background: '#E9EBF3', color: '#111' }}>T</span>Title
@@ -356,110 +440,159 @@ function ConceptEditor({ concept, selection, onSelect, onBack }) {
         <button className="addnode frameadd" title="Add a directional support arrow" onClick={addArrow}>
           <span className="sq arrowglyph" style={{ color: '#5CA8F5' }}>→</span>Arrow
         </button>
+        <button className="addnode frameadd" title="Add an editable curved support line" onClick={addSpline}>
+          <span className="sq splineglyph" style={{ color: '#5CA8F5' }}>∿</span>Spline
+        </button>
         </div>
       </div>
       <FlowCanvas
-        nodes={conceptCanvasNodes} edges={concept.edges} selId={selId} colorOf={canvasColorOf}
+        nodes={conceptCanvasNodes} edges={currentGraph.edges} selId={selId} colorOf={canvasColorOf}
         iconOf={canvasIconOf}
-        nodeClass={(n) => (n.kind === 'framework' ? 'framework' : '')}
-        onSelect={(id) => onSelect(concept.frameworks?.[id] ? { kind: 'lib-structframework', id, storyId: concept.id, coll: 'concepts' } : { kind: 'lib-structnode', id, storyId: concept.id, coll: 'concepts' })}
-        onMove={(id, x, y) => concept.frameworks?.[id]
+        nodeClass={(n) => (n.kind === 'framework' ? 'framework' : n.kind === 'concept' || n.kind === STORY_STRUCTURE_CONTAINER_KIND ? 'concept' : n.kind === LINKING_NODE_KIND ? 'linking-node' : '')}
+        onOpenNode={openPath.length < 3 ? (id) => { if (currentGraph.nodes[id]?.sub) { setOpenPath([...openPath, id]); onSelect(null); } } : undefined}
+        onSelect={(id) => onSelect(!nested && concept.frameworks?.[id] ? { kind: 'lib-structframework', id, storyId: concept.id, coll: 'concepts' } : { kind: 'lib-structnode', id, storyId: concept.id, coll: 'concepts', graphPath: openPath })}
+        onUpdateNode={(id, nodePatch) => patchCurrentGraph({ nodes: { ...currentGraph.nodes, [id]: { ...currentGraph.nodes[id], ...nodePatch } } })}
+        onMove={(id, x, y) => !nested && concept.frameworks?.[id]
           ? patch({ frameworks: { ...(concept.frameworks || {}), [id]: { ...concept.frameworks[id], x, y } } })
-          : patch({ nodes: { ...concept.nodes, [id]: { ...concept.nodes[id], x, y } } })}
+          : patchCurrentGraph({ nodes: { ...currentGraph.nodes, [id]: { ...currentGraph.nodes[id], x, y } } })}
         onMoveNodes={(positions) => {
-          const nodes = { ...concept.nodes };
-          const frameworks = { ...(concept.frameworks || {}) };
+          const nodes = { ...currentGraph.nodes };
+          const frameworks = { ...(!nested ? concept.frameworks || {} : {}) };
           Object.entries(positions).forEach(([id, pos]) => {
-            if (frameworks[id]) frameworks[id] = { ...frameworks[id], ...pos };
+            if (!nested && frameworks[id]) frameworks[id] = { ...frameworks[id], ...pos };
             else if (nodes[id]) nodes[id] = { ...nodes[id], ...pos };
           });
-          patch({ nodes, frameworks });
+          if (!nested) patch({ nodes, frameworks });
+          else patchCurrentGraph({ nodes });
         }}
-        onResizeNode={(id, nodePatch) => concept.frameworks?.[id]
+        onMoveSelection={(patches) => {
+          const moved = moveCanvasSelectionPatch({ ...currentGraph, frameworks: nested ? {} : (concept.frameworks || {}) }, patches);
+          if (!nested) patch(moved);
+          else patchCurrentGraph(moved);
+        }}
+        onResizeNode={(id, nodePatch) => !nested && concept.frameworks?.[id]
           ? patch({ frameworks: { ...(concept.frameworks || {}), [id]: { ...concept.frameworks[id], ...nodePatch } } })
-          : patch({ nodes: { ...concept.nodes, [id]: { ...concept.nodes[id], ...nodePatch } } })}
+          : patchCurrentGraph({ nodes: { ...currentGraph.nodes, [id]: { ...currentGraph.nodes[id], ...nodePatch } } })}
         onConnect={(from, to, edgePatch = {}) => {
-          if (concept.edges.some((e) => e.from === from && e.to === to)) {
-            patch({ edges: concept.edges.map((e) => e.from === from && e.to === to ? { ...e, ...edgePatch } : e) });
+          if (currentGraph.edges.some((e) => e.from === from && e.to === to)) {
+            patchCurrentGraph({ edges: currentGraph.edges.map((e) => e.from === from && e.to === to ? { ...e, ...edgePatch } : e) });
             return;
           }
-          patch({ edges: [...concept.edges, { from, to, label: '', color: null, ...edgePatch }] });
+          patchCurrentGraph({ edges: [...currentGraph.edges, { from, to, label: '', color: null, ...edgePatch }] });
         }}
-        onRemoveEdge={(e) => patch({ edges: concept.edges.filter((x) => !(x.from === e.from && x.to === e.to)) })}
-        onRemoveEdges={(hit) => patch({ edges: concept.edges.filter((x) => !hit.some((e) => e.from === x.from && e.to === x.to)) })}
-        onSetColor={(id, color) => concept.frameworks?.[id]
+        onRemoveEdge={(e) => patchCurrentGraph({ edges: currentGraph.edges.filter((x) => !(x.from === e.from && x.to === e.to)) })}
+        onRemoveEdges={(hit) => patchCurrentGraph({ edges: currentGraph.edges.filter((x) => !hit.some((e) => e.from === x.from && e.to === x.to)) })}
+        onSetColor={(id, color) => !nested && concept.frameworks?.[id]
           ? patch({ frameworks: { ...(concept.frameworks || {}), [id]: { ...concept.frameworks[id], color } } })
-          : patch({ nodes: { ...concept.nodes, [id]: { ...concept.nodes[id], color } } })}
+          : patchCurrentGraph({ nodes: { ...currentGraph.nodes, [id]: { ...currentGraph.nodes[id], color } } })}
         onDeleteNode={(id) => {
-          if (concept.frameworks?.[id]) {
+          if (!nested && concept.frameworks?.[id]) {
             const frameworks = { ...(concept.frameworks || {}) };
             delete frameworks[id];
             patch({ frameworks });
           } else {
-            const nodes = { ...concept.nodes };
+            const nodes = { ...currentGraph.nodes };
             delete nodes[id];
-            patch({ nodes, edges: concept.edges.filter((e) => e.from !== id && e.to !== id) });
+            patchCurrentGraph({ nodes, edges: currentGraph.edges.filter((e) => e.from !== id && e.to !== id) });
           }
           onSelect(null);
         }}
         onDeleteNodes={(ids) => {
           const removed = new Set(ids);
-          const nodes = { ...concept.nodes };
-          const frameworks = { ...(concept.frameworks || {}) };
+          const nodes = { ...currentGraph.nodes };
+          const frameworks = { ...(!nested ? concept.frameworks || {} : {}) };
           ids.forEach((id) => { delete nodes[id]; delete frameworks[id]; });
-          patch({ nodes, frameworks, edges: concept.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)) });
+          const graphPatch = { nodes, edges: currentGraph.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)) };
+          if (!nested) patch({ ...graphPatch, frameworks });
+          else patchCurrentGraph(graphPatch);
+          onSelect(null);
+        }}
+        onDeleteSelection={(selected) => {
+          const deleted = deleteCanvasSelectionPatch({ ...currentGraph, frameworks: nested ? {} : (concept.frameworks || {}) }, selected);
+          if (!nested) patch(deleted);
+          else patchCurrentGraph(deleted);
           onSelect(null);
         }}
         onClearCanvas={() => {
-          patch({ nodes: {}, edges: [], frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {} });
+          if (!nested) patch({ nodes: {}, edges: [], frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {} });
+          else patchCurrentGraph({ nodes: {}, edges: [], frames: {}, numberMarkers: {}, titleMarkers: {} });
           onSelect(null);
         }}
-        onEditEdge={(e, edgePatch) => patch({ edges: concept.edges.map((x) => (x.from === e.from && x.to === e.to ? { ...x, ...edgePatch } : x)) })}
-        frames={concept.frames || {}}
-        selFrame={selection?.kind === 'lib-structframe' && selection.storyId === concept.id ? selection.id : null}
-        onFrameSelect={(id) => onSelect({ kind: 'lib-structframe', id, storyId: concept.id, coll: 'concepts' })}
+        onEditEdge={(e, edgePatch) => patchCurrentGraph({ edges: currentGraph.edges.map((x) => (x.from === e.from && x.to === e.to ? { ...x, ...edgePatch } : x)) })}
+        frames={currentGraph.frames || {}}
+        selFrame={selection?.kind === 'lib-structframe' && selection.storyId === concept.id && sameGraphPath ? selection.id : null}
+        onFrameSelect={(id) => onSelect({ kind: 'lib-structframe', id, storyId: concept.id, coll: 'concepts', graphPath: openPath })}
+        onFrameDelete={(id) => {
+          const frames = { ...(currentGraph.frames || {}) };
+          delete frames[id];
+          patchCurrentGraph({ frames });
+          onSelect(null);
+        }}
         onFrameMove={(id, dx, dy) => {
-          const moved = moveFrameGraphPatch(concept, id, dx, dy);
-          if (moved) patch(moved);
+          const moved = moveFrameGraphPatch(currentGraph, id, dx, dy);
+          if (moved) patchCurrentGraph(moved);
+        }}
+        onFrameMoveTo={(id, x, y) => {
+          const fr = currentGraph.frames?.[id];
+          if (!fr) return;
+          const moved = moveFrameGraphPatch(currentGraph, id, x - fr.x, y - fr.y);
+          if (moved) patchCurrentGraph(moved);
         }}
         onFrameResize={(id, w, h) => {
-          const fr = concept.frames?.[id];
-          if (fr) patch({ frames: { ...(concept.frames || {}), [id]: { ...fr, w, h } } });
+          const fr = currentGraph.frames?.[id];
+          if (fr) patchCurrentGraph({ frames: { ...(currentGraph.frames || {}), [id]: { ...fr, w, h } } });
         }}
-        numberMarkers={concept.numberMarkers || {}}
-        selNumberMarker={selection?.kind === 'lib-structnumber' && selection.storyId === concept.id ? selection.id : null}
-        onNumberMarkerSelect={(id) => onSelect({ kind: 'lib-structnumber', id, storyId: concept.id, coll: 'concepts' })}
+        onFrameGeometry={(id, geometry) => {
+          const fr = currentGraph.frames?.[id];
+          if (fr) patchCurrentGraph({ frames: { ...(currentGraph.frames || {}), [id]: { ...fr, ...geometry } } });
+        }}
+        onFrameScale={(id, transform) => patchCurrentGraph(applyFrameScale(currentGraph, id, transform))}
+        numberMarkers={currentGraph.numberMarkers || {}}
+        selNumberMarker={selection?.kind === 'lib-structnumber' && selection.storyId === concept.id && sameGraphPath ? selection.id : null}
+        onNumberMarkerSelect={(id) => onSelect({ kind: 'lib-structnumber', id, storyId: concept.id, coll: 'concepts', graphPath: openPath })}
         onNumberMarkerMove={(id, dx, dy) => {
-          const marker = concept.numberMarkers?.[id];
-          if (marker) patch({ numberMarkers: { ...(concept.numberMarkers || {}), [id]: { ...marker, x: marker.x + dx, y: marker.y + dy } } });
+          const marker = currentGraph.numberMarkers?.[id];
+          if (marker) patchCurrentGraph({ numberMarkers: { ...(currentGraph.numberMarkers || {}), [id]: { ...marker, x: marker.x + dx, y: marker.y + dy } } });
+        }}
+        onNumberMarkerUpdate={(id, markerPatch) => {
+          const marker = currentGraph.numberMarkers?.[id];
+          if (marker) patchCurrentGraph({ numberMarkers: { ...(currentGraph.numberMarkers || {}), [id]: { ...marker, ...markerPatch } } });
         }}
         onNumberMarkerDelete={(id) => {
-          const numberMarkers = { ...(concept.numberMarkers || {}) };
+          const numberMarkers = { ...(currentGraph.numberMarkers || {}) };
           delete numberMarkers[id];
-          patch({ numberMarkers });
+          patchCurrentGraph({ numberMarkers });
           onSelect(null);
         }}
-        titleMarkers={concept.titleMarkers || {}}
-        selTitleMarker={selection?.kind === 'lib-structtitle' && selection.storyId === concept.id ? selection.id : null}
-        onTitleMarkerSelect={(id) => onSelect({ kind: 'lib-structtitle', id, storyId: concept.id, coll: 'concepts' })}
+        titleMarkers={currentGraph.titleMarkers || {}}
+        selTitleMarker={selection?.kind === 'lib-structtitle' && selection.storyId === concept.id && sameGraphPath ? selection.id : null}
+        onTitleMarkerSelect={(id) => onSelect({ kind: 'lib-structtitle', id, storyId: concept.id, coll: 'concepts', graphPath: openPath })}
         onTitleMarkerMove={(id, dx, dy) => {
-          const marker = concept.titleMarkers?.[id];
-          if (marker) patch({ titleMarkers: { ...(concept.titleMarkers || {}), [id]: { ...marker, x: marker.x + dx, y: marker.y + dy } } });
+          const marker = currentGraph.titleMarkers?.[id];
+          if (marker) patchCurrentGraph({ titleMarkers: { ...(currentGraph.titleMarkers || {}), [id]: { ...marker, x: marker.x + dx, y: marker.y + dy } } });
         }}
         onTitleMarkerDelete={(id) => {
-          const titleMarkers = { ...(concept.titleMarkers || {}) };
+          const titleMarkers = { ...(currentGraph.titleMarkers || {}) };
           delete titleMarkers[id];
-          patch({ titleMarkers, edges: concept.edges.filter((e) => e.from !== id && e.to !== id) });
+          patchCurrentGraph({ titleMarkers, edges: currentGraph.edges.filter((e) => e.from !== id && e.to !== id) });
           onSelect(null);
         }}
         onPasteNode={(p) => {
-          const id = genId(concept.nodes, 'S');
-          patch({ nodes: { ...concept.nodes, [id]: { id, kind: p.kind, title: p.title, x: p.x, y: p.y, body: p.body, color: p.color ?? null, w: p.w ?? undefined, h: p.h ?? undefined } } });
+          const id = genId(currentGraph.nodes, nested ? 'D' : 'S');
+          patchCurrentGraph({ nodes: { ...currentGraph.nodes, [id]: { id, kind: p.kind, title: p.title, x: p.x, y: p.y, body: p.body, color: p.color ?? null, w: p.w ?? undefined, h: p.h ?? undefined } } });
         }}
-        renderExtra={(n) => {
+        onPasteNodes={(clipboard) => {
+          const pasted = remapCanvasClipboard(clipboard, currentGraph.nodes, nested ? 'DCOPY-' : 'SCOPY-');
+          patchCurrentGraph({ nodes: { ...currentGraph.nodes, ...pasted.nodes }, edges: [...currentGraph.edges, ...pasted.edges] });
+          onSelect({ kind: 'lib-structnode', id: pasted.ids[pasted.ids.length - 1], storyId: concept.id, coll: 'concepts', graphPath: openPath });
+        }}
+        renderBody={(n) => (n.kind === LINKING_NODE_KIND ? null : n.body)}
+        renderExtra={(n, dimensions) => {
+          if (n.kind === LINKING_NODE_KIND) return <LinkingNodePreview node={n} onNavigate={onNavigate} onInsert={(ref) => insertLinkedTarget(n, ref)} />;
+          if (n.kind === 'concept' || n.kind === STORY_STRUCTURE_CONTAINER_KIND) return <div className="cptrow"><span className="cptbadge">{n.kind === 'concept' ? 'Concept' : 'Story Structure'} · {Object.keys(n.sub?.nodes || {}).length} inside</span><button className="linkbtn" onClick={(event) => { event.stopPropagation(); setOpenPath([...openPath, n.id]); onSelect(null); }}>Enter structure</button></div>;
           if (n.kind !== 'framework') return null;
           const fw = FRAMEWORK_TYPES[n.frameworkId] || FRAMEWORK_TYPES.fate;
-          return <FrameworkPreview frameworkId={fw.id} />;
+          return <FrameworkPreview frameworkId={fw.id} nodeWidth={dimensions.width} nodeHeight={dimensions.height} />;
         }}
       />
       <div className="statusbar">
@@ -514,7 +647,7 @@ function patchSubgraphAtPath(nodes, path, nextGraph) {
   };
 }
 
-function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
+function StructureEditor({ coll, structure, selection, onSelect, onBack, onNavigate }) {
   const lib = useLibrary();
   const proj = useGame();
   const libDispatch = useLibraryDispatch();
@@ -524,9 +657,9 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
   const [mechPaletteFilter, setMechPaletteFilter] = useState('all');
   const [openPath, setOpenPath] = useState([]);
   const patch = (p) => libDispatch({ type: 'UPDATE_ENTITY', coll, id: structure.id, patch: p });
-  const activePath = isMechanicStructure ? openPath : [];
+  const activePath = openPath;
   const currentGraph = structureGraphAtPath(structure, activePath);
-  const nested = isMechanicStructure && activePath.length > 0;
+  const nested = activePath.length > 0;
   const sameGraphPath = JSON.stringify(selection?.graphPath || []) === JSON.stringify(activePath);
   const patchCurrentGraph = (p) => {
     if (!nested) {
@@ -544,7 +677,13 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
     })) : {}),
   };
   const canvasColor = (n) => n.kind === 'framework' ? (n.color || FRAMEWORK_TYPES[n.frameworkId]?.color || '#E8D25C') : structNodeColor(n, lib);
-  const canvasIcon = (n) => n.kind === 'framework' ? (FRAMEWORK_TYPES[n.frameworkId]?.icon || 'target') : undefined;
+  const canvasIcon = (n) => n.kind === 'framework'
+    ? (FRAMEWORK_TYPES[n.frameworkId]?.icon || 'target')
+    : n.kind === LINKING_NODE_KIND
+      ? LINKING_NODE_TYPE.icon
+      : n.kind === STORY_STRUCTURE_CONTAINER_KIND
+        ? 'layers'
+        : undefined;
   const addMechanicPayload = (payload, x = null, y = null) => {
     const nodePos = x == null || y == null ? visibleCanvasPlacement({ x: 90, y: 90 }) : { x, y };
     const node = mechanicsPayloadToNode(payload, lib, currentGraph.nodes, nodePos.x, nodePos.y, nested ? 'D' : 'S');
@@ -565,11 +704,10 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
     }),
     mechPaletteFilter,
   );
-  const addNumberMarker = () => {
+  const addVisualMarker = (markerType = 'number') => {
     const markers = currentGraph.numberMarkers || {};
-    const id = genId(markers, 'NUM-');
-    const values = Object.values(markers).map((m) => Number(m.value)).filter(Number.isFinite);
-    const marker = { id, value: values.length ? Math.max(...values) + 1 : 1, ...visibleCanvasPlacement({ x: 120, y: 120 }, { w: 34, h: 34 }), color: '#E8D25C' };
+    const id = genId(markers, markerType === 'letter' ? 'LTR-' : 'NUM-');
+    const marker = { id, markerType, value: nextVisualMarkerValue(markers, markerType), ...visibleCanvasPlacement({ x: 120, y: 120 }, { w: 34, h: 34 }), color: '#E8D25C' };
     patchCurrentGraph({ numberMarkers: { ...markers, [id]: marker } });
     onSelect({ kind: 'lib-structnumber', id, storyId: structure.id, coll, graphPath: activePath });
   };
@@ -599,12 +737,31 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
     patchCurrentGraph({ frames: { ...frames, [id]: frame } });
     onSelect({ kind: 'lib-structframe', id, storyId: structure.id, coll, graphPath: activePath });
   };
+  const addSpline = () => {
+    const frames = currentGraph.frames || {};
+    const id = genId(frames, 'SPL-');
+    const pos = visibleCanvasPlacement({ x: 110, y: 160 }, { w: 220, h: 80 });
+    const frame = { id, label: 'Spline', shape: 'spline', ...pos, w: 220, h: 80, curveX: 0, curveY: -70, color: '#5CA8F5' };
+    patchCurrentGraph({ frames: { ...frames, [id]: frame } });
+    onSelect({ kind: 'lib-structframe', id, storyId: structure.id, coll, graphPath: activePath });
+  };
   const addTitleMarker = () => {
     const markers = currentGraph.titleMarkers || {};
     const id = genId(markers, 'TTL-');
     const marker = { id, text: 'Title', ...visibleCanvasPlacement({ x: 140, y: 110 }, { w: 120, h: 42 }), fontSize: 28, color: '#E9EBF3' };
     patchCurrentGraph({ titleMarkers: { ...markers, [id]: marker } });
     onSelect({ kind: 'lib-structtitle', id, storyId: structure.id, coll, graphPath: activePath });
+  };
+  const addLinkingNode = (pos = null) => {
+    const node = createLinkingNode(currentGraph.nodes, pos || visibleCanvasPlacement({ x: 110, y: 110 }, { w: 280, h: 150 }), 'SLINK-');
+    patchCurrentGraph({ nodes: { ...currentGraph.nodes, [node.id]: node } });
+    onSelect({ kind: 'lib-structnode', id: node.id, storyId: structure.id, coll, graphPath: activePath });
+  };
+  const insertLinkedTarget = (linkNode, ref) => {
+    const inserted = buildNarrativeLinkInsertion(lib, ref, currentGraph.nodes, { x: linkNode.x + (linkNode.w || 280) + 50, y: linkNode.y }, 'SINS-');
+    if (!inserted) return;
+    patchCurrentGraph({ nodes: { ...currentGraph.nodes, [inserted.id]: inserted } });
+    onSelect({ kind: 'lib-structnode', id: inserted.id, storyId: structure.id, coll, graphPath: activePath });
   };
 
   return (
@@ -622,9 +779,11 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
           <div className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
             <button className="btn" onClick={addFrame}>Frame</button>
             <button className="btn" onClick={addCircle}>Circle</button>
-            <button className="btn" onClick={addNumberMarker}>Number</button>
+            <button className="btn" onClick={() => addVisualMarker('number')}>Number</button>
+            <button className="btn" onClick={() => addVisualMarker('letter')}>Letter</button>
             <button className="btn" onClick={addTitleMarker}>Title</button>
             <button className="btn" onClick={addArrow}>Arrow</button>
+            <button className="btn" onClick={addSpline}>Spline</button>
           </div>
           <span className="mono dim">~{structure.estMinutes} min · {Object.keys(currentGraph.nodes).length} nodes · {currentGraph.edges.length} links</span>
         </div>
@@ -645,6 +804,7 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
           <div className="palette">
             <div className="lab">{cfg.paletteLabel}</div>
             <div className="hint" style={{ marginBottom: 9 }}>{cfg.paletteHint}</div>
+            {coll === 'stories' && <PaletteNode n={{ id: 'linkingNode', name: LINKING_NODE_TYPE.label, body: LINKING_NODE_TYPE.blurb, color: LINKING_NODE_TYPE.color, icon: LINKING_NODE_TYPE.icon, category: 'Supporting' }} onSelect={() => addLinkingNode()} />}
             {Object.values(lib[cfg.paletteColl]).map((n) => (
               <PaletteNode key={n.id} n={n} onSelect={() => onSelect({ kind: cfg.paletteKind, id: n.id })} />
             ))}
@@ -654,9 +814,10 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
           nodes={canvasNodes} edges={currentGraph.edges} selId={selId}
           colorOf={canvasColor}
           iconOf={canvasIcon}
-          nodeClass={(n) => (n.kind === 'framework' ? 'framework' : '')}
-          onOpenNode={isMechanicStructure && activePath.length < 3 ? (id) => { setOpenPath([...activePath, id]); onSelect(null); } : undefined}
+          nodeClass={(n) => (n.kind === 'framework' ? 'framework' : n.kind === 'concept' || n.kind === STORY_STRUCTURE_CONTAINER_KIND ? 'concept' : n.kind === LINKING_NODE_KIND ? 'linking-node' : '')}
+          onOpenNode={activePath.length < 3 ? (id) => { if (currentGraph.nodes[id]?.sub) { setOpenPath([...activePath, id]); onSelect(null); } } : undefined}
           onSelect={(id) => onSelect(!nested && structure.frameworks?.[id] ? { kind: 'lib-structframework', id, storyId: structure.id, coll } : { kind: 'lib-structnode', id, storyId: structure.id, coll, graphPath: activePath })}
+          onUpdateNode={(id, nodePatch) => patchCurrentGraph({ nodes: { ...currentGraph.nodes, [id]: { ...currentGraph.nodes[id], ...nodePatch } } })}
           onMove={(id, x, y) => !nested && structure.frameworks?.[id]
             ? patch({ frameworks: { ...(structure.frameworks || {}), [id]: { ...structure.frameworks[id], x, y } } })
             : patchCurrentGraph({ nodes: { ...currentGraph.nodes, [id]: { ...currentGraph.nodes[id], x, y } } })}
@@ -669,6 +830,11 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
             });
             if (!nested) patch({ nodes, frameworks });
             else patchCurrentGraph({ nodes });
+          }}
+          onMoveSelection={(patches) => {
+            const moved = moveCanvasSelectionPatch({ ...currentGraph, frameworks: nested ? {} : (structure.frameworks || {}) }, patches);
+            if (!nested) patch(moved);
+            else patchCurrentGraph(moved);
           }}
           onResizeNode={(id, nodePatch) => !nested && structure.frameworks?.[id]
             ? patch({ frameworks: { ...(structure.frameworks || {}), [id]: { ...structure.frameworks[id], ...nodePatch } } })
@@ -690,17 +856,26 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
               addMechanicPayload(nodeTypeId, x, y);
               return;
             }
+            if (nodeTypeId === 'linkingNode') {
+              addLinkingNode({ x, y });
+              return;
+            }
             const t = lib[cfg.paletteColl][nodeTypeId];
             if (!t) return;
             const node = cfg.build(t, currentGraph.nodes, x, y);
-            patch({ nodes: { ...structure.nodes, [node.id]: node } });
-            onSelect({ kind: 'lib-structnode', id: node.id, storyId: structure.id, coll });
+            patchCurrentGraph({ nodes: { ...currentGraph.nodes, [node.id]: node } });
+            onSelect({ kind: 'lib-structnode', id: node.id, storyId: structure.id, coll, graphPath: activePath });
           }}
           onPasteNode={(p) => {
             const id = genId(currentGraph.nodes, nested ? 'D' : 'S');
             const node = { id, primitiveId: p.primitiveId ?? null, kind: p.kind, title: p.title, x: p.x, y: p.y, body: p.body, color: p.color ?? null, image: p.image ?? null, w: p.w ?? undefined, h: p.h ?? undefined };
             patchCurrentGraph({ nodes: { ...currentGraph.nodes, [id]: node } });
             onSelect({ kind: 'lib-structnode', id, storyId: structure.id, coll, graphPath: activePath });
+          }}
+          onPasteNodes={(clipboard) => {
+            const pasted = remapCanvasClipboard(clipboard, currentGraph.nodes, nested ? 'DCOPY-' : 'SCOPY-');
+            patchCurrentGraph({ nodes: { ...currentGraph.nodes, ...pasted.nodes }, edges: [...currentGraph.edges, ...pasted.edges] });
+            onSelect({ kind: 'lib-structnode', id: pasted.ids[pasted.ids.length - 1], storyId: structure.id, coll, graphPath: activePath });
           }}
           onDeleteNode={(id) => {
             if (!nested && structure.frameworks?.[id]) {
@@ -709,19 +884,26 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
               patch({ frameworks });
             } else {
               const nodes = { ...currentGraph.nodes };
-              delete nodes[id];
-              patchCurrentGraph({ nodes, edges: currentGraph.edges.filter((e) => e.from !== id && e.to !== id) });
+              const removed = includeGeneratedCharacterNodes(nodes, [id]);
+              removed.forEach((nodeId) => delete nodes[nodeId]);
+              patchCurrentGraph({ nodes, edges: currentGraph.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)) });
             }
             onSelect(null);
           }}
           onDeleteNodes={(ids) => {
-            const removed = new Set(ids);
+            const removed = includeGeneratedCharacterNodes(currentGraph.nodes, ids);
             const nodes = { ...currentGraph.nodes };
             const frameworks = { ...(!nested ? structure.frameworks || {} : {}) };
-            ids.forEach((id) => { delete nodes[id]; delete frameworks[id]; });
+            removed.forEach((id) => { delete nodes[id]; delete frameworks[id]; });
             const graphPatch = { nodes, edges: currentGraph.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)) };
             if (!nested) patch({ ...graphPatch, frameworks });
             else patchCurrentGraph(graphPatch);
+            onSelect(null);
+          }}
+          onDeleteSelection={(selected) => {
+            const removed = deleteCanvasSelectionPatch({ ...currentGraph, frameworks: nested ? {} : (structure.frameworks || {}) }, selected);
+            if (!nested) patch(removed);
+            else patchCurrentGraph(removed);
             onSelect(null);
           }}
           onClearCanvas={() => {
@@ -733,8 +915,10 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
             onSelect(null);
           }}
           onEditEdge={(e, edgePatch) => patchCurrentGraph({ edges: currentGraph.edges.map((x) => (x.from === e.from && x.to === e.to ? { ...x, ...edgePatch } : x)) })}
-          renderBody={(n) => (isSupportingMechanicSubnode(n) || n.kind === 'item' ? null : n.body)}
-          renderExtra={(n) => {
+          renderBody={(n) => (isSupportingMechanicSubnode(n) || n.kind === 'item' || n.kind === LINKING_NODE_KIND ? null : n.body)}
+          renderExtra={(n, dimensions) => {
+            if (n.kind === LINKING_NODE_KIND) return <LinkingNodePreview node={n} onNavigate={onNavigate} onInsert={(ref) => insertLinkedTarget(n, ref)} />;
+            if (n.kind === STORY_STRUCTURE_CONTAINER_KIND) return <div className="cptrow"><span className="cptbadge">Story Structure · {Object.keys(n.sub?.nodes || {}).length} inside</span><button className="linkbtn" onClick={(e) => { e.stopPropagation(); setOpenPath([...activePath, n.id]); onSelect(null); }}>Enter structure</button></div>;
             if (isMechanicStructure && supportingMechanicSubnodePreview(n, proj)) return <SupportingMechanicPreview node={n} game={proj} onSelect={onSelect} />;
             if (isMechanicStructure && isProgressStateNode(n)) return <ProgressMechanicPreview node={n} />;
             if (n.kind === 'item') {
@@ -746,25 +930,47 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
             }
             if (n.kind !== 'framework') return null;
             const fw = FRAMEWORK_TYPES[n.frameworkId] || FRAMEWORK_TYPES.fate;
-            return <FrameworkPreview frameworkId={fw.id} />;
+            return <FrameworkPreview frameworkId={fw.id} nodeWidth={dimensions.width} nodeHeight={dimensions.height} />;
           }}
           frames={currentGraph.frames || {}}
           selFrame={selection?.kind === 'lib-structframe' && selection.storyId === structure.id && sameGraphPath ? selection.id : null}
           onFrameSelect={(id) => onSelect({ kind: 'lib-structframe', id, storyId: structure.id, coll, graphPath: activePath })}
+          onFrameDelete={(id) => {
+            const frames = { ...(currentGraph.frames || {}) };
+            delete frames[id];
+            patchCurrentGraph({ frames });
+            onSelect(null);
+          }}
           onFrameMove={(id, dx, dy) => {
             const moved = moveFrameGraphPatch({ ...currentGraph, frameworks: nested ? {} : (structure.frameworks || {}) }, id, dx, dy);
+            if (moved) patchCurrentGraph(moved);
+          }}
+          onFrameMoveTo={(id, x, y) => {
+            const fr = currentGraph.frames?.[id];
+            if (!fr) return;
+            const graph = { ...currentGraph, frameworks: nested ? {} : (structure.frameworks || {}) };
+            const moved = moveFrameGraphPatch(graph, id, x - fr.x, y - fr.y);
             if (moved) patchCurrentGraph(moved);
           }}
           onFrameResize={(id, w, h) => {
             const fr = currentGraph.frames?.[id];
             if (fr) patchCurrentGraph({ frames: { ...(currentGraph.frames || {}), [id]: { ...fr, w, h } } });
           }}
+          onFrameGeometry={(id, geometry) => {
+            const fr = currentGraph.frames?.[id];
+            if (fr) patchCurrentGraph({ frames: { ...(currentGraph.frames || {}), [id]: { ...fr, ...geometry } } });
+          }}
+          onFrameScale={(id, transform) => patchCurrentGraph(applyFrameScale(currentGraph, id, transform))}
           numberMarkers={currentGraph.numberMarkers || {}}
           selNumberMarker={selection?.kind === 'lib-structnumber' && selection.storyId === structure.id && sameGraphPath ? selection.id : null}
           onNumberMarkerSelect={(id) => onSelect({ kind: 'lib-structnumber', id, storyId: structure.id, coll, graphPath: activePath })}
           onNumberMarkerMove={(id, dx, dy) => {
             const marker = currentGraph.numberMarkers?.[id];
             if (marker) patchCurrentGraph({ numberMarkers: { ...(currentGraph.numberMarkers || {}), [id]: { ...marker, x: marker.x + dx, y: marker.y + dy } } });
+          }}
+          onNumberMarkerUpdate={(id, markerPatch) => {
+            const marker = currentGraph.numberMarkers?.[id];
+            if (marker) patchCurrentGraph({ numberMarkers: { ...(currentGraph.numberMarkers || {}), [id]: { ...marker, ...markerPatch } } });
           }}
           onNumberMarkerDelete={(id) => {
             const numberMarkers = { ...(currentGraph.numberMarkers || {}) };
@@ -794,7 +1000,7 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack }) {
   );
 }
 
-export default function Library({ group = 'physical', selection, onSelect }) {
+export default function Library({ group = 'physical', selection, onSelect, onNavigate }) {
   const lib = useLibrary();
   const libDispatch = useLibraryDispatch();
   const proj = useGame();
@@ -805,7 +1011,7 @@ export default function Library({ group = 'physical', selection, onSelect }) {
   const [preview, setPreview] = useState(null); // concept id being previewed
   const [narrFilter, setNarrFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [builder, setBuilder, undoBuilder] = useUndoableLocalState({ target: 'stories', conceptKind: 'storyConcept', name: 'New story structure', description: '', nodes: {}, edges: [], subnodes: {}, frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {} });
+  const [builder, setBuilder, undoBuilder] = useUndoableLocalState({ target: 'stories', conceptKind: 'storyConcept', name: 'New story structure', description: '', usesBaseConcept: false, baseConceptId: null, nodes: {}, edges: [], subnodes: {}, frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {} });
   const [builderSel, setBuilderSel] = useState(null);
   const [builderFrameSel, setBuilderFrameSel] = useState(null);
   const [builderNumberSel, setBuilderNumberSel] = useState(null);
@@ -842,6 +1048,19 @@ export default function Library({ group = 'physical', selection, onSelect }) {
     if (!groupMeta.tabs.includes(tab)) { setTab(groupMeta.tabs[0]); setEditing(null); }
   }, [group]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => {
+    if (!selection?.openEditor) return;
+    if (selection.kind === 'lib-concepts' && lib.concepts?.[selection.id]) {
+      setTab('concepts');
+      setEditing({ coll: 'concepts', id: selection.id });
+    } else if (selection.kind === 'lib-stories' && lib.stories?.[selection.id]) {
+      setTab('stories');
+      setEditing({ coll: 'stories', id: selection.id });
+    } else if (selection.kind === 'lib-narrative' && lib.narrative?.[selection.id]) {
+      setTab('baseNodes');
+      setEditing(null);
+    }
+  }, [selection, lib.concepts, lib.stories, lib.narrative]);
+  React.useEffect(() => {
     if (tab === 'mechBuilder' && builder.target !== 'mechStructures') {
       setBuilder({ target: 'mechStructures', conceptKind: 'storyConcept', name: 'New mechanic structure', description: '', nodes: {}, edges: [], subnodes: {}, frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {} });
       setBuilderSel(null);
@@ -857,6 +1076,8 @@ export default function Library({ group = 'physical', selection, onSelect }) {
         conceptKind: 'storyConcept',
         name: tab === 'mechBuilder' ? 'New mechanic structure' : 'New story structure',
         description: '',
+        usesBaseConcept: false,
+        baseConceptId: null,
         nodes: {}, edges: [], subnodes: {}, frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {},
       });
       setBuilderSel(null);
@@ -956,6 +1177,8 @@ export default function Library({ group = 'physical', selection, onSelect }) {
     if (n._sub) return n.color || SUBNODE_TYPES[n.kind]?.color || '#F08CB4';
     if (n.kind === 'framework') return n.color || FRAMEWORK_TYPES[n.frameworkId]?.color || '#E8D25C';
     if (n.kind === 'concept') return n.color || ADDITIONAL_NODE_TYPES[n.conceptKind]?.color || '#E8D25C';
+    if (n.kind === LINKING_NODE_KIND) return n.color || LINKING_NODE_TYPE.color;
+    if (n.kind === STORY_STRUCTURE_CONTAINER_KIND) return n.color || '#5CA8F5';
     if (n.kind === 'mechanicSubnode') return n.color || MECHANIC_SUBNODE_TYPES[n.subnodeKind]?.color || '#F08CB4';
     if (n.physicalKind === 'item' && n.itemId && lib.items?.[n.itemId]) return n.color || lib.itemTypes?.[lib.items[n.itemId].type]?.color || '#E0A23C';
     if (n.physicalKind === 'sensor') return n.color || ENTITY_COLORS.sensor;
@@ -967,11 +1190,13 @@ export default function Library({ group = 'physical', selection, onSelect }) {
     if (n._sub) return SUBNODE_TYPES[n.kind]?.icon;
     if (n.kind === 'framework') return FRAMEWORK_TYPES[n.frameworkId]?.icon || 'target';
     if (n.kind === 'concept') return ADDITIONAL_NODE_TYPES[n.conceptKind]?.icon || 'book';
+    if (n.kind === LINKING_NODE_KIND) return LINKING_NODE_TYPE.icon;
+    if (n.kind === STORY_STRUCTURE_CONTAINER_KIND) return 'layers';
     if (n.kind === 'mechanicSubnode') return n.icon || MECHANIC_SUBNODE_TYPES[n.subnodeKind]?.icon || 'pin';
     if (n.physicalKind === 'sensor') return 'zap';
     if (n.physicalKind === 'location') return 'pin';
     if (n.physicalKind === 'item') return 'swap';
-    if (n.mechKind) return lib.mechPrimitives?.[n.primitiveId]?.icon || 'cog';
+    if (n.mechKind) return n.icon || lib.mechPrimitives?.[n.primitiveId]?.icon || 'cog';
     return BASE_NODE_TYPES[n.kind]?.icon || 'flag';
   };
   const selectBuilderNode = (id, source = builderMerged) => {
@@ -980,7 +1205,12 @@ export default function Library({ group = 'physical', selection, onSelect }) {
     setBuilderFrameSel(null);
     setBuilderNumberSel(null);
     setBuilderTitleSel(null);
-    if (n) onSelect({ kind: 'lib-buildernode', id, node: n, onPatch: (patch) => patchBuilderNode(id, patch) });
+    if (n) onSelect({
+      kind: 'lib-buildernode', id, node: n,
+      onPatch: (patch) => patchBuilderNode(id, patch),
+      onArchetypeChange: (patch) => patchBuilderNode(id, patch),
+      onInsert: (ref) => insertBuilderLinkedTarget(n, ref),
+    });
   };
   const selectBuilderFrame = (id, source = builder.frames || {}) => {
     const frame = source[id];
@@ -1012,8 +1242,18 @@ export default function Library({ group = 'physical', selection, onSelect }) {
       const current = b[coll]?.[id];
       if (!current) return b;
       const nextNode = { ...current, ...patch };
-      onSelect({ kind: 'lib-buildernode', id, node: { ...builderMerged[id], ...nextNode }, onPatch: (p) => patchBuilderNode(id, p) });
-      return { ...b, [coll]: { ...b[coll], [id]: nextNode } };
+      const hasArchetypePatch = coll === 'nodes' && Object.keys(patch).some((key) => key === 'archetypeEnabled' || key.startsWith('archetypeDarkSide'));
+      const nextBuilder = hasArchetypePatch
+        ? syncCharacterArchetypeGraph({ ...b, nodes: { ...(b.nodes || {}), [id]: nextNode } }, id, patch)
+        : { ...b, [coll]: { ...b[coll], [id]: nextNode } };
+      const selectedNode = nextBuilder.nodes?.[id] || nextNode;
+      onSelect({
+        kind: 'lib-buildernode', id, node: selectedNode,
+        onPatch: (p) => patchBuilderNode(id, p),
+        onArchetypeChange: (p) => patchBuilderNode(id, p),
+        onInsert: (ref) => insertBuilderLinkedTarget(selectedNode, ref),
+      });
+      return nextBuilder;
     });
   };
   const patchBuilderFrame = (id, patch) => {
@@ -1100,6 +1340,18 @@ export default function Library({ group = 'physical', selection, onSelect }) {
     setBuilder((b) => ({ ...b, nodes: { ...b.nodes, [id]: node } }));
     selectBuilderNode(id, { ...builderMerged, [id]: node });
   };
+  const addBuilderLinkingNode = (pos = null) => {
+    const node = createLinkingNode(builder.nodes, pos || visibleCanvasPlacement({ x: 110, y: 110 }, { w: 280, h: 150 }), 'BLINK-');
+    setBuilder((b) => ({ ...b, nodes: { ...b.nodes, [node.id]: node } }));
+    selectBuilderNode(node.id, { ...builderMerged, [node.id]: node });
+  };
+  const insertBuilderLinkedTarget = (linkNode, ref) => {
+    const inserted = buildNarrativeLinkInsertion(lib, ref, builder.nodes, { x: linkNode.x + (linkNode.w || 280) + 50, y: linkNode.y }, 'BINS-');
+    if (!inserted) return;
+    setBuilder((b) => ({ ...b, nodes: { ...b.nodes, [inserted.id]: inserted } }));
+    setBuilderSel(inserted.id);
+    onSelect({ kind: 'lib-buildernode', id: inserted.id, node: inserted, onPatch: (patch) => patchBuilderNode(inserted.id, patch), onArchetypeChange: (patch) => patchBuilderNode(inserted.id, patch) });
+  };
   const addBuilderSub = (kind, pos = null) => {
     const id = genId(builder.subnodes || {}, 'BSB');
     const sn = { ...SUBNODE_BLANK(id, kind), ...(pos || visibleCanvasPlacement({ x: 120, y: 120 }, { w: 196, h: 110 })) };
@@ -1140,11 +1392,17 @@ export default function Library({ group = 'physical', selection, onSelect }) {
     setBuilder((b) => ({ ...b, frames: { ...(b.frames || {}), [id]: frame } }));
     selectBuilderFrame(id, { ...(builder.frames || {}), [id]: frame });
   };
-  const addBuilderNumber = (pos = null) => {
+  const addBuilderSpline = (pos = null) => {
+    const id = genId(builder.frames || {}, 'BSPL');
+    const splinePos = pos || visibleCanvasPlacement({ x: 110, y: 160 }, { w: 220, h: 80 });
+    const frame = { id, label: 'Spline', shape: 'spline', ...splinePos, w: 220, h: 80, curveX: 0, curveY: -70, color: '#5CA8F5' };
+    setBuilder((b) => ({ ...b, frames: { ...(b.frames || {}), [id]: frame } }));
+    selectBuilderFrame(id, { ...(builder.frames || {}), [id]: frame });
+  };
+  const addBuilderVisualMarker = (markerType = 'number', pos = null) => {
     const markers = builder.numberMarkers || {};
-    const id = genId(markers, 'BNUM-');
-    const values = Object.values(markers).map((m) => Number(m.value)).filter(Number.isFinite);
-    const marker = { id, value: values.length ? Math.max(...values) + 1 : 1, ...(pos || visibleCanvasPlacement({ x: 100, y: 100 }, { w: 34, h: 34 })), color: '#E8D25C' };
+    const id = genId(markers, markerType === 'letter' ? 'BLTR-' : 'BNUM-');
+    const marker = { id, markerType, value: nextVisualMarkerValue(markers, markerType), ...(pos || visibleCanvasPlacement({ x: 100, y: 100 }, { w: 34, h: 34 })), color: '#E8D25C' };
     setBuilder((b) => ({ ...b, numberMarkers: { ...(b.numberMarkers || {}), [id]: marker } }));
     selectBuilderNumber(id, { ...markers, [id]: marker });
   };
@@ -1159,11 +1417,13 @@ export default function Library({ group = 'physical', selection, onSelect }) {
     const [type, id] = payload.split(':');
     const pos = { x: Math.round(x), y: Math.round(y) };
     if (type === 'lib-base') addBuilderBase(id, pos);
+    else if (type === 'lib-link') addBuilderLinkingNode(pos);
     else if (type === 'lib-concept') addBuilderConcept(id, pos);
     else if (type === 'lib-sub') addBuilderSub(id, pos);
     else if (type === 'lib-framework') addBuilderFramework(id, pos);
     else if (type === 'lib-frame') addBuilderFrame(pos);
-    else if (type === 'lib-number') addBuilderNumber(pos);
+    else if (type === 'lib-number') addBuilderVisualMarker('number', pos);
+    else if (type === 'lib-letter') addBuilderVisualMarker('letter', pos);
     else if (type === 'lib-title') addBuilderTitle(pos);
     else if (builder.target === 'mechStructures') {
       const node = mechanicsPayloadToNode(payload, lib, builder.nodes, pos.x, pos.y, 'B');
@@ -1227,6 +1487,8 @@ export default function Library({ group = 'physical', selection, onSelect }) {
         coll: 'stories',
         entity: {
           id, name, description: builder.description, estMinutes: 15,
+          usesBaseConcept: builder.usesBaseConcept === true,
+          baseConceptId: builder.usesBaseConcept === true ? (builder.baseConceptId || null) : null,
           nodes: JSON.parse(JSON.stringify(builder.nodes)),
           edges: JSON.parse(JSON.stringify(builder.edges)),
           subnodes: JSON.parse(JSON.stringify(builder.subnodes || {})),
@@ -1260,10 +1522,17 @@ export default function Library({ group = 'physical', selection, onSelect }) {
       id: 'supporting',
       label: 'Supporting Notes',
       hint: 'Comment and supporting note cards for narrative structures.',
-      items: Object.values(SUBNODE_TYPES).filter((t) => t.category === 'supporting').map((t) => ({
-        id: `lib-sub:${t.id}`, label: t.label, blurb: t.blurb, color: t.color, icon: t.icon,
-        dragPayload: `lib-sub:${t.id}`, onClick: () => addBuilderSub(t.id),
-      })),
+      items: [
+        {
+          id: 'lib-link:new', label: LINKING_NODE_TYPE.label, blurb: LINKING_NODE_TYPE.blurb,
+          color: LINKING_NODE_TYPE.color, icon: LINKING_NODE_TYPE.icon,
+          dragPayload: 'lib-link:new', onClick: () => addBuilderLinkingNode(),
+        },
+        ...Object.values(SUBNODE_TYPES).filter((t) => t.category === 'supporting').map((t) => ({
+          id: `lib-sub:${t.id}`, label: t.label, blurb: t.blurb, color: t.color, icon: t.icon,
+          dragPayload: `lib-sub:${t.id}`, onClick: () => addBuilderSub(t.id),
+        })),
+      ],
     },
     {
       id: 'stories',
@@ -1369,6 +1638,10 @@ export default function Library({ group = 'physical', selection, onSelect }) {
   const tabCount = (tid) => {
     if (tid === 'baseNodes') return Object.values(lib.narrative || {}).filter((n) => n.nodeClass === 'base').length;
     if (tid === 'frameworks') return Object.keys(FRAMEWORK_TYPES).length;
+    if (tid === 'mechPrimitives') return Object.values(lib.mechPrimitives || {}).filter(isCurrentMechanicPrimitive).length;
+    if (tid === 'mechSubnodes') return Object.values(lib.mechSubnodes || {}).filter(isCurrentMechanicSubnode).length;
+    if (tid === 'oldNodes') return Object.values(lib.mechPrimitives || {}).filter(isOldMechanicPrimitive).length
+      + Object.values(lib.mechSubnodes || {}).filter(isOldMechanicSubnode).length;
     return Object.keys(lib[tid] ?? {}).length;
   };
 
@@ -1398,10 +1671,10 @@ export default function Library({ group = 'physical', selection, onSelect }) {
 
   if (editing && lib[editing.coll]?.[editing.id]) {
     if (editing.coll === 'concepts') {
-      return <ConceptEditor concept={lib.concepts[editing.id]} selection={selection} onSelect={onSelect}
+      return <ConceptEditor concept={lib.concepts[editing.id]} selection={selection} onSelect={onSelect} onNavigate={onNavigate}
         onBack={() => { setEditing(null); setTab('concepts'); }} />;
     }
-    return <StructureEditor coll={editing.coll} structure={lib[editing.coll][editing.id]} selection={selection} onSelect={onSelect}
+    return <StructureEditor coll={editing.coll} structure={lib[editing.coll][editing.id]} selection={selection} onSelect={onSelect} onNavigate={onNavigate}
       onBack={() => { setEditing(null); setTab(editing.coll); }} />;
   }
 
@@ -1414,7 +1687,7 @@ export default function Library({ group = 'physical', selection, onSelect }) {
         </div>
         <div className="right">
           <span className="libbadge">Templates — reusable across games</span>
-          <button className="btn primary" onClick={addNew}>{activeTab.addLabel}</button>
+          {activeTab.addLabel && <button className="btn primary" onClick={addNew}>{activeTab.addLabel}</button>}
         </div>
       </div>
       <div className="toolrow">
@@ -1475,9 +1748,11 @@ export default function Library({ group = 'physical', selection, onSelect }) {
             headerAction={<><div className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
               <button className="btn tiny" onClick={() => addBuilderFrame()}>Frame</button>
               <button className="btn tiny" onClick={() => addBuilderCircle()}>Circle</button>
-              <button className="btn tiny" onClick={() => addBuilderNumber()}>Number</button>
+              <button className="btn tiny" onClick={() => addBuilderVisualMarker('number')}>Number</button>
+              <button className="btn tiny" onClick={() => addBuilderVisualMarker('letter')}>Letter</button>
               <button className="btn tiny" onClick={() => addBuilderTitle()}>Title</button>
               <button className="btn tiny" onClick={() => addBuilderArrow()}>Arrow</button>
+              <button className="btn tiny" onClick={() => addBuilderSpline()}>Spline</button>
               </div>
               <button className="btn tiny" onClick={() => setBrowsingMechanicsLibrary(true)}>Browse Library</button>
             </>}
@@ -1491,6 +1766,7 @@ export default function Library({ group = 'physical', selection, onSelect }) {
               iconOf={builderIcon}
               nodeClass={(n) => (n.kind === 'mechanicSubnode' ? 'subnode' : '')}
               onSelect={(id) => selectBuilderNode(id, builder.nodes)}
+              onUpdateNode={(id, patch) => setBuilder((b) => ({ ...b, nodes: { ...b.nodes, [id]: { ...b.nodes[id], ...patch } } }))}
               onMove={(id, x, y) => setBuilder((b) => ({ ...b, nodes: { ...b.nodes, [id]: { ...b.nodes[id], x, y } } }))}
               onMoveNodes={(positions) => setBuilder((b) => {
                 const nodes = { ...b.nodes };
@@ -1499,6 +1775,7 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 });
                 return { ...b, nodes };
               })}
+              onMoveSelection={(patches) => setBuilder((b) => ({ ...b, ...moveCanvasSelectionPatch(b, patches) }))}
               onResizeNode={(id, patch) => setBuilder((b) => ({ ...b, nodes: { ...b.nodes, [id]: { ...b.nodes[id], ...patch } } }))}
               onConnect={(from, to, edgePatch = {}) => setBuilder((b) => {
                 if (from === to) return b;
@@ -1523,6 +1800,10 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 setBuilderSel(null);
                 return { ...b, nodes, edges: b.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)) };
               })}
+              onDeleteSelection={(selection) => {
+                setBuilder((b) => ({ ...b, ...deleteCanvasSelectionPatch(b, selection) }));
+                setBuilderSel(null); setBuilderFrameSel(null); setBuilderNumberSel(null); setBuilderTitleSel(null);
+              }}
               onClearCanvas={() => {
                 setBuilder((b) => ({ ...b, nodes: {}, edges: [], frames: {}, numberMarkers: {}, titleMarkers: {} }));
                 setBuilderSel(null);
@@ -1538,16 +1819,23 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 setBuilder((b) => ({ ...b, nodes: { ...b.nodes, [id]: node } }));
                 setBuilderSel(id);
               }}
-              renderBody={(n) => (isSupportingMechanicSubnode(n) || n.kind === 'item' ? null : n.body)}
-              renderExtra={(n) => {
+              onPasteNodes={(clipboard) => setBuilder((b) => {
+                const pasted = remapCanvasClipboard(clipboard, b.nodes, 'BCOPY-');
+                setBuilderSel(pasted.ids[pasted.ids.length - 1]);
+                return { ...b, nodes: { ...b.nodes, ...pasted.nodes }, edges: [...b.edges, ...pasted.edges] };
+              })}
+              renderBody={(n) => (isSupportingMechanicSubnode(n) || isMechanismPreviewNode(n) || n.kind === 'item' ? null : n.body)}
+              renderExtra={(n, dimensions) => {
                 if (supportingMechanicSubnodePreview(n, proj)) return <SupportingMechanicPreview node={n} game={proj} onSelect={onSelect} />;
                 if (isProgressStateNode(n)) return <ProgressMechanicPreview node={n} />;
+                if (isMechanismPreviewNode(n)) return <MechanismNodePreview node={n} lib={lib} />;
                 if (n.kind === 'item') return <div className="nsets"><span className="factchip sm subcount"><i />{n.buildStatus || 'concept'}</span></div>;
                 return null;
               }}
               frames={builder.frames || {}}
               selFrame={builderFrameSel}
               onFrameSelect={(id) => selectBuilderFrame(id)}
+              onFrameDelete={deleteBuilderFrame}
               onFrameMove={(id, dx, dy) => setBuilder((b) => {
                 const moved = moveFrameGraphPatch(b, id, dx, dy);
                 return moved ? { ...b, ...moved } : b;
@@ -1557,6 +1845,11 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 if (!fr) return b;
                 return { ...b, frames: { ...(b.frames || {}), [id]: { ...fr, w, h } } };
               })}
+              onFrameGeometry={(id, geometry) => setBuilder((b) => {
+                const fr = b.frames?.[id];
+                return fr ? { ...b, frames: { ...(b.frames || {}), [id]: { ...fr, ...geometry } } } : b;
+              })}
+              onFrameScale={(id, transform) => setBuilder((b) => applyFrameScale(b, id, transform))}
               numberMarkers={builder.numberMarkers || {}}
               selNumberMarker={builderNumberSel}
               onNumberMarkerSelect={(id) => selectBuilderNumber(id)}
@@ -1564,6 +1857,10 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 const marker = b.numberMarkers?.[id];
                 if (!marker) return b;
                 return { ...b, numberMarkers: { ...(b.numberMarkers || {}), [id]: { ...marker, x: marker.x + dx, y: marker.y + dy } } };
+              })}
+              onNumberMarkerUpdate={(id, markerPatch) => setBuilder((b) => {
+                const marker = b.numberMarkers?.[id];
+                return marker ? { ...b, numberMarkers: { ...(b.numberMarkers || {}), [id]: { ...marker, ...markerPatch } } } : b;
               })}
               onNumberMarkerDelete={deleteBuilderNumber}
               titleMarkers={builder.titleMarkers || {}}
@@ -1582,7 +1879,7 @@ export default function Library({ group = 'physical', selection, onSelect }) {
 
       {tab === 'mechPrimitives' && (
         <div className="gallery prim">
-          {Object.values(lib.mechPrimitives).filter((p) => !p.deprecated).map((p) => (
+          {Object.values(lib.mechPrimitives).filter((p) => !p.deprecated && isCurrentMechanicPrimitive(p)).map((p) => (
             <button key={p.id} className={`primcard${selId === p.id ? ' sel' : ''}`}
               style={{ borderTopColor: p.color }} onClick={() => pick('mechPrimitives', p.id)}>
               <div className="primhead">
@@ -1599,7 +1896,7 @@ export default function Library({ group = 'physical', selection, onSelect }) {
       {tab === 'mechSubnodes' && (
         <div className="subnode-catalog">
           {MECHANIC_SUBNODE_CATEGORY_SECTIONS.map((section) => {
-            const subnodes = Object.values(lib.mechSubnodes || {}).filter((sn) => !sn.deprecated && !sn.hiddenFromPalette && mechanicSubnodeCategory(sn) === section.id);
+            const subnodes = Object.values(lib.mechSubnodes || {}).filter((sn) => !sn.deprecated && !sn.hiddenFromPalette && isCurrentMechanicSubnode(sn) && mechanicSubnodeCategory(sn) === section.id);
             if (!subnodes.length) return null;
             return (
               <section key={section.id} className="subnode-section">
@@ -1617,7 +1914,7 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                           <span className="primic" style={{ background: sn.color || meta.color }}><PrimIcon icon={sn.icon || meta.icon} color="#fff" /></span>
                           <b>{sn.name || meta.label}</b>
                         </div>
-                        <small>{sn.purpose || meta.purpose}</small>
+                        <small>{sn.description || sn.purpose || meta.purpose}</small>
                         <div className="primmeta dim mono">{section.label} - {sn.id}</div>
                       </button>
                     );
@@ -1626,6 +1923,52 @@ export default function Library({ group = 'physical', selection, onSelect }) {
               </section>
             );
           })}
+        </div>
+      )}
+
+      {tab === 'oldNodes' && (
+        <div className="subnode-catalog">
+          <section className="subnode-section">
+            <div className="subnode-section-head">
+              <div><b>Old Mechanic Nodes</b><small>Archived building blocks remain editable here and continue to work on existing canvases.</small></div>
+              <span>{Object.values(lib.mechPrimitives || {}).filter(isOldMechanicPrimitive).length}</span>
+            </div>
+            <div className="gallery prim compact">
+              {Object.values(lib.mechPrimitives || {}).filter(isOldMechanicPrimitive).map((p) => (
+                <button key={p.id} className={`primcard${selId === p.id ? ' sel' : ''}`}
+                  style={{ borderTopColor: p.color }} onClick={() => pick('mechPrimitives', p.id)}>
+                  <div className="primhead">
+                    <span className="primic" style={{ background: p.color }}><PrimIcon icon={p.icon} color="#fff" /></span>
+                    <b>{p.name}</b>
+                  </div>
+                  <small>{p.defaultBody}</small>
+                  <div className="primmeta dim mono">{p.deprecated ? 'Deprecated - ' : ''}{p.id}</div>
+                </button>
+              ))}
+            </div>
+          </section>
+          <section className="subnode-section">
+            <div className="subnode-section-head">
+              <div><b>Old Mechanic Subnodes</b><small>Archived modifiers and supporting records are kept out of creation menus without losing their data.</small></div>
+              <span>{Object.values(lib.mechSubnodes || {}).filter(isOldMechanicSubnode).length}</span>
+            </div>
+            <div className="gallery prim compact">
+              {Object.values(lib.mechSubnodes || {}).filter(isOldMechanicSubnode).map((sn) => {
+                const meta = MECHANIC_SUBNODE_TYPES[sn.kind] || {};
+                return (
+                  <button key={sn.id} className={`primcard subnode${selId === sn.id ? ' sel' : ''}`}
+                    style={{ borderTopColor: sn.color || meta.color }} onClick={() => pick('mechSubnodes', sn.id)}>
+                    <div className="primhead">
+                      <span className="primic" style={{ background: sn.color || meta.color }}><PrimIcon icon={sn.icon || meta.icon} color="#fff" /></span>
+                      <b>{sn.name || meta.label}</b>
+                    </div>
+                    <small>{sn.description || sn.purpose || meta.purpose}</small>
+                    <div className="primmeta dim mono">{sn.deprecated ? 'Deprecated - ' : ''}{sn.id}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         </div>
       )}
 
@@ -1650,9 +1993,11 @@ export default function Library({ group = 'physical', selection, onSelect }) {
             headerAction={<><div className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
               <button className="btn tiny" onClick={() => addBuilderFrame()}>Frame</button>
               <button className="btn tiny" onClick={() => addBuilderCircle()}>Circle</button>
-              <button className="btn tiny" onClick={() => addBuilderNumber()}>Number</button>
+              <button className="btn tiny" onClick={() => addBuilderVisualMarker('number')}>Number</button>
+              <button className="btn tiny" onClick={() => addBuilderVisualMarker('letter')}>Letter</button>
               <button className="btn tiny" onClick={() => addBuilderTitle()}>Title</button>
               <button className="btn tiny" onClick={() => addBuilderArrow()}>Arrow</button>
+              <button className="btn tiny" onClick={() => addBuilderSpline()}>Spline</button>
               </div>
               <button className="btn tiny" onClick={() => setBrowsingNarrativeLibrary(true)}>Browse Library</button>
             </>}
@@ -1664,8 +2009,9 @@ export default function Library({ group = 'physical', selection, onSelect }) {
               selId={builderSel}
               colorOf={builderColor}
               iconOf={builderIcon}
-              nodeClass={(n) => (n._sub ? 'subnode' : n.kind === 'framework' ? 'framework' : n.kind === 'concept' ? 'concept' : '')}
+              nodeClass={(n) => (n._sub ? 'subnode' : n.kind === 'framework' ? 'framework' : n.kind === 'concept' || n.kind === STORY_STRUCTURE_CONTAINER_KIND ? 'concept' : n.kind === LINKING_NODE_KIND ? 'linking-node' : '')}
               onSelect={(id) => selectBuilderNode(id)}
+              onUpdateNode={(id, patch) => patchBuilderNode(id, patch)}
               onMove={(id, x, y) => setBuilder((b) => {
                 const coll = b.subnodes?.[id] ? 'subnodes' : b.frameworks?.[id] ? 'frameworks' : 'nodes';
                 return { ...b, [coll]: { ...b[coll], [id]: { ...b[coll][id], x, y } } };
@@ -1678,6 +2024,7 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 });
                 return next;
               })}
+              onMoveSelection={(patches) => setBuilder((b) => ({ ...b, ...moveCanvasSelectionPatch(b, patches) }))}
               onResizeNode={(id, patch) => setBuilder((b) => {
                 const coll = b.subnodes?.[id] ? 'subnodes' : b.frameworks?.[id] ? 'frameworks' : 'nodes';
                 return { ...b, [coll]: { ...b[coll], [id]: { ...b[coll][id], ...patch } } };
@@ -1698,14 +2045,15 @@ export default function Library({ group = 'physical', selection, onSelect }) {
               onDeleteNode={(id) => setBuilder((b) => {
                 const coll = b.subnodes?.[id] ? 'subnodes' : b.frameworks?.[id] ? 'frameworks' : 'nodes';
                 const next = { ...b[coll] };
-                delete next[id];
+                const removed = coll === 'nodes' ? includeGeneratedCharacterNodes(next, [id]) : new Set([id]);
+                removed.forEach((nodeId) => delete next[nodeId]);
                 setBuilderSel(null);
-                return { ...b, [coll]: next, edges: b.edges.filter((e) => e.from !== id && e.to !== id) };
+                return { ...b, [coll]: next, edges: b.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)) };
               })}
               onDeleteNodes={(ids) => setBuilder((b) => {
-                const removed = new Set(ids);
+                const removed = includeGeneratedCharacterNodes(b.nodes, ids);
                 const next = { ...b, nodes: { ...b.nodes }, subnodes: { ...(b.subnodes || {}) }, frameworks: { ...(b.frameworks || {}) } };
-                ids.forEach((id) => {
+                removed.forEach((id) => {
                   delete next.nodes[id];
                   delete next.subnodes[id];
                   delete next.frameworks[id];
@@ -1714,6 +2062,10 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 setBuilderSel(null);
                 return next;
               })}
+              onDeleteSelection={(selection) => {
+                setBuilder((b) => ({ ...b, ...deleteCanvasSelectionPatch(b, selection) }));
+                setBuilderSel(null); setBuilderFrameSel(null); setBuilderNumberSel(null); setBuilderTitleSel(null);
+              }}
               onClearCanvas={() => {
                 setBuilder((b) => ({ ...b, nodes: {}, subnodes: {}, frameworks: {}, edges: [], frames: {}, numberMarkers: {}, titleMarkers: {} }));
                 setBuilderSel(null);
@@ -1728,9 +2080,15 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 setBuilder((b) => ({ ...b, nodes: { ...b.nodes, [id]: { id, kind: p.kind, title: p.title, x: p.x, y: p.y, body: p.body || '', color: p.color ?? null, w: p.w ?? undefined, h: p.h ?? undefined } } }));
                 setBuilderSel(id);
               }}
+              onPasteNodes={(clipboard) => setBuilder((b) => {
+                const pasted = remapCanvasClipboard(clipboard, b.nodes, 'BCOPY-');
+                setBuilderSel(pasted.ids[pasted.ids.length - 1]);
+                return { ...b, nodes: { ...b.nodes, ...pasted.nodes }, edges: [...b.edges, ...pasted.edges] };
+              })}
               frames={builder.frames || {}}
               selFrame={builderFrameSel}
               onFrameSelect={(id) => selectBuilderFrame(id)}
+              onFrameDelete={deleteBuilderFrame}
               onFrameMove={(id, dx, dy) => setBuilder((b) => {
                 const moved = moveFrameGraphPatch(b, id, dx, dy);
                 return moved ? { ...b, ...moved } : b;
@@ -1740,6 +2098,11 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 if (!fr) return b;
                 return { ...b, frames: { ...(b.frames || {}), [id]: { ...fr, w, h } } };
               })}
+              onFrameGeometry={(id, geometry) => setBuilder((b) => {
+                const fr = b.frames?.[id];
+                return fr ? { ...b, frames: { ...(b.frames || {}), [id]: { ...fr, ...geometry } } } : b;
+              })}
+              onFrameScale={(id, transform) => setBuilder((b) => applyFrameScale(b, id, transform))}
               numberMarkers={builder.numberMarkers || {}}
               selNumberMarker={builderNumberSel}
               onNumberMarkerSelect={(id) => selectBuilderNumber(id)}
@@ -1747,6 +2110,10 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 const marker = b.numberMarkers?.[id];
                 if (!marker) return b;
                 return { ...b, numberMarkers: { ...(b.numberMarkers || {}), [id]: { ...marker, x: marker.x + dx, y: marker.y + dy } } };
+              })}
+              onNumberMarkerUpdate={(id, markerPatch) => setBuilder((b) => {
+                const marker = b.numberMarkers?.[id];
+                return marker ? { ...b, numberMarkers: { ...(b.numberMarkers || {}), [id]: { ...marker, ...markerPatch } } } : b;
               })}
               onNumberMarkerDelete={deleteBuilderNumber}
               titleMarkers={builder.titleMarkers || {}}
@@ -1758,12 +2125,14 @@ export default function Library({ group = 'physical', selection, onSelect }) {
                 return { ...b, titleMarkers: { ...(b.titleMarkers || {}), [id]: { ...marker, x: marker.x + dx, y: marker.y + dy } } };
               })}
               onTitleMarkerDelete={deleteBuilderTitle}
-              renderBody={(n) => (n.kind === 'item' ? null : n.body)}
-              renderExtra={(n) => {
+              renderBody={(n) => (n.kind === 'item' || n.kind === LINKING_NODE_KIND ? null : n.body)}
+              renderExtra={(n, dimensions) => {
+                if (n.kind === LINKING_NODE_KIND) return <LinkingNodePreview node={n} onNavigate={onNavigate} onInsert={(ref) => insertBuilderLinkedTarget(n, ref)} />;
+                if (n.kind === STORY_STRUCTURE_CONTAINER_KIND) return <div className="cptrow"><span className="cptbadge">Story Structure · {Object.keys(n.sub?.nodes || {}).length} inside</span></div>;
                 if (n.kind === 'item') return <div className="nsets"><span className="factchip sm subcount"><i />{n.buildStatus || 'concept'}</span></div>;
                 if (n.kind !== 'framework') return null;
                 const fw = FRAMEWORK_TYPES[n.frameworkId] || FRAMEWORK_TYPES.fate;
-                return <FrameworkPreview frameworkId={fw.id} />;
+                return <FrameworkPreview frameworkId={fw.id} nodeWidth={dimensions.width} nodeHeight={dimensions.height} />;
               }}
             />
             <div className="nodebuilder-intro">

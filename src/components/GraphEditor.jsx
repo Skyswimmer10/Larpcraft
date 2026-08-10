@@ -1,5 +1,5 @@
 import React from 'react';
-import { useGame, useDispatch } from '../state/store.jsx';
+import { useGame, useDispatch, useLibrary } from '../state/store.jsx';
 import { locateGraph } from '../state/reducer.js';
 import { ENTITY_COLORS, PrimIcon } from './bits.jsx';
 import FlowCanvas, { visibleCanvasPlacement } from './FlowCanvas.jsx';
@@ -7,6 +7,9 @@ import { genId } from '../data/csvSchemas.js';
 import { FRAMEWORK_TYPES, cloneCharacterCardTemplate } from '../data/seed.js';
 import { isProgressStateNode, isSupportingMechanicSubnode, progressPercent, progressValue, supportingMechanicSubnodePreview } from '../mechanics/palette.js';
 import FrameworkPreview from './FrameworkPreview.jsx';
+import { nextVisualMarkerValue } from '../lib/visualMarkers.js';
+import { remapCanvasClipboard } from '../lib/canvasClipboard.js';
+import MechanismNodePreview, { isMechanismPreviewNode } from './MechanismNodePreview.jsx';
 
 const scopeKey = (s) => `${s.coll}:${(s.parentPath ?? (s.parentId ? [s.parentId] : [])).join('/')}`;
 const sameScope = (a, b) => a && b && scopeKey(a) === scopeKey(b);
@@ -22,6 +25,7 @@ export default function GraphEditor({
   filterNode = () => true, showToolbar = true, createNodeFromPalette, enableFrames = false,
 }) {
   const s = useGame();
+  const lib = useLibrary();
   const dispatch = useDispatch();
   const g = locateGraph(s, scope);
   const nodes = Object.fromEntries(Object.entries(g.nodes).filter(([, n]) => filterNode(n)));
@@ -39,7 +43,7 @@ export default function GraphEditor({
   const colorOf = (n) => n?.kind === 'framework'
     ? (n.color || FRAMEWORK_TYPES[n.frameworkId]?.color || ENTITY_COLORS.framework)
     : n?.color || paletteById[n?.kind]?.color || ENTITY_COLORS[n?.kind] || '#8B92A6';
-  const iconOf = (n) => n.kind === 'framework' ? (FRAMEWORK_TYPES[n.frameworkId]?.icon || 'target') : (paletteById[n.kind]?.icon || null);
+  const iconOf = (n) => n.kind === 'framework' ? (FRAMEWORK_TYPES[n.frameworkId]?.icon || 'target') : (n.icon || paletteById[n.kind]?.icon || null);
   const renderSupportingPreview = (n) => {
     const preview = supportingMechanicSubnodePreview(n, s);
     if (!preview) return null;
@@ -126,10 +130,16 @@ export default function GraphEditor({
     dispatch({ type: 'GRAPH_ADD_FRAME', scope, frame });
     onSelect({ kind: 'graphframe', scope, id });
   };
-  const addNumberMarker = () => {
-    const id = genId(numberMarkers, 'NUM-');
-    const values = Object.values(numberMarkers).map((m) => Number(m.value)).filter(Number.isFinite);
-    const marker = { id, value: values.length ? Math.max(...values) + 1 : 1, ...visibleCanvasPlacement({ x: 110, y: 110 }, { w: 34, h: 34 }), color: '#E8D25C' };
+  const addSpline = () => {
+    const id = genId(frames, 'SPL-');
+    const pos = visibleCanvasPlacement({ x: 100, y: 150 }, { w: 220, h: 80 });
+    const frame = { id, label: 'Spline', shape: 'spline', ...pos, w: 220, h: 80, curveX: 0, curveY: -70, color: '#5CA8F5' };
+    dispatch({ type: 'GRAPH_ADD_FRAME', scope, frame });
+    onSelect({ kind: 'graphframe', scope, id });
+  };
+  const addVisualMarker = (markerType = 'number') => {
+    const id = genId(numberMarkers, markerType === 'letter' ? 'LTR-' : 'NUM-');
+    const marker = { id, markerType, value: nextVisualMarkerValue(numberMarkers, markerType), ...visibleCanvasPlacement({ x: 110, y: 110 }, { w: 34, h: 34 }), color: '#E8D25C' };
     dispatch({ type: 'GRAPH_ADD_NUMBER_MARKER', scope, marker });
     onSelect({ kind: 'graphnumber', scope, id });
   };
@@ -158,14 +168,20 @@ export default function GraphEditor({
             <button className="addnode frameadd" title="Add a resizable circle" onClick={addCircle}>
               <span className="sq shapecircle" style={{ borderColor: '#5CA8F5' }} />Circle
             </button>
-            <button className="addnode frameadd" title="Add a visual number marker" onClick={addNumberMarker}>
+            <button className="addnode frameadd" title="Add a visual number marker" onClick={() => addVisualMarker('number')}>
               <span className="sq" style={{ background: '#E8D25C', color: '#111' }}>1</span>Number
+            </button>
+            <button className="addnode frameadd" title="Add a visual letter marker (A-Z)" onClick={() => addVisualMarker('letter')}>
+              <span className="sq" style={{ background: '#E8D25C', color: '#111' }}>A</span>Letter
             </button>
             <button className="addnode frameadd" title="Add a draggable title label" onClick={addTitleMarker}>
               <span className="sq" style={{ background: '#E9EBF3', color: '#111' }}>T</span>Title
             </button>
             <button className="addnode frameadd" title="Add a directional support arrow" onClick={addArrow}>
               <span className="sq arrowglyph" style={{ color: '#5CA8F5' }}>→</span>Arrow
+            </button>
+            <button className="addnode frameadd" title="Add an editable curved support line" onClick={addSpline}>
+              <span className="sq splineglyph" style={{ color: '#5CA8F5' }}>∿</span>Spline
             </button>
           </div>}
         </div>
@@ -187,10 +203,21 @@ export default function GraphEditor({
           nodes={nodes} edges={edges} selId={selId} colorOf={colorOf} iconOf={iconOf}
           onSelect={(id) => onSelect({ kind: 'graphnode', scope, id })}
           onMove={(id, x, y) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch: { x, y } })}
+          onUpdateNode={(id, patch) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch })}
           onMoveNodes={(positions, meta) => dispatch({
             type: 'BATCH',
             undoGroup: meta?.undoGroup,
             actions: Object.entries(positions).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_NODE', scope, id, patch })),
+          })}
+          onMoveSelection={(patches, meta) => dispatch({
+            type: 'BATCH',
+            undoGroup: meta?.undoGroup,
+            actions: [
+              ...Object.entries(patches.nodes).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_NODE', scope, id, patch })),
+              ...Object.entries(patches.frames).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_FRAME', scope, id, patch })),
+              ...Object.entries(patches.numberMarkers).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_NUMBER_MARKER', scope, id, patch })),
+              ...Object.entries(patches.titleMarkers).map(([id, patch]) => ({ type: 'GRAPH_UPDATE_TITLE_MARKER', scope, id, patch })),
+            ],
           })}
           onResizeNode={(id, patch) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch })}
           onConnect={(from, to, edgePatch = {}) => dispatch({ type: 'GRAPH_ADD_EDGE', scope, from, to, color: colorOf(g.nodes[from] || titleMarkers[from]), ...edgePatch })}
@@ -202,6 +229,18 @@ export default function GraphEditor({
             dispatch({ type: 'BATCH', actions: ids.map((id) => ({ type: 'GRAPH_DELETE_NODE', scope, id })) });
             onSelect(null);
           }}
+          onDeleteSelection={(selection) => {
+            dispatch({
+              type: 'BATCH',
+              actions: [
+                ...selection.nodes.map((id) => ({ type: 'GRAPH_DELETE_NODE', scope, id })),
+                ...selection.frames.map((id) => ({ type: 'GRAPH_DELETE_FRAME', scope, id })),
+                ...selection.numberMarkers.map((id) => ({ type: 'GRAPH_DELETE_NUMBER_MARKER', scope, id })),
+                ...selection.titleMarkers.map((id) => ({ type: 'GRAPH_DELETE_TITLE_MARKER', scope, id })),
+              ],
+            });
+            onSelect(null);
+          }}
           onClearCanvas={() => {
             dispatch({ type: 'GRAPH_CLEAR', scope });
             onSelect(null);
@@ -211,8 +250,11 @@ export default function GraphEditor({
           frames={enableFrames ? frames : undefined}
           selFrame={selFrame}
           onFrameSelect={enableFrames ? (id) => onSelect({ kind: 'graphframe', scope, id }) : undefined}
+          onFrameDelete={enableFrames ? (id) => { dispatch({ type: 'GRAPH_DELETE_FRAME', scope, id }); onSelect(null); } : undefined}
           onFrameMove={enableFrames ? (id, dx, dy) => dispatch({ type: 'GRAPH_MOVE_FRAME', scope, id, dx, dy }) : undefined}
           onFrameResize={enableFrames ? (id, w, h) => dispatch({ type: 'GRAPH_UPDATE_FRAME', scope, id, patch: { w, h } }) : undefined}
+          onFrameGeometry={enableFrames ? (id, patch) => dispatch({ type: 'GRAPH_UPDATE_FRAME', scope, id, patch }) : undefined}
+          onFrameScale={enableFrames ? (id, transform) => dispatch({ type: 'GRAPH_SCALE_FRAME', scope, id, transform }) : undefined}
           numberMarkers={enableFrames ? numberMarkers : undefined}
           selNumberMarker={selNumberMarker}
           onNumberMarkerSelect={enableFrames ? (id) => onSelect({ kind: 'graphnumber', scope, id }) : undefined}
@@ -220,6 +262,7 @@ export default function GraphEditor({
             const marker = numberMarkers[id];
             if (marker) dispatch({ type: 'GRAPH_UPDATE_NUMBER_MARKER', scope, id, patch: { x: marker.x + dx, y: marker.y + dy } });
           } : undefined}
+          onNumberMarkerUpdate={enableFrames ? (id, patch) => dispatch({ type: 'GRAPH_UPDATE_NUMBER_MARKER', scope, id, patch }) : undefined}
           onNumberMarkerDelete={enableFrames ? (id) => { dispatch({ type: 'GRAPH_DELETE_NUMBER_MARKER', scope, id }); onSelect(null); } : undefined}
           titleMarkers={enableFrames ? titleMarkers : undefined}
           selTitleMarker={selTitleMarker}
@@ -235,16 +278,28 @@ export default function GraphEditor({
             dispatch({ type: 'GRAPH_ADD_NODE', scope, node: { id, kind: p.kind, title: p.title, body: p.body ?? '', color: p.color ?? null, x: p.x, y: p.y, w: p.w ?? undefined, h: p.h ?? undefined } });
             onSelect({ kind: 'graphnode', scope, id });
           }}
-          renderBody={(n) => (isSupportingMechanicSubnode(n) || n.kind === 'item' || n.kind === 'framework' ? null : n.body)}
-          renderExtra={(n) => {
+          onPasteNodes={(clipboard) => {
+            const pasted = remapCanvasClipboard(clipboard, g.nodes, `${idPrefix}-COPY-`);
+            dispatch({
+              type: 'BATCH',
+              actions: [
+                ...Object.values(pasted.nodes).map((node) => ({ type: 'GRAPH_ADD_NODE', scope, node })),
+                ...pasted.edges.map((edge) => ({ type: 'GRAPH_ADD_EDGE', scope, ...edge })),
+              ],
+            });
+            onSelect({ kind: 'graphnode', scope, id: pasted.ids[pasted.ids.length - 1] });
+          }}
+          renderBody={(n) => (isSupportingMechanicSubnode(n) || isMechanismPreviewNode(n) || n.kind === 'item' || n.kind === 'framework' ? null : n.body)}
+          renderExtra={(n, dimensions) => {
             if (n.kind === 'framework') {
               const fw = FRAMEWORK_TYPES[n.frameworkId] || FRAMEWORK_TYPES.fate;
-              return <FrameworkPreview frameworkId={fw.id} />;
+              return <FrameworkPreview frameworkId={fw.id} nodeWidth={dimensions.width} nodeHeight={dimensions.height} />;
             }
             const support = renderSupportingPreview(n);
             if (support) return support;
             const progress = renderProgressPreview(n);
             if (progress) return progress;
+            if (isMechanismPreviewNode(n)) return <MechanismNodePreview node={n} lib={lib} />;
             if (n.kind === 'item') {
               return (
                 <div className="nsets">

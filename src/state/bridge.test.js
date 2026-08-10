@@ -236,7 +236,8 @@ describe('library → project import bridge', () => {
     expect(Object.values(lib.narrative).every((n) => n.nodeClass)).toBe(true);
     // mechanic node tree holds the physical/sensor/task types
     const mechNames = Object.values(lib.mechPrimitives).map((p) => p.name);
-    expect(mechNames).toEqual(expect.arrayContaining(['Sensor Node', 'Actuator Node', 'Character State', 'Challenge Core']));
+    expect(mechNames).toEqual(expect.arrayContaining(['Sensor Node', 'Actuator Node', 'Character State', 'Cooperation']));
+    expect(mechNames).not.toContain('Challenge Core');
     for (const oldName of ['Cross-Task Resource', 'Sensor + Actuator', 'Waypoint Check-in', 'Item Handoff', 'Environmental Puzzle', 'Physical Challenge', 'Knowledge State', 'Physical State', 'NPC State', 'Countdown Pressure']) {
       expect(mechNames).not.toContain(oldName);
     }
