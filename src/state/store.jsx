@@ -3,7 +3,9 @@ import { reducer } from './reducer.js';
 import { makeLibrarySeed, makeProjectSeed, makeEmptyProject, migrateLibrary, migrateProject, LIB_REV, SEED_REV } from '../data/seed.js';
 import { loadKey, saveKeyDebounced, clearKey } from './storage.js';
 import deployedLibrary from '../data/deployedLibrary.json';
+import deployedProject from '../data/deployedProject.json';
 import { mergeBundledLibrary } from '../lib/bundledLibrary.js';
+import { mergeBundledProject } from '../lib/bundledProject.js';
 
 // Two distinct stores:
 //  - Library: the persistent master database (templates). Survives across games.
@@ -141,7 +143,7 @@ export function StoreProvider({ children }) {
         rawLibDispatch({ type: 'RESET', seed: migrateLibrary(mergeBundledLibrary(deployedLibrary, savedLib)) });
         // Project is migrated additively (backfills `facts` etc.) so an open game
         // survives schema bumps instead of being reset.
-        rawProjDispatch({ type: 'RESET', seed: migrateProject(savedProj) });
+        rawProjDispatch({ type: 'RESET', seed: migrateProject(mergeBundledProject(deployedProject, savedProj)) });
         setBootError(null);
         setBooted(true);
       } catch (err) {
