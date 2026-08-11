@@ -1,7 +1,8 @@
-export const BUNDLED_LIBRARY_VERSION = 2;
+export const BUNDLED_LIBRARY_VERSION = 3;
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const RICH_GRAPH_COLLECTIONS = new Set(['concepts', 'stories', 'mechStructures']);
+const MECHANISM_COLLECTIONS = new Set(['actionPatternMechanisms', 'actionProbabilityMechanisms']);
 
 const graphScore = (record) => {
   if (!isRecord(record)) return 0;
@@ -12,6 +13,25 @@ const graphScore = (record) => {
     + Object.keys(record.numberMarkers || {}).length
     + Object.keys(record.titleMarkers || {}).length
     + (record.questions || []).length;
+};
+
+const hasUploadedImage = (record) => record?.image?.kind === 'upload' && Boolean(record.image.dataUrl);
+
+const mergeMechanismRecord = (bundledRecord, savedRecord) => {
+  if (!isRecord(savedRecord)) return bundledRecord;
+  const merged = { ...bundledRecord, ...savedRecord };
+
+  // The captured workspace contains the user's uploaded mechanism artwork.
+  // Restore it over the generated seed illustration, while retaining edits
+  // made to the mechanism's text and layout in this browser.
+  if (hasUploadedImage(bundledRecord) && !hasUploadedImage(savedRecord)) {
+    merged.image = bundledRecord.image;
+    merged.imageScale = bundledRecord.imageScale;
+    merged.imagePositionX = bundledRecord.imagePositionX;
+    merged.imagePositionY = bundledRecord.imagePositionY;
+  }
+
+  return merged;
 };
 
 // Apply a captured master-library baseline once. Saved browser records win on
@@ -35,6 +55,10 @@ export function mergeBundledLibrary(bundled, saved) {
           if (!savedRecord || graphScore(bundledRecord) > graphScore(savedRecord)) {
             merged[key][id] = bundledRecord;
           }
+        }
+      } else if (MECHANISM_COLLECTIONS.has(key)) {
+        for (const [id, bundledRecord] of Object.entries(bundledValue)) {
+          merged[key][id] = mergeMechanismRecord(bundledRecord, savedValue[id]);
         }
       }
     }
