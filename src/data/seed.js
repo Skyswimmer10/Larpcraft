@@ -1,6 +1,19 @@
+import { nlpMetaPrograms } from './nlpMetaPrograms.js';
+import { nlpMetaModel } from './nlpMetaModel.js';
+import { mmpi2Framework } from './mmpi2Framework.js';
 import { cloneDefaultStoryDynamicsGraph } from './storyDynamics.js';
+import { masculineDetails, feminineArchetypes } from './archetypeDetails.js';
 import { actionPatternMechanismId, actionPatternSystemForCode, ACTION_MECHANISMS, makeActionMechanicTemplates, makeActionPatternMechanisms } from './actionMechanics.js';
 import { ACTION_PROBABILITY_RESOLUTIONS, ACTION_PROBABILITY_RESOLUTION_TYPES, actionProbabilityResolution } from './actionProbability.js';
+import { VICTORY_CONDITIONS } from './victoryConditions.js';
+import { ECONOMY_MECHANISMS } from './economyMechanisms.js';
+import { AUCTION_MECHANISMS } from './auctionMechanisms.js';
+import { WORKER_PLACEMENT_MECHANISMS } from './workerPlacementMechanisms.js';
+import { MOVEMENT_MECHANISMS } from './movementMechanisms.js';
+import { AREA_CONTROL_MECHANISMS } from './areaControlMechanisms.js';
+import { SET_COLLECTION_MECHANISMS } from './setCollectionMechanisms.js';
+import { CARD_MECHANISMS } from './cardMechanisms.js';
+import { UNCERTAINTY_MECHANISMS } from './uncertaintyMechanisms.js';
 import { CURRENT_MECHANIC_PRIMITIVE_KINDS, CURRENT_MECHANIC_SUBNODE_KINDS } from '../mechanics/nodeArchive.js';
 
 // Two separate stores:
@@ -16,7 +29,7 @@ import { CURRENT_MECHANIC_PRIMITIVE_KINDS, CURRENT_MECHANIC_SUBNODE_KINDS } from
 //      game-state fields (build status, availability, placement, assignment,
 //      sensor battery) · edits affect only this game
 
-export const LIB_REV = 29;
+export const LIB_REV = 38;
 export const SEED_REV = 11;
 
 // Default item types — seeds the editable lib.itemTypes collection.
@@ -617,6 +630,10 @@ export const FRAMEWORK_TYPES = {
       },
     ],
   },
+  nlpMetaPrograms,
+  nlpMetaModel,
+  mmpi2CharacterProfile: mmpi2Framework,
+  jungianFeminineArchetypes: feminineArchetypes,
   jungianMasculineArchetypes: {
     id: 'jungianMasculineArchetypes',
     label: 'Jungian Masculine Archetypes',
@@ -626,9 +643,11 @@ export const FRAMEWORK_TYPES = {
     layout: 'archetypes',
     blurb: 'A reference framework for King, Warrior, Magician, and Lover archetypes with immature roots and shadow distortions.',
     summary: 'Four mature masculine archetypes mapped between fullness and immature/shadow expressions: King, Warrior, Magician, and Lover.',
+    attribution: 'Robert Moore and Douglas Gillette’s King, Warrior, Magician, Lover model. Descriptions and story examples are Larpcraft interpretations of its named forms.',
     phases: [
       {
         key: 'King',
+        descriptions: masculineDetails.King,
         name: 'Divine Child',
         adultActiveShadow: 'Tyrant',
         adultPassiveShadow: 'Weakling',
@@ -639,6 +658,7 @@ export const FRAMEWORK_TYPES = {
       },
       {
         key: 'Warrior',
+        descriptions: masculineDetails.Warrior,
         name: 'Hero',
         adultActiveShadow: 'Sadist',
         adultPassiveShadow: 'Masochist',
@@ -649,6 +669,7 @@ export const FRAMEWORK_TYPES = {
       },
       {
         key: 'Magician',
+        descriptions: masculineDetails.Magician,
         name: 'Precocious Child',
         adultActiveShadow: 'Detached Manipulator',
         adultPassiveShadow: 'Denying Innocent One',
@@ -659,6 +680,7 @@ export const FRAMEWORK_TYPES = {
       },
       {
         key: 'Lover',
+        descriptions: masculineDetails.Lover,
         name: 'Oedipal Child',
         adultActiveShadow: 'Addicted Lover',
         adultPassiveShadow: 'Impotent Lover',
@@ -1039,7 +1061,7 @@ export const MECHANIC_SUBNODE_KINDS = Object.keys(MECHANIC_SUBNODE_TYPES);
 export const LIB_PREFIX = {
   items: 'LIB-ITM-', locations: 'LIB-LOC-', mechanics: 'LIB-MECH-N', sensors: 'LIB-SEN-N',
   narrative: 'LIB-NAR-', mechPrimitives: 'LIB-MPRIM-', mechSubnodes: 'LIB-MSUB-', mechanicRestrictionTypes: 'RST-', mechanicInteractionTypes: 'PIT-', mechanicSensorTypes: 'SNT-', mechanicActuatorTypes: 'ACT-', stories: 'LIB-STORY-N',
-  mechanicCharacterEmotionTypes: 'CEM-', mechanicSequenceModes: 'SQM-', actionPatternMechanisms: 'APM-', actionProbabilityMechanisms: 'APR-', mechStructures: 'LIB-MSTRUCT-N', gmRules: 'LIB-GMR-', concepts: 'LIB-CPT-N',
+  mechanicCharacterEmotionTypes: 'CEM-', mechanicSequenceModes: 'SQM-', actionPatternMechanisms: 'APM-', actionProbabilityMechanisms: 'APR-', victoryConditionMechanisms: 'VC-', uncertaintyMechanisms: 'UNC-', economyMechanisms: 'ECON-', auctionMechanisms: 'AUC-', workerPlacementMechanisms: 'WP-', movementMechanisms: 'MOV-', areaControlMechanisms: 'AC-', setCollectionMechanisms: 'SET-', cardMechanisms: 'CARD-', mechStructures: 'LIB-MSTRUCT-N', gmRules: 'LIB-GMR-', concepts: 'LIB-CPT-N',
 };
 
 const mechanicSubnodeFieldDefault = (field) => {
@@ -1104,6 +1126,15 @@ export const LIB_BLANK = {
   mechanicSequenceModes: (id) => ({ id, label: 'Custom', custom: true }),
   actionPatternMechanisms: (id) => ({ id, system: 'special', label: 'New mechanism', description: '', image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, advantages: [''], effects: [''], variations: [''], custom: true }),
   actionProbabilityMechanisms: (id) => ({ id, kind: 'probability', label: 'New resolution', description: '', variations: [''], emotionalSpike: '', effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, custom: true }),
+  victoryConditionMechanisms: (id) => ({ id, kind: 'victory', label: 'New victory condition', category: 'Victory Condition', description: '', variations: [''], effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, color: '#43BF87', custom: true }),
+  uncertaintyMechanisms: (id) => ({ id, kind: 'uncertainty', label: 'New uncertainty mechanism', category: 'Uncertainty', description: '', variations: [''], effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, color: '#A87BF0', custom: true }),
+  economyMechanisms: (id) => ({ id, kind: 'economy', label: 'New economy mechanism', category: 'Economy', description: '', variations: [''], effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, color: '#E0A23C', custom: true }),
+  auctionMechanisms: (id) => ({ id, kind: 'auction', label: 'New auction mechanism', category: 'Auctions', description: '', variations: [''], effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, color: '#A87BF0', custom: true }),
+  workerPlacementMechanisms: (id) => ({ id, kind: 'workerPlacement', label: 'New worker placement mechanism', category: 'Worker Placement', description: '', variations: [''], effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, color: '#5CA8F5', custom: true }),
+  movementMechanisms: (id) => ({ id, kind: 'movement', label: 'New movement mechanism', category: 'Movement', description: '', variations: [''], effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, color: '#3EC6D6', custom: true }),
+  areaControlMechanisms: (id) => ({ id, kind: 'areaControl', label: 'New area control mechanism', category: 'Area Control', description: '', variations: [''], effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, color: '#43BF87', custom: true }),
+  setCollectionMechanisms: (id) => ({ id, kind: 'setCollection', label: 'New set collection mechanism', category: 'Set Collection', description: '', variations: [''], effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, color: '#E8D25C', custom: true }),
+  cardMechanisms: (id) => ({ id, kind: 'cardMechanism', label: 'New card mechanism', category: 'Card Mechanisms', description: '', variations: [''], effects: [''], image: null, imageScale: 1, imagePositionX: 0, imagePositionY: 0, color: '#F08CB4', custom: true }),
   stories: (id) => ({ id, name: 'New structure', description: '', estMinutes: 15, usesBaseConcept: false, baseConceptId: null, nodes: {}, edges: [], frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {} }),
   mechStructures: (id) => ({ id, name: 'New mechanic structure', description: '', estMinutes: 10, nodes: {}, edges: [], numberMarkers: {}, titleMarkers: {} }),
   gmRules: (id) => ({ id, title: 'New game master rule', principle: '', implementation: '', rationale: '', aiRule: '' }),
@@ -1208,6 +1239,7 @@ const migrateActionGraph = (graph = {}, ensureInstruction = false) => {
         || node.advantage != null || node.effect != null || node.variation != null;
       node = {
         ...rest,
+        title: node.title === 'Action' ? 'BG action' : node.title,
         ...(hasLegacyDetails ? {
           advantages: Array.isArray(node.advantages) && node.advantages.length ? node.advantages : [node.advantage || ''],
           effects: Array.isArray(node.effects) && node.effects.length ? node.effects : [node.effect || ''],
@@ -1315,6 +1347,7 @@ export function migrateLibrary(saved) {
   ]);
   merged.mechPrimitives = Object.fromEntries(Object.entries(merged.mechPrimitives || {}).filter(([id, n]) => (
     !retiredMechIds.has(id) && !retiredMechKinds.has(n?.mechKind)
+    && !['LIB-MPRIM-ACTION-SEQUENCE', 'LIB-MPRIM-ACTION-PROBABILITY'].includes(id)
   )));
   merged.stories = Object.fromEntries(Object.entries(merged.stories || {}).filter(([id, st]) =>
     !['LIB-STORY-BETRAY', 'LIB-STORY-COLDCASE'].includes(id)
@@ -1368,6 +1401,195 @@ export function migrateLibrary(saved) {
       imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
       imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
       imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+    }];
+  }));
+  const seededVictoryConditions = Object.fromEntries(VICTORY_CONDITIONS.map((record) => [record.id, record]));
+  merged.victoryConditionMechanisms = Object.fromEntries(Object.entries({
+    ...seededVictoryConditions,
+    ...(merged.victoryConditionMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seededVictoryConditions[id] || {};
+    return [id, {
+      ...seeded,
+      ...mechanism,
+      kind: 'victory',
+      category: 'Victory Condition',
+      description: mechanism.description || seeded.description || '',
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+      color: mechanism.color || seeded.color || '#43BF87',
+    }];
+  }));
+  const seededUncertaintyMechanisms = Object.fromEntries(UNCERTAINTY_MECHANISMS.map((record) => [record.id, record]));
+  merged.uncertaintyMechanisms = Object.fromEntries(Object.entries({
+    ...seededUncertaintyMechanisms,
+    ...(merged.uncertaintyMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seededUncertaintyMechanisms[id] || {};
+    return [id, {
+      ...seeded,
+      ...mechanism,
+      kind: 'uncertainty',
+      category: 'Uncertainty',
+      description: mechanism.description || seeded.description || '',
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+      color: mechanism.color || seeded.color || '#A87BF0',
+    }];
+  }));
+  const seededEconomyMechanisms = Object.fromEntries(ECONOMY_MECHANISMS.map((record) => [record.id, record]));
+  merged.economyMechanisms = Object.fromEntries(Object.entries({
+    ...seededEconomyMechanisms,
+    ...(merged.economyMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seededEconomyMechanisms[id] || {};
+    return [id, {
+      ...seeded,
+      ...mechanism,
+      kind: 'economy',
+      category: 'Economy',
+      description: mechanism.description || seeded.description || '',
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+      color: mechanism.color || seeded.color || '#E0A23C',
+    }];
+  }));
+  const seededAuctionMechanisms = Object.fromEntries(AUCTION_MECHANISMS.map((record) => [record.id, record]));
+  merged.auctionMechanisms = Object.fromEntries(Object.entries({
+    ...seededAuctionMechanisms,
+    ...(merged.auctionMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seededAuctionMechanisms[id] || {};
+    return [id, {
+      ...seeded,
+      ...mechanism,
+      kind: 'auction',
+      category: 'Auctions',
+      description: mechanism.description || seeded.description || '',
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+      color: mechanism.color || seeded.color || '#A87BF0',
+    }];
+  }));
+  const seededWorkerPlacementMechanisms = Object.fromEntries(WORKER_PLACEMENT_MECHANISMS.map((record) => [record.id, record]));
+  merged.workerPlacementMechanisms = Object.fromEntries(Object.entries({
+    ...seededWorkerPlacementMechanisms,
+    ...(merged.workerPlacementMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seededWorkerPlacementMechanisms[id] || {};
+    return [id, {
+      ...seeded,
+      ...mechanism,
+      kind: 'workerPlacement',
+      category: 'Worker Placement',
+      description: mechanism.description || seeded.description || '',
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+      color: mechanism.color || seeded.color || '#5CA8F5',
+    }];
+  }));
+  const seededMovementMechanisms = Object.fromEntries(MOVEMENT_MECHANISMS.map((record) => [record.id, record]));
+  merged.movementMechanisms = Object.fromEntries(Object.entries({
+    ...seededMovementMechanisms,
+    ...(merged.movementMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seededMovementMechanisms[id] || {};
+    return [id, {
+      ...seeded,
+      ...mechanism,
+      kind: 'movement',
+      category: 'Movement',
+      description: mechanism.description || seeded.description || '',
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+      color: mechanism.color || seeded.color || '#3EC6D6',
+    }];
+  }));
+  const seededAreaControlMechanisms = Object.fromEntries(AREA_CONTROL_MECHANISMS.map((record) => [record.id, record]));
+  merged.areaControlMechanisms = Object.fromEntries(Object.entries({
+    ...seededAreaControlMechanisms,
+    ...(merged.areaControlMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seededAreaControlMechanisms[id] || {};
+    return [id, {
+      ...seeded,
+      ...mechanism,
+      kind: 'areaControl',
+      category: 'Area Control',
+      description: mechanism.description || seeded.description || '',
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+      color: mechanism.color || seeded.color || '#43BF87',
+    }];
+  }));
+  const seededSetCollectionMechanisms = Object.fromEntries(SET_COLLECTION_MECHANISMS.map((record) => [record.id, record]));
+  merged.setCollectionMechanisms = Object.fromEntries(Object.entries({
+    ...seededSetCollectionMechanisms,
+    ...(merged.setCollectionMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seededSetCollectionMechanisms[id] || {};
+    return [id, {
+      ...seeded,
+      ...mechanism,
+      kind: 'setCollection',
+      category: 'Set Collection',
+      description: mechanism.description || seeded.description || '',
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+      color: mechanism.color || seeded.color || '#E8D25C',
+    }];
+  }));
+  const seededCardMechanisms = Object.fromEntries(CARD_MECHANISMS.map((record) => [record.id, record]));
+  merged.cardMechanisms = Object.fromEntries(Object.entries({
+    ...seededCardMechanisms,
+    ...(merged.cardMechanisms || {}),
+  }).map(([id, mechanism]) => {
+    const seeded = seededCardMechanisms[id] || {};
+    return [id, {
+      ...seeded,
+      ...mechanism,
+      kind: 'cardMechanism',
+      category: 'Card Mechanisms',
+      description: mechanism.description || seeded.description || '',
+      variations: Array.isArray(mechanism.variations) && mechanism.variations.length ? mechanism.variations : [''],
+      effects: Array.isArray(mechanism.effects) && mechanism.effects.length ? mechanism.effects : [''],
+      image: mechanism.image || seeded.image || null,
+      imageScale: Math.min(3, Math.max(0.5, Number(mechanism.imageScale ?? seeded.imageScale) || 1)),
+      imagePositionX: Math.min(100, Math.max(-100, Number(mechanism.imagePositionX ?? seeded.imagePositionX) || 0)),
+      imagePositionY: Math.min(100, Math.max(-100, Number(mechanism.imagePositionY ?? seeded.imagePositionY) || 0)),
+      color: mechanism.color || seeded.color || '#F08CB4',
     }];
   }));
   merged.mechPrimitives = Object.fromEntries(Object.entries({ ...seed.mechPrimitives, ...(merged.mechPrimitives || {}) }).map(([id, node]) => {
@@ -1444,6 +1666,7 @@ export function migrateLibrary(saved) {
         || node.advantage != null || node.effect != null || node.variation != null;
       return [id, {
         ...rest,
+        name: node.name === 'Action' ? 'BG action' : node.name,
         ...(hasLegacyDetails ? {
           advantages: Array.isArray(node.advantages) && node.advantages.length ? node.advantages : [node.advantage || ''],
           effects: Array.isArray(node.effects) && node.effects.length ? node.effects : [node.effect || ''],
@@ -2054,7 +2277,7 @@ export function makeLibrarySeed() {
         manualOverrideFallback: '', nodeColor: '#5CA8F5',
       },
       'LIB-MPRIM-ACTION': {
-        id: 'LIB-MPRIM-ACTION', name: 'Action', mechKind: 'action', category: 'action',
+        id: 'LIB-MPRIM-ACTION', name: 'BG action', mechKind: 'action', category: 'action',
         baseKind: 'mechanic', color: '#58C7A6', icon: 'zap', inputs: ['available'], outputs: ['complete'],
         defaultBody: 'One atomic physical, cognitive, or social step performed by a player or team.',
         estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0,
@@ -2064,22 +2287,6 @@ export function makeLibrarySeed() {
         id: 'LIB-MPRIM-PLAYER-INSTRUCTION', name: 'Player-Facing Instruction', mechKind: 'playerFacingInstruction', category: 'supporting',
         baseKind: 'mechanic', color: '#E8D25C', icon: 'book', inputs: ['in'], outputs: ['out'],
         defaultBody: '', estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0,
-      },
-      'LIB-MPRIM-ACTION-SEQUENCE': {
-        id: 'LIB-MPRIM-ACTION-SEQUENCE', name: 'Action Sequence', mechKind: 'actionSequence', category: 'action',
-        baseKind: 'mechanic', color: '#3EC6D6', icon: 'layers', inputs: ['start'], outputs: ['complete'],
-        defaultBody: 'Collapsible container for a custom sequence of actions.',
-        estMinutes: 3, crew: 0, refs: {}, collapseDepth: 1,
-        sequenceMode: 'Custom', sequenceInstruction: '', attachedSubnodeIds: [],
-      },
-      'LIB-MPRIM-ACTION-PROBABILITY': {
-        id: 'LIB-MPRIM-ACTION-PROBABILITY', name: 'Resolution', mechKind: 'actionProbability', category: 'action',
-        baseKind: 'mechanic', color: '#F08CB4', icon: 'pin', inputs: ['attempt'], outputs: ['resolved'],
-        defaultBody: ACTION_PROBABILITY_RESOLUTIONS[0].description,
-        estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0,
-        resolutionMechanismId: ACTION_PROBABILITY_RESOLUTIONS[0].id,
-        resolutionType: ACTION_PROBABILITY_RESOLUTION_TYPES[0], variations: [''], emotionalSpike: '', effects: [''],
-        image: ACTION_PROBABILITY_RESOLUTIONS[0].image, imageScale: 1, imagePositionX: 0, imagePositionY: 0,
       },
       'LIB-MPRIM-CHARACTER-STATE': {
         id: 'LIB-MPRIM-CHARACTER-STATE', name: 'Character State', mechKind: 'characterState',
@@ -2163,6 +2370,15 @@ export function makeLibrarySeed() {
     },
     actionPatternMechanisms: makeActionPatternMechanisms(),
     actionProbabilityMechanisms: Object.fromEntries(ACTION_PROBABILITY_RESOLUTIONS.map((record) => [record.id, record])),
+    victoryConditionMechanisms: Object.fromEntries(VICTORY_CONDITIONS.map((record) => [record.id, record])),
+    uncertaintyMechanisms: Object.fromEntries(UNCERTAINTY_MECHANISMS.map((record) => [record.id, record])),
+    economyMechanisms: Object.fromEntries(ECONOMY_MECHANISMS.map((record) => [record.id, record])),
+    auctionMechanisms: Object.fromEntries(AUCTION_MECHANISMS.map((record) => [record.id, record])),
+    workerPlacementMechanisms: Object.fromEntries(WORKER_PLACEMENT_MECHANISMS.map((record) => [record.id, record])),
+    movementMechanisms: Object.fromEntries(MOVEMENT_MECHANISMS.map((record) => [record.id, record])),
+    areaControlMechanisms: Object.fromEntries(AREA_CONTROL_MECHANISMS.map((record) => [record.id, record])),
+    setCollectionMechanisms: Object.fromEntries(SET_COLLECTION_MECHANISMS.map((record) => [record.id, record])),
+    cardMechanisms: Object.fromEntries(CARD_MECHANISMS.map((record) => [record.id, record])),
 
     // GAME MASTER RULES: global design principles that shape the whole game.
     // Each rule leads with a short core principle (≤4 sentences), then carries
@@ -2579,7 +2795,7 @@ export function migrateProject(saved) {
   }
   const plainTestActions = Object.values(merged.taskNodes).filter((node) => (
     node.mechKind === 'action'
-    && node.title === 'Action'
+    && saved.taskNodes?.[node.id]?.title === 'Action'
     && node.body === 'One atomic physical, cognitive, or social step performed by a player or team.'
   ));
   const hasMacroDroidBridge = Object.values(merged.taskNodes).some((node) => node.itemId === 'LIB-ITM-MACRODROID-PHONE');

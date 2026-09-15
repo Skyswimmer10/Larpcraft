@@ -1,12 +1,14 @@
 export const CURRENT_MECHANIC_PRIMITIVE_KINDS = new Set([
   'action',
   'playerFacingInstruction',
-  'actionSequence',
-  'actionProbability',
   'sensorNode',
   'actuatorNode',
   'progressState',
 ]);
+
+export const isRetiredMechanicPrimitive = (node) => (
+  node?.mechKind === 'actionSequence' || node?.mechKind === 'actionProbability'
+);
 
 export const CURRENT_MECHANIC_SUBNODE_KINDS = new Set([
   'progressiveFeedback',
@@ -22,8 +24,8 @@ export const CURRENT_MECHANIC_SUBNODE_KINDS = new Set([
 ]);
 
 export const isOldMechanicPrimitive = (node) => (
-  node?.oldNode === true
-  || (node?.oldNode == null && !CURRENT_MECHANIC_PRIMITIVE_KINDS.has(node?.mechKind))
+  !isRetiredMechanicPrimitive(node) && (node?.oldNode === true
+  || (node?.oldNode == null && !CURRENT_MECHANIC_PRIMITIVE_KINDS.has(node?.mechKind)))
 );
 
 export const isOldMechanicSubnode = (node) => (
@@ -31,5 +33,5 @@ export const isOldMechanicSubnode = (node) => (
   || (node?.oldNode == null && !CURRENT_MECHANIC_SUBNODE_KINDS.has(node?.kind))
 );
 
-export const isCurrentMechanicPrimitive = (node) => !isOldMechanicPrimitive(node);
+export const isCurrentMechanicPrimitive = (node) => !isRetiredMechanicPrimitive(node) && !isOldMechanicPrimitive(node);
 export const isCurrentMechanicSubnode = (node) => !isOldMechanicSubnode(node);

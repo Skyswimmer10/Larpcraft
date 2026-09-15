@@ -483,3 +483,10 @@ alignments. Use it as the reference for expected data shapes.
 
 *Keep this document in sync with the code. If a future change contradicts a
 statement here, fix the statement in the same commit.*
+
+
+## Mechanics selection update (2026-09-15)
+
+Action has a single Browse Mechanisms entry point, accepting every catalogue category. Applied nodes use `mechKind: actionMechanism`, `mechanismKind` for the catalogue, and `actionMechanismId` for the source record. Older nodes without `mechanismKind` resolve to the pattern catalogue. `src/data/mechanismCatalog.js` shares lookup routing between inspector and canvas. Selection copies images, crop transforms, and descriptive fields into the node; graph identity, geometry, and attachments survive.
+
+Action Sequence and Resolution are retired base-node choices. Library revision 38 removes their built-in primitive definitions on load, without deleting authored graph instances or resolution catalogue records. Existing Action Templates insert using Task Template containers.

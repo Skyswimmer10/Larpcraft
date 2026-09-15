@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import StorageStatus from './components/StorageStatus.jsx';
+import { AppearanceProvider, useAppearance } from './components/AppearanceContext.jsx';
+import './ui-refresh.css';
 import { StoreProvider, useGame, useDispatch, useLibrary, useLibraryDispatch, resetDemoData } from './state/store.jsx';
 import Inspector from './components/Inspector.jsx';
 import ProjectMenu from './components/ProjectMenu.jsx';
@@ -36,12 +39,23 @@ const LIB_GROUPS = [
 ];
 
 const INSPECTOR_WIDTH_KEY = 'larpcraft:inspectorWidth';
+const NAV_ICONS = {
+  weaver: 'book', storyDynamics: 'pulse', flow: 'branches', tasks: 'wrench',
+  locations: 'pin', items: 'box', teams: 'users', players: 'user',
+  physical: 'layers', mechanics: 'wrenches', story: 'book', gmrules: 'rules',
+};
+const NAV_ACCENTS = {
+  weaver: '#65D6D0', storyDynamics: '#F19BC1', flow: '#80B9FF', tasks: '#BAA0FF',
+  locations: '#70D3A0', items: '#EDB66A', teams: '#D1A5EC', players: '#91CFEB',
+  physical: '#D8C4A1', mechanics: '#E8A38A', story: '#A8B6FF', gmrules: '#E3D47D',
+};
 const inspectorWidthFromStorage = () => {
   const saved = Number(window.localStorage.getItem(INSPECTOR_WIDTH_KEY));
   return Number.isFinite(saved) ? Math.max(280, Math.min(720, saved)) : 320;
 };
 
 function Shell() {
+  const { refreshed } = useAppearance();
   const proj = useGame();
   const lib = useLibrary();
   const dispatch = useDispatch();
@@ -62,8 +76,8 @@ function Shell() {
   const ActiveView = isLibrary || isRules ? null : all.find((v) => v.id === view).comp;
 
   const navBtn = (v) => (
-    <button key={v.id} className={`nav${view === v.id ? ' on' : ''}`} onClick={() => setView(v.id)}>
-      <span className="sq" style={{ background: v.color }} />{v.label}<span className="n">{v.count(proj)}</span>
+    <button key={v.id} className={`nav${view === v.id ? ' on' : ''}`} style={{ '--nav-accent': NAV_ACCENTS[v.id] }} onClick={() => setView(v.id)}>
+      {refreshed ? <span className="nav-icon"><PrimIcon icon={NAV_ICONS[v.id]} color="currentColor" size={19} /></span> : <span className="sq" style={{ background: v.color }} />}{v.label}<span className="n">{v.count(proj)}</span>
     </button>
   );
 
@@ -96,7 +110,7 @@ function Shell() {
   };
   return (
     <div
-      className={`chrome${navCollapsed ? ' nav-collapsed' : ''}${inspectorCollapsed ? ' inspector-collapsed' : ''}${contentBackdrop?.image?.dataUrl ? ' has-content-backdrop' : ''}`}
+      className={`chrome${refreshed && (!selection || isRules) ? ' inspector-idle' : ''}${navCollapsed ? ' nav-collapsed' : ''}${inspectorCollapsed ? ' inspector-collapsed' : ''}${contentBackdrop?.image?.dataUrl ? ' has-content-backdrop' : ''}`}
       style={{ '--insp-w': inspectorCollapsed ? '38px' : `${inspectorWidth}px` }}
     >
       {contentBackdrop?.image?.dataUrl && (
@@ -117,14 +131,14 @@ function Shell() {
         {MANAGE_VIEWS.map(navBtn)}
         <div className="navlab">Library · master database</div>
         {LIB_GROUPS.map((g) => (
-          <button key={g.id} className={`nav${view === 'library' && libGroup === g.id ? ' on' : ''}`}
+          <button key={g.id} className={`nav${view === 'library' && libGroup === g.id ? ' on' : ''}`} style={{ '--nav-accent': NAV_ACCENTS[g.id] }}
             onClick={() => { setView('library'); setLibGroup(g.id); }}>
-            <span className="sq" style={{ background: g.color }} />{g.label}
+            {refreshed ? <span className="nav-icon"><PrimIcon icon={NAV_ICONS[g.id]} color="currentColor" size={19} /></span> : <span className="sq" style={{ background: g.color }} />}{g.label}
             <span className="n">{g.colls.reduce((sum, c) => sum + Object.keys(lib[c]).length, 0)}</span>
           </button>
         ))}
-        <button className={`nav${isRules ? ' on' : ''}`} onClick={() => setView('gmrules')}>
-          <span className="sq" style={{ background: '#E8D25C' }} />Game Master Rules
+        <button className={`nav${isRules ? ' on' : ''}`} style={{ '--nav-accent': NAV_ACCENTS.gmrules }} onClick={() => setView('gmrules')}>
+          {refreshed ? <span className="nav-icon"><PrimIcon icon="rules" color="currentColor" size={19} /></span> : <span className="sq" style={{ background: '#E8D25C' }} />}Game Master Rules
           <span className="n">{Object.keys(lib.gmRules ?? {}).length}</span>
         </button>
         <div className="sidefoot">
@@ -158,6 +172,7 @@ function Shell() {
 }
 
 function TitleBar() {
+  const { refreshed, focus, toggleAppearance, toggleFocus } = useAppearance();
   const proj = useGame();
   const headerBackdrop = proj?.meta?.backdrops?.header;
   return (
@@ -169,6 +184,11 @@ function TitleBar() {
       <span className="logo" />
       <ProjectMenu />
       <span className="appname">LARP Craft — {proj?.meta?.name || 'Loading game...'}</span>
+      <StorageStatus />
+      <div className="appearance-controls">
+        {refreshed && <button aria-pressed={focus} onClick={toggleFocus}>{focus ? 'Exit focus' : 'Focus mode'}</button>}
+        <button aria-pressed={refreshed} onClick={toggleAppearance} title="Switch appearances without changing game content">{refreshed ? 'Refreshed UI · On' : 'Refreshed UI · Off'}</button>
+      </div>
     </div>
   );
 }
@@ -176,10 +196,10 @@ function TitleBar() {
 export default function App() {
   return (
     <StoreProvider>
-      <div className="frame">
+      <AppearanceProvider>
         <TitleBar />
         <Shell />
-      </div>
+      </AppearanceProvider>
     </StoreProvider>
   );
 }

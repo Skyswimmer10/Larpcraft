@@ -41,15 +41,13 @@ src/mechanics/
 - Actuator Node: gameplay output/effect behavior.
 - Action: one atomic step with Who Acts, Number of Players, and attachable modifiers.
 - Player-Facing Instruction: a separate node containing the exact instruction presented to players.
-- Action Sequence: collapsible container with a library-extensible custom sequence mode.
-- Resolution: selects one of the probability or resolution mechanisms and records a human-readable category and procedure for applying it.
 - Character State: pre-authored NPC/character behavior for dialogue trees and AI-agent responses.
 
 ## Action System
 
-Action nodes stay deliberately small. Selection rules, budgets, availability, prompts, and physical resolution use one reusable Action Type Pattern subnode. Its mechanisms are organized into Action Token Systems, Action Order Systems, and Action Special System dropdowns, and each mechanism can recall saved rule settings from the library.
+Action nodes have one **Browse Mechanisms** button. The browser opens all categories and any catalogue mechanism can replace the Action placeholder. The applied node keeps a detached copy of its description, image/crop, effects, variations, and category-specific details. Its inspector has the same browser button for choosing a different mechanism. Save Changes edits the library record; Use Mechanism copies it to the node.
 
-The 23 `ACT-01` through `ACT-23` mechanisms from *Building Blocks of Tabletop Game Design* are stored as `templateKind: 'action'` records in `mechStructures`. The UI presents these as Action Templates, separately from Task Templates. Inserting one creates a collapsed Action Sequence containing an editable Action node, a Player-Facing Instruction node, and its matching modifier; it does not create 23 permanent base-node types.
+Action Sequence and Resolution are removed from the base-node choices and built-in definitions. Existing graph instances remain readable. Resolution mechanisms remain available inside the shared browser. The 23 existing Action Templates insert as ordinary Task Template containers, preserving their internal graphs.
 
 ## Mechanic Subnodes
 

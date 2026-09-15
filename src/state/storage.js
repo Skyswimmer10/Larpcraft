@@ -1,9 +1,74 @@
-// Local-first persistence: each store (library / active project) saves its
-// whole state under its own IndexedDB key, debounced after every change.
-// IndexedDB is the primary store, with localStorage as the offline fallback.
+// Local Vite sessions commit to disk; deployed builds retain browser storage.
+// Browser snapshots remain recovery copies, never a silent substitute for disk.
 import { get, set, del } from 'idb-keyval';
 
 const IDB_TIMEOUT_MS = 1800;
+const diskMode = import.meta.env.DEV;
+const storeNames = { 'larpcraft:library': 'library', 'larpcraft:activeProject': 'project' };
+const revisions = {}, pending = {}, diskTimers = {}, chains = {}, errors = {};
+const listeners = new Set();
+let status = diskMode ? 'Connecting to local files…' : 'Saved in this browser';
+export const subscribeStorageStatus = listener => { listeners.add(listener); return () => listeners.delete(listener); };
+export const getStorageStatus = () => status;
+function publish() {
+  status = Object.values(errors).find(Boolean) || (Object.keys(pending).length ? 'Saving to local files…' : 'Saved to local files');
+  listeners.forEach(listener => listener());
+}
+async function diskRequest(name, payload) {
+  const response = await fetch(`/api/local-data/${name}`, {
+    ...(payload ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) } : {}),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || `Local save failed (${response.status})`);
+  }
+  return response.json();
+}
+export async function loadKey(key) {
+  if (!diskMode || !storeNames[key]) return loadBrowserKey(key);
+  // Archive this browser's data BEFORE selecting the shared disk copy.
+  const browser = await loadBrowserKey(key);
+  if (browser) await diskRequest('archive', { key, origin: location.origin, state: browser });
+  const record = await diskRequest(storeNames[key]);
+  revisions[key] = record.revision;
+  publish();
+  return record.state;
+}
+function commit(key) {
+  const state = pending[key];
+  if (!state) return;
+  chains[key] = (chains[key] || Promise.resolve()).then(async () => {
+    try {
+      const record = await diskRequest(storeNames[key], { state, revision: revisions[key] });
+      revisions[key] = record.revision;
+      if (pending[key] === state) delete pending[key];
+      delete errors[key];
+    } catch (error) {
+      errors[key] = `Local save needs attention: ${error.message}`;
+      // Preserve the complete draft on disk even when a revision conflict blocks
+      // replacing the shared canonical state.
+      await diskRequest('archive', { key, origin: location.origin, state, recovery: 'uncommitted-draft' }).catch(() => {});
+    }
+    publish();
+  });
+}
+export function retryLocalSaves() {
+  Object.keys(pending).forEach(key => { clearTimeout(diskTimers[key]); commit(key); });
+}
+export function saveKeyDebounced(key, state) {
+  saveBrowserKeyDebounced(key, state);
+  if (!diskMode || !storeNames[key]) return;
+  pending[key] = state;
+  publish();
+  clearTimeout(diskTimers[key]);
+  diskTimers[key] = setTimeout(() => commit(key), 500);
+}
+if (typeof window !== 'undefined' && diskMode) {
+  window.addEventListener('beforeunload', event => {
+    if (Object.keys(pending).length) { event.preventDefault(); event.returnValue = ''; }
+  });
+}
 
 function withStorageTimeout(promise, label) {
   return Promise.race([
@@ -25,7 +90,7 @@ const ls = (() => {
   }
 })();
 
-export async function loadKey(key) {
+async function loadBrowserKey(key) {
   let idbTimeout = null;
   try {
     const v = await withStorageTimeout(get(key), `IndexedDB load for ${key}`);
@@ -47,7 +112,7 @@ export async function loadKey(key) {
 }
 
 const timers = {};
-export function saveKeyDebounced(key, state) {
+function saveBrowserKeyDebounced(key, state) {
   clearTimeout(timers[key]);
   timers[key] = setTimeout(() => {
     set(key, state).catch((err) => {

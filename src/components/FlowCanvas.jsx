@@ -1,3 +1,4 @@
+import { useAppearance } from './AppearanceContext.jsx';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ENTITY_COLORS, PrimIcon } from './bits.jsx';
 import { arrowEndpointGeometry, splineControlOffset } from '../lib/arrowGeometry.js';
@@ -75,7 +76,6 @@ export function visibleCanvasPlacement(fallback = { x: 80, y: 80 }, size = { w: 
   })).find((point) => !overlaps(point)) || center;
   return { x: Math.max(8, Math.round(candidate.x)), y: Math.max(8, Math.round(candidate.y)) };
 }
-
 export const NODE_W = NODE_DEFAULT_WIDTH;
 export const KIND_LABEL = {
   story: 'Story beat', location: 'Location', objective: 'Objective', enemy: 'Enemy encounter', mechanic: 'Mechanic', sensor: 'Sensor trigger',
@@ -142,6 +142,8 @@ export default function FlowCanvas({
   // titleMarkers: draggable text headings for visually grouping graph areas.
   titleMarkers, onTitleMarkerSelect, onTitleMarkerMove, onTitleMarkerDelete, selTitleMarker,
 }) {
+  const { refreshed } = useAppearance();
+  const [arrangeUndo, setArrangeUndo] = useState(null);
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
   const resizeRef = useRef(null);
@@ -268,7 +270,10 @@ export default function FlowCanvas({
     return valid;
   };
   const nodeDefaultW = (n) => {
-    if (n.kind === 'framework' && n.frameworkId === 'jungianMasculineArchetypes') return 360;
+    if (n.kind === 'framework' && n.frameworkId === 'nlpMetaPrograms') return 460;
+    if (n.kind === 'framework' && n.frameworkId === 'nlpMetaModel') return 560;
+    if (n.kind === 'framework' && n.frameworkId === 'mmpi2CharacterProfile') return 420;
+    if (n.kind === 'framework' && ['jungianMasculineArchetypes', 'jungianFeminineArchetypes'].includes(n.frameworkId)) return 360;
     if (n.kind === 'framework' && n.frameworkId === 'kolbLearningCycle') return 300;
     if (n.kind === 'framework' && n.frameworkId === 'descentAndRecovery') return 330;
     if (n.kind === 'framework' && n.frameworkId === 'homeVoyageReturn') return 360;
@@ -1168,9 +1173,31 @@ export default function FlowCanvas({
     };
   }, [boxDrag, list, frames, markerList, titleList, measuredTitleSizes]);
 
+  const fitView = (selectedOnly = false) => {
+    const canvas = canvasRef.current;
+    const canvasRect = canvas.getBoundingClientRect();
+    const elements = [...canvas.querySelectorAll('[data-node], .gframe, .numarker, .titlemarker')].filter(el => !selectedOnly || el.dataset.node === selId || multiSel.has(el.dataset.node));
+    if (!elements.length) return;
+    const boxes = elements.map(el => { const r = el.getBoundingClientRect(); return { x: (r.left - canvasRect.left + canvas.scrollLeft) / zoom, y: (r.top - canvasRect.top + canvas.scrollTop) / zoom, w: r.width / zoom, h: r.height / zoom }; });
+    const x = Math.min(...boxes.map(b => b.x)), y = Math.min(...boxes.map(b => b.y));
+    const w = Math.max(...boxes.map(b => b.x + b.w)) - x, h = Math.max(...boxes.map(b => b.y + b.h)) - y;
+    const next = clampZoom(Math.min(1.5, (canvas.clientWidth - 100) / Math.max(1,w), (canvas.clientHeight - 100) / Math.max(1,h)));
+    setZoom(next);
+    requestAnimationFrame(() => { canvas.scrollLeft = Math.max(0,x * next - 50); canvas.scrollTop = Math.max(0,y * next - 50); });
+  };
+  const arrangeNodes = () => {
+    const items = list.filter(n => multiSel.size < 2 || multiSel.has(n.id));
+    const before = {}, after = {};
+    const columns = Math.max(1, Math.ceil(Math.sqrt(items.length)));
+    const cellW = Math.max(...items.map(nodeW), 240) + 70;
+    const cellH = Math.max(...items.map(nodeH), 160) + 70;
+    items.forEach((n,i) => { before[n.id] = { x:n.x,y:n.y }; after[n.id] = { x:60+(i%columns)*cellW,y:80+Math.floor(i/columns)*cellH }; });
+    setArrangeUndo(before);
+    onMoveNodes(after, { undoGroup: `arrange-${Date.now()}` });
+  };
   return (
     <div
-      className="canvas" ref={canvasRef}
+      className={`canvas${refreshed && selId ? ' canvas-selection-emphasis' : ''}`} ref={canvasRef}
       data-canvas-zoom={zoom}
       onPointerEnter={(e) => { activeCanvasElement = e.currentTarget; }}
       onScroll={(e) => { activeCanvasElement = e.currentTarget; }}
@@ -1193,6 +1220,12 @@ export default function FlowCanvas({
         <span>{Math.round(zoom * 100)}%</span>
         <button title="Zoom in" onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}>+</button>
         <button title="Reset zoom" onClick={() => setZoom(1)}>1:1</button>
+        {refreshed && <>
+          <button onClick={() => fitView()}>Fit all</button>
+          <button disabled={!selId && !multiSel.size} onClick={() => fitView(true)}>Focus selection</button>
+          {onMoveNodes && <button disabled={!list.length || Object.keys(frames || {}).length > 0} title="Arrange nodes in a grid; select several to arrange only those. Unavailable inside framed layouts." onClick={arrangeNodes}>Auto-arrange</button>}
+          {arrangeUndo && <button onClick={() => { onMoveNodes(Object.fromEntries(Object.entries(arrangeUndo).filter(([id]) => nodes[id])), { undoGroup: `undo-arrange-${Date.now()}` }); setArrangeUndo(null); }}>Undo arrange</button>}
+        </>}
       </div>
       {multiSel.size > 1 && <div className="multisel-count">{multiSel.size} objects selected</div>}
       <div className="canvas-zoom" style={{ width: extentX * zoom, height: extentY * zoom }}>
@@ -1357,7 +1390,7 @@ export default function FlowCanvas({
           const color = e.color || ENTITY_COLORS[e.kindColor] || colorOf(from) || '#8B92A6';
           const fact = edgeFact?.(e);
           return (
-            <g key={idx}>
+            <g key={idx} className={refreshed && selId ? (e.from === selId || e.to === selId ? 'connection-active' : 'connection-muted') : undefined}>
               <path d={edgePath(a, b, fromSide, toSide)} stroke={color} strokeWidth="2" fill="none" opacity=".8" />
               <foreignObject x={mid.x - 100} y={mid.y - 26} width="200" height="32">
                 <div className={`elab${e.label ? '' : ' empty'}`} style={{ borderColor: color, color }}>

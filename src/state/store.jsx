@@ -6,6 +6,7 @@ import deployedLibrary from '../data/deployedLibrary.json';
 import deployedProject from '../data/deployedProject.json';
 import { mergeBundledLibrary } from '../lib/bundledLibrary.js';
 import { mergeBundledProject } from '../lib/bundledProject.js';
+import { enforceStorageOwnership, masterCollectionForAction, stripMasterCollectionsFromProject } from '../lib/storageOwnership.js';
 
 // Two distinct stores:
 //  - Library: the persistent master database (templates). Survives across games.
@@ -129,6 +130,11 @@ export function StoreProvider({ children }) {
     rawLibDispatch(action);
   }, []);
   const projDispatch = useCallback((action) => {
+    if (masterCollectionForAction(action)) {
+      if (isUndoableAction(action)) lastUndoStore.current = 'library';
+      rawLibDispatch(action);
+      return;
+    }
     if (isUndoableAction(action)) lastUndoStore.current = 'project';
     rawProjDispatch(action);
   }, []);
@@ -140,10 +146,13 @@ export function StoreProvider({ children }) {
       try {
         // Library is migrated additively: newer schema revs backfill missing
         // collections (e.g. gmRules) instead of discarding the saved library.
-        rawLibDispatch({ type: 'RESET', seed: migrateLibrary(mergeBundledLibrary(deployedLibrary, savedLib)) });
+        const migratedLibrary = migrateLibrary(mergeBundledLibrary(deployedLibrary, savedLib));
         // Project is migrated additively (backfills `facts` etc.) so an open game
         // survives schema bumps instead of being reset.
-        rawProjDispatch({ type: 'RESET', seed: migrateProject(mergeBundledProject(deployedProject, savedProj)) });
+        const migratedProject = migrateProject(mergeBundledProject(deployedProject, savedProj));
+        const owned = enforceStorageOwnership(migratedLibrary, migratedProject);
+        rawLibDispatch({ type: 'RESET', seed: owned.library });
+        rawProjDispatch({ type: 'RESET', seed: owned.project });
         setBootError(null);
         setBooted(true);
       } catch (err) {
@@ -194,7 +203,9 @@ export function StoreProvider({ children }) {
   }, []);
 
   useEffect(() => { if (booted && lib) saveKeyDebounced(LIB_KEY, lib); }, [lib, booted]);
-  useEffect(() => { if (booted && proj) saveKeyDebounced(PROJ_KEY, proj); }, [proj, booted]);
+  useEffect(() => {
+    if (booted && proj) saveKeyDebounced(PROJ_KEY, stripMasterCollectionsFromProject(proj));
+  }, [proj, booted]);
 
   if (bootError) {
     return (

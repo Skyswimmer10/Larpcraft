@@ -1,3 +1,4 @@
+import AnnotationTools from '../components/AnnotationTools.jsx';
 import React, { useState } from 'react';
 import { useGame, useDispatch, useLibrary, useLibraryDispatch } from '../state/store.jsx';
 import { ENTITY_COLORS, Pill, PrimIcon } from '../components/bits.jsx';
@@ -565,7 +566,7 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
           <h2>Narrative</h2>
         </div>
         <div className="right">
-          <div className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
+          <AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
             <button className="btn" onClick={() => addFrame()}>Frame</button>
             <button className="btn" onClick={() => addCircle()}>Circle</button>
             <button className="btn" onClick={() => addVisualMarker('number')}>Number</button>
@@ -573,7 +574,7 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
             <button className="btn" onClick={() => addTitleMarker()}>Title</button>
             <button className="btn" onClick={() => addArrow()}>Arrow</button>
             <button className="btn" onClick={() => addSpline()}>Spline</button>
-          </div>
+          </AnnotationTools>
           <CsvButtons coll="nodes" />
         </div>
       </div>

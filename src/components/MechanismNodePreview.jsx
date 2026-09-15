@@ -1,4 +1,5 @@
 import React from 'react';
+import { appliedMechanismRecord } from '../data/mechanismCatalog.js';
 import { ACTION_MECHANISM_NODE_KIND, ACTION_PATTERN_SYSTEMS } from '../data/actionMechanics.js';
 
 const detail = (label, value) => value ? <div><b>{label}</b><span>{value}</span></div> : null;
@@ -16,7 +17,7 @@ export const isMechanismPreviewNode = (node) => (
 
 export default function MechanismNodePreview({ node, lib }) {
   if (node?.mechKind === ACTION_MECHANISM_NODE_KIND) {
-    const record = lib.actionPatternMechanisms?.[node.actionMechanismId];
+    const record = appliedMechanismRecord(lib, node);
     const advantages = Array.isArray(node.advantages) ? node.advantages : record?.advantages;
     const effects = Array.isArray(node.effects) ? node.effects : record?.effects;
     const variations = Array.isArray(node.variations) ? node.variations : record?.variations;
@@ -26,7 +27,8 @@ export default function MechanismNodePreview({ node, lib }) {
           <div className="mechanism-node-record-copy">
             <small>{node.mechanismCategory || ACTION_PATTERN_SYSTEMS[node.mechanismSystem]?.label || 'Action Mechanism'}</small>
             {(node.body || record?.description) && <p>{node.body || record.description}</p>}
-            {detailList('Advantage', advantages)}
+            {(node.mechanismKind || 'pattern') === 'pattern' && detailList('Advantage', advantages)}
+            {node.mechanismKind === 'probability' && detail('Emotional spike', node.emotionalSpike ?? record?.emotionalSpike)}
             {detailList('Effect', effects)}
             {detailList('Variation', variations)}
           </div>
@@ -40,7 +42,7 @@ export default function MechanismNodePreview({ node, lib }) {
     const selected = Object.keys(ACTION_PATTERN_SYSTEMS)
       .map((system) => lib.actionPatternMechanisms?.[fields[`${system}MechanismId`]])
       .filter(Boolean);
-    if (!selected.length) return <div className="mechanism-node-empty">Choose Token, Order, or Special in the inspector.</div>;
+    if (!selected.length) return <div className="mechanism-node-empty">Choose a mechanism in the inspector.</div>;
     return (
       <div className="mechanism-node-records">
         {selected.map((record) => (

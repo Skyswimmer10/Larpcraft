@@ -40,7 +40,7 @@ describe('mechanics model', () => {
   it('seeds the mechanics library with those node types', () => {
     const lib = makeLibrarySeed();
     const seededKinds = Object.values(lib.mechPrimitives).map((node) => node.mechKind).filter(Boolean);
-    expect(seededKinds).toEqual(expect.arrayContaining([...MECHANIC_NODE_KINDS]));
+    expect(seededKinds).toEqual(expect.arrayContaining(MECHANIC_NODE_KINDS.filter((kind) => !['actionSequence', 'actionProbability'].includes(kind))));
     expect(seededKinds).not.toContain('challengeCore');
     expect(lib.mechPrimitives['LIB-MPRIM-COOPERATION']).toMatchObject({
       name: 'Cooperation',
@@ -135,18 +135,18 @@ describe('mechanics model', () => {
   it('exposes board game nodes and action templates as separate mechanics palette groups', () => {
     const lib = makeLibrarySeed();
     const groups = buildMechanicsPaletteGroups(lib, { includeTemplates: true });
-    expect(groups.find((group) => group.id === 'boardGame').items.map((item) => item.label)).toEqual(['Action', 'Action Sequence', 'Resolution']);
+    expect(groups.find((group) => group.id === 'boardGame').items.map((item) => item.label)).toEqual(['BG action']);
     expect(groups.find((group) => group.id === 'supporting').items.map((item) => item.label)).toContain('Player-Facing Instruction');
     expect(groups.find((group) => group.id === 'actionTemplates').items).toHaveLength(23);
     expect(groups.find((group) => group.id === 'templates').items.every((item) => !item.kicker.startsWith('ACT-'))).toBe(true);
 
     const inserted = mechanicsPayloadToNode('template:LIB-MSTRUCT-ACT-01', lib, {});
-    expect(inserted.mechKind).toBe('actionSequence');
+    expect(inserted.mechKind).toBe('taskTemplate');
     expect(Object.keys(inserted.sub.nodes)).toHaveLength(3);
-    expect(inserted.sequenceMode).toBe('Custom');
+    expect(inserted).not.toHaveProperty('sequenceMode');
   });
 
-  it('uses the simplified Action schemas and custom sequence modes', () => {
+  it('uses the simplified Action schema and keeps legacy sequence modes', () => {
     const lib = makeLibrarySeed();
     expect(lib.mechPrimitives['LIB-MPRIM-ACTION']).toMatchObject({
       tokenMechanismId: '', orderMechanismId: '', specialMechanismId: '',
@@ -163,32 +163,38 @@ describe('mechanics model', () => {
     expect(lib.mechPrimitives['LIB-MPRIM-ACTION']).not.toHaveProperty('actionMode');
     expect(lib.mechPrimitives['LIB-MPRIM-ACTION']).not.toHaveProperty('playerInstruction');
     expect(lib.mechPrimitives['LIB-MPRIM-ACTION']).not.toHaveProperty('completionCondition');
-    expect(lib.mechPrimitives['LIB-MPRIM-ACTION-SEQUENCE']).toMatchObject({ sequenceMode: 'Custom' });
-    expect(lib.mechPrimitives['LIB-MPRIM-ACTION-SEQUENCE']).not.toHaveProperty('completionCondition');
+    expect(lib.mechPrimitives['LIB-MPRIM-ACTION-SEQUENCE']).toBeUndefined();
     expect(Object.values(lib.mechanicSequenceModes).map((mode) => mode.label)).toEqual(['Custom']);
   });
 
-  it('seeds Resolution with a human-readable resolution schema', () => {
-    expect(makeLibrarySeed().mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY']).toMatchObject({
-      name: 'Resolution',
-      mechKind: 'actionProbability',
-      category: 'action',
-      resolutionType: 'High Number',
-      variations: [''],
-      emotionalSpike: '',
-      effects: [''],
-      imageScale: 1,
-      imagePositionX: 0,
-      imagePositionY: 0,
-    });
-    expect(makeLibrarySeed().mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY']).not.toHaveProperty('resolutionCategory');
-    expect(makeLibrarySeed().mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY']).not.toHaveProperty('resolutionProcedure');
+  it('removes retired node choices on reload while preserving their saved graphs', () => {
+    const lib = makeLibrarySeed();
+    expect(lib.mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY']).toBeUndefined();
+    for (const [id, mechKind] of [['LIB-MPRIM-ACTION-SEQUENCE', 'actionSequence'], ['LIB-MPRIM-ACTION-PROBABILITY', 'actionProbability']]) {
+      const legacy = { id, mechKind, oldNode: false, category: 'action' };
+      lib.mechPrimitives[id] = legacy;
+      expect(isCurrentMechanicPrimitive(legacy)).toBe(false);
+      expect(isOldMechanicPrimitive(legacy)).toBe(false);
+      expect(mechanicsPayloadToNode(`mech:${id}`, lib)).toBeNull();
+    }
+    lib.mechStructures.SAVED = { id: 'SAVED', name: 'Saved work', nodes: {
+      S: { id: 'S', primitiveId: 'LIB-MPRIM-ACTION-SEQUENCE', kind: 'mechanic', mechKind: 'actionSequence', title: 'My sequence', sub: { nodes: { A: { id: 'A', title: 'Authored step' } }, edges: [] } },
+      R: { id: 'R', primitiveId: 'LIB-MPRIM-ACTION-PROBABILITY', kind: 'mechanic', mechKind: 'actionProbability', title: 'My resolution', body: 'Authored outcome', emotionalSpike: 'Surprise' },
+    }, edges: [{ from: 'S', to: 'R' }] };
+    const migrated = migrateLibrary(lib);
+    expect(migrated.mechPrimitives['LIB-MPRIM-ACTION-SEQUENCE']).toBeUndefined();
+    expect(migrated.mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY']).toBeUndefined();
+    expect(migrateLibrary(migrated).mechPrimitives['LIB-MPRIM-ACTION-SEQUENCE']).toBeUndefined();
+    expect(migrated.mechStructures.SAVED.nodes.S.sub.nodes.A.title).toBe('Authored step');
+    expect(migrated.mechStructures.SAVED.nodes.R).toMatchObject({ body: 'Authored outcome', emotionalSpike: 'Surprise' });
+    expect(migrated.mechStructures.SAVED.edges).toEqual([{ from: 'S', to: 'R' }]);
+    expect(Object.keys(migrated.actionProbabilityMechanisms)).toHaveLength(26);
   });
 
   it('keeps the mechanics restart set visible and archives the remaining node definitions', () => {
     const lib = makeLibrarySeed();
     expect(Object.values(lib.mechPrimitives).filter(isCurrentMechanicPrimitive).map((node) => node.mechKind)).toEqual([
-      'sensorNode', 'actuatorNode', 'action', 'playerFacingInstruction', 'actionSequence', 'actionProbability', 'progressState',
+      'sensorNode', 'actuatorNode', 'action', 'playerFacingInstruction', 'progressState',
     ]);
     expect(Object.values(lib.mechSubnodes).filter(isCurrentMechanicSubnode).map((node) => node.kind)).toEqual([
       'progressiveFeedback', 'failSafeScaffolding', 'escalatingPressure', 'teamDiscussionPrompt', 'facilitatorNote',
@@ -201,15 +207,9 @@ describe('mechanics model', () => {
   it('migrates existing mechanic definitions into current and old-node shelves without deleting either', () => {
     const old = makeLibrarySeed();
     old.rev = 24;
-    old.mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY'].name = 'Action Probability';
-    old.mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY'].resolutionCategory = 'Numeric';
-    old.mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY'].resolutionProcedure = 'Roll and compare.';
     const migrated = migrateLibrary(old);
     expect(migrated.mechPrimitives['LIB-MPRIM-SENSOR-NODE'].oldNode).toBe(false);
     expect(migrated.mechPrimitives['LIB-MPRIM-TASK-TEMPLATE'].oldNode).toBe(true);
-    expect(migrated.mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY'].name).toBe('Resolution');
-    expect(migrated.mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY']).not.toHaveProperty('resolutionCategory');
-    expect(migrated.mechPrimitives['LIB-MPRIM-ACTION-PROBABILITY']).not.toHaveProperty('resolutionProcedure');
     expect(migrated.mechSubnodes['LIB-MSUB-progressiveFeedback'].oldNode).toBe(false);
     expect(migrated.mechSubnodes['LIB-MSUB-noSoloEnforcer'].oldNode).toBe(true);
   });

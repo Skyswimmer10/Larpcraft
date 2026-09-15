@@ -1,3 +1,4 @@
+import AnnotationTools from './AnnotationTools.jsx';
 import React from 'react';
 import { useGame, useDispatch, useLibrary } from '../state/store.jsx';
 import { locateGraph } from '../state/reducer.js';
@@ -161,7 +162,7 @@ export default function GraphEditor({
               <span className="sq" style={{ background: p.color }}>{p.icon && <PrimIcon icon={p.icon} color="#fff" size={11} />}</span>{p.label}
             </button>
           ))}</div>}
-          {enableFrames && <div className="canvas-tool-group support-tool-group"><span className="tool-kind-label">Support</span>
+          {enableFrames && <AnnotationTools className="canvas-tool-group support-tool-group"><span className="tool-kind-label">Support</span>
             <button className="addnode frameadd" title="Add a visual grouping frame" onClick={addFrame}>
               <span className="sq" style={{ background: '#8B92A6' }}><PrimIcon icon="layers" color="#fff" size={11} /></span>Frame
             </button>
@@ -183,7 +184,7 @@ export default function GraphEditor({
             <button className="addnode frameadd" title="Add an editable curved support line" onClick={addSpline}>
               <span className="sq splineglyph" style={{ color: '#5CA8F5' }}>∿</span>Spline
             </button>
-          </div>}
+          </AnnotationTools>}
         </div>
       )}
       {empty ? (

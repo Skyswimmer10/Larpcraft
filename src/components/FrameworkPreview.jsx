@@ -1,132 +1,90 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { FRAMEWORK_TYPES } from '../data/seed.js';
-import { frameworkBaseSize, frameworkPreviewScale } from '../lib/frameworkScale.js';
+import { frameworkBaseSize } from '../lib/frameworkScale.js';
+import LanguageSpectrum from './LanguageSpectrum.jsx';
+import PreferenceSpectra from './PreferenceSpectra.jsx';
+
+function JourneyDiagram({ framework }) {
+  const arc = framework.layout === 'storyArc';
+  const learning = framework.layout === 'cycle';
+  const points = arc ? [[24,28],[87,74],[160,118],[233,74],[296,28]]
+    : framework.phases.map((_, i) => {
+      const angle = -Math.PI / 2 + i * Math.PI * 2 / framework.phases.length;
+      return [160 + 67 * Math.cos(angle), 82 + 67 * Math.sin(angle)];
+    });
+  return <svg className="framework-journey" viewBox="0 0 320 166" aria-hidden="true">
+    {arc ? <>
+      <path className="framework-area" d="M24 28 C77 28 92 118 160 118 S243 28 296 28 L296 152 H24Z" />
+      <path className="framework-route" d="M24 28 C77 28 92 118 160 118 S243 28 296 28" />
+      <text x="160" y="31" textAnchor="middle">DESCENT → RECOVERY</text>
+    </> : <>
+      <circle className="framework-area" cx="160" cy="82" r="67" />
+      <circle className="framework-route" cx="160" cy="82" r="67" />
+      <path className="framework-arrow" d="M213 39l10 3-1-11" />
+      {learning ? <><text x="160" y="80" textAnchor="middle">LEARNING</text><text x="160" y="97" textAnchor="middle">CYCLE ↻</text></>
+        : <><path className="framework-divider" d="M99 82H221" /><text x="160" y="70" textAnchor="middle">ORDER</text><text x="160" y="103" textAnchor="middle">CHAOS</text><text x="34" y="40">HOME</text><text x="244" y="144">VOYAGE</text><text x="15" y="126">RETURN</text></>}
+    </>}
+    {points.map(([x,y],i)=><g key={i}><circle className="framework-stop" cx={x} cy={y} r="13" /><text className="framework-stop-label" x={x} y={y+4} textAnchor="middle">{i+1}</text></g>)}
+  </svg>;
+}
+
+function FrameworkDesign({ fw, className }) {
+  const layout = fw.layout || 'fate';
+  if (layout === 'preferenceSpectra') return <div className={`framework-design ${className}`} style={{ '--framework-accent': fw.color }}><PreferenceSpectra framework={fw} /></div>;
+  if (layout === 'languageSpectrum') return <div className={`framework-design ${className}`} style={{ '--framework-accent': fw.color }}><LanguageSpectrum framework={fw} /></div>;
+  if (layout === 'profileDomains') return <div className={`framework-design framework-profile ${className}`} style={{ '--framework-accent': fw.color }}>
+    <div className="framework-design-caption"><span>Person · nine dimensions</span><b>9</b></div>
+    <div className="profile-root">CHARACTER PROFILE<small>Multiple dimensions · no single type</small></div>
+    <div className="profile-branches">{fw.phases.map(phase => <div className="profile-branch" key={phase.key}>
+      <span className="framework-stage-index">{phase.key}</span><div><strong>{phase.name}</strong><small>{phase.children.join(' · ')}</small></div>
+    </div>)}</div>
+    <div className="profile-levels">{fw.levels.map(level => <span key={level}>{level}</span>)}</div>
+    <p className="profile-note">Describe each subdomain independently. Writing reference · no clinical scores.</p>
+  </div>;
+  return <div className={`framework-design framework-${layout} ${className}`} style={{ '--framework-accent': fw.color }} aria-label={`${fw.label} framework`}>
+    <div className="framework-design-caption"><span>{layout === 'values' ? 'Opposing values' : layout === 'archetypes' ? (fw.phases.some(phase => phase.childActiveShadow) ? 'Adult · child · shadow' : 'Strengths · shadow tensions') : layout === 'decisionPath' ? 'From question to recipe' : layout === 'fate' ? 'Four lenses for engagement' : 'Follow the numbered stages'}</span><b>{fw.phases.length}</b></div>
+    {['cycle','storyArc','storyCircle8'].includes(layout) && <JourneyDiagram framework={fw} />}
+    {layout === 'values' ? <div className="framework-poles">
+      {fw.phases.map(phase=><div className="framework-pole" key={phase.key} title={phase.short}>
+        <strong>{phase.key}</strong><span aria-label="versus">↔</span><b>{phase.name}</b>
+      </div>)}
+    </div> : layout === 'archetypes' ? <div className="framework-archetype-grid">
+      {fw.phases.map(phase=><div className="framework-archetype" key={phase.key}>
+        <div className="framework-archetype-adult"><small>ADULT</small><strong>{phase.key}</strong></div>
+        <div className="framework-shadow-pair"><span>{phase.adultActiveShadow}</span><span>{phase.adultPassiveShadow}</span></div>
+        <div className="framework-archetype-child"><small>{phase.childActiveShadow ? 'CHILD' : 'FOCUS'}</small><b>{phase.name}</b></div>
+        {phase.childActiveShadow && <div className="framework-shadow-pair"><span>{phase.childActiveShadow}</span><span>{phase.childPassiveShadow}</span></div>}
+      </div>)}
+    </div> : <div className={`framework-stages ${layout === 'decisionPath' ? 'framework-timeline' : ''}`}>
+      {fw.phases.map((phase,i)=><div className="framework-stage" key={phase.key} title={phase.detail || phase.short}>
+        <span className="framework-stage-index">{layout === 'fate' ? phase.key : i+1}</span>
+        <div><strong>{phase.name}</strong>{layout === 'cycle' && <em>{phase.key}</em>}
+          {(phase.question || layout === 'fate') && <small>{phase.question || phase.short}</small>}
+        </div>
+      </div>)}
+    </div>}
+  </div>;
+}
 
 export default function FrameworkPreview({ frameworkId, className = '', nodeWidth, nodeHeight }) {
   const fw = FRAMEWORK_TYPES[frameworkId] || FRAMEWORK_TYPES.fate;
-  const scale = frameworkPreviewScale(fw, nodeWidth, nodeHeight);
+  const content = useRef(null);
+  const [naturalHeight, setNaturalHeight] = useState(0);
+  const onCanvas = Boolean(Number(nodeWidth) || Number(nodeHeight));
   const base = frameworkBaseSize(fw);
-  const hasCanvasDimensions = Number(nodeWidth) || Number(nodeHeight);
-  const wrap = (content) => hasCanvasDimensions ? (
-    <div className="fwscale-shell" style={{ height: `${Math.max(48, base.h - 58) * scale}px` }}>
-      <div className="fwscale-inner" style={{ width: `${base.w - 24}px`, transform: `translateX(-50%) scale(${scale})` }}>
-        {content}
-      </div>
+  const naturalWidth = Math.max(320, base.w - 24);
+  useLayoutEffect(() => {
+    if (!onCanvas || !content.current) return;
+    const observer = new ResizeObserver(([entry]) => setNaturalHeight(entry.contentRect.height));
+    observer.observe(content.current);
+    return () => observer.disconnect();
+  }, [onCanvas, frameworkId]);
+  if (!onCanvas) return <FrameworkDesign fw={fw} className={className} />;
+  const scale = Math.min((Math.max(26, Number(nodeWidth) || base.w) - 26) / naturalWidth,
+    nodeHeight && naturalHeight ? Math.max(1, Number(nodeHeight) - 58) / naturalHeight : Infinity);
+  return <div className="framework-fit" style={{ height: naturalHeight * scale }}>
+    <div ref={content} className="framework-fit-content" style={{ width: naturalWidth, transform: `translateX(-50%) scale(${scale})` }}>
+      <FrameworkDesign fw={fw} className={className} />
     </div>
-  ) : content;
-  if (fw.layout === 'archetypes') {
-    return wrap(
-      <div className={`fwmini archetypes ${className}`.trim()} aria-label={`${fw.label} framework`}>
-        {fw.phases.map((phase) => (
-          <div key={phase.key} className="archpair">
-            <div className="archpyramid adult">
-              <div className="archtop">{phase.key}</div>
-              <div className="archbase">
-                <span>{phase.adultActiveShadow}</span>
-                <span>{phase.adultPassiveShadow}</span>
-              </div>
-            </div>
-            <div className="archbridge">{phase.name}</div>
-            <div className="archpyramid child">
-              <div className="archtop">{phase.name}</div>
-              <div className="archbase">
-                <span>{phase.childActiveShadow}</span>
-                <span>{phase.childPassiveShadow}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (fw.layout === 'cycle') {
-    return wrap(
-      <div className={`fwcycle ${className}`.trim()} aria-label={`${fw.label} cycle framework`}>
-        <svg className="fwcycle-ring" viewBox="0 0 120 120" aria-hidden="true">
-          <circle className="fwcycle-glow" cx="60" cy="60" r="43" />
-          <circle className="fwcycle-main-ring" cx="60" cy="60" r="39" />
-          <path className="fwcycle-arrow" d="M87 31l12 2-3 12" />
-          <path className="fwcycle-arrow" d="M89 91l-2 12-12-3" />
-          <path className="fwcycle-arrow" d="M33 89l-12-2 3-12" />
-          <path className="fwcycle-arrow" d="M31 33l2-12 12 3" />
-        </svg>
-        {fw.phases.map((phase, idx) => (
-          <div key={phase.key} className={`fwcycle-step p${idx + 1}`}>
-            <span>{phase.key}</span>
-            <b>{phase.name}</b>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (fw.layout === 'storyArc') {
-    return wrap(
-      <div className={`fwarc ${className}`.trim()} aria-label={`${fw.label} story arc framework`}>
-        <svg className="fwarc-path" viewBox="0 0 300 132" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M22 25 C68 26 70 103 148 108 C220 108 226 28 278 24" />
-        </svg>
-        {fw.phases.map((phase, idx) => (
-          <div key={phase.key} className={`fwarc-step p${idx + 1}`}>
-            <span>{phase.key}</span>
-            <b>{phase.name}</b>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (fw.layout === 'storyCircle8') {
-    return wrap(
-      <div className={`fwstorycircle ${className}`.trim()} aria-label={`${fw.label} story circle framework`}>
-        <div className="fwstorycircle-ring" aria-hidden="true">
-          <span className="axis vertical" />
-          <span className="axis horizontal" />
-          <span className="axis diagonal one" />
-          <span className="axis diagonal two" />
-          <b>ORDER</b>
-          <em>CHAOS</em>
-        </div>
-        {fw.phases.map((phase, idx) => (
-          <div key={phase.key} className={`fwstorycircle-step p${idx + 1}`}>
-            <span>{phase.key}</span>
-            <b>{phase.name}</b>
-          </div>
-        ))}
-        <small className="fwstorycircle-region home">HOME</small>
-        <small className="fwstorycircle-region voyage">VOYAGE</small>
-        <small className="fwstorycircle-region return">RETURN</small>
-      </div>
-    );
-  }
-
-  if (fw.layout === 'decisionPath') {
-    return wrap(
-      <div className={`fwdecision ${className}`.trim()} aria-label={`${fw.label} decision framework`}>
-        {fw.phases.map((phase, idx) => (
-          <div key={phase.key} className={`fwdecision-step${idx === fw.phases.length - 1 ? ' recipe' : ''}`}>
-            <span>{phase.key}</span>
-            <div>
-              <b>{phase.name}</b>
-              <small>{phase.question}</small>
-            </div>
-            {idx < fw.phases.length - 1 && <i aria-hidden="true">&#8595;</i>}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return wrap(
-    <div className={`fwmini${fw.layout === 'values' ? ' values' : ''}${className ? ` ${className}` : ''}`} aria-label={`${fw.label} framework`}>
-      {fw.phases.map((phase, idx) => (
-        <div key={phase.key} className="fwstep">
-          <span>{idx + 1}</span>
-          <b>{phase.key}</b>
-          <small>{phase.name}</small>
-        </div>
-      ))}
-    </div>
-  );
+  </div>;
 }

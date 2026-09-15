@@ -45,6 +45,13 @@ export function SectionLabel({ children }) {
 
 // Designated icons for Narrative Primitives.
 const PRIM_PATHS = {
+  wrench: <path d="M14 4a5 5 0 00-5 7L3.5 16.5a2.8 2.8 0 004 4L13 15a5 5 0 007-5l-3 3-4-4 3-3z" />,
+  wrenches: <>{[0, 11].map(x => <g key={x} transform={`translate(${x} 0)`}><path d="M3 3v5h4V3a4 4 0 012 7l-2 1v8a2 2 0 01-4 0v-8l-2-1a4 4 0 012-7z" /></g>)}</>,
+  workflow: <><rect x="3" y="3" width="7" height="6" rx="1.5" /><rect x="14" y="15" width="7" height="6" rx="1.5" /><path d="M6.5 9v9H14M11 15l3 3-3 3" /></>,
+  dice: <><rect x="3.5" y="3.5" width="17" height="17" rx="3" /><circle cx="8" cy="8" r=".8" /><circle cx="16" cy="8" r=".8" /><circle cx="12" cy="12" r=".8" /><circle cx="8" cy="16" r=".8" /><circle cx="16" cy="16" r=".8" /></>,
+  pulse: <><path d="M3 18V5M3 18h18M5 13l4-5 4 7 6-10" /></>,
+  branches: <><circle cx="6" cy="5" r="2" /><circle cx="18" cy="12" r="2" /><circle cx="6" cy="19" r="2" /><path d="M6 7v10M6 9c0 3 6 3 10 3" /></>,
+  rules: <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 3h6v3H9zM8 11l1 1 2-2M13 11h3M8 16l1 1 2-2M13 16h3" /></>,
   flag: <path d="M6 21V4h12l-2.5 4L18 12H6" />,
   pin: <><path d="M12 21s-6.5-5.4-6.5-10a6.5 6.5 0 0113 0c0 4.6-6.5 10-6.5 10z" /><circle cx="12" cy="10.6" r="2.3" /></>,
   zap: <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" />,

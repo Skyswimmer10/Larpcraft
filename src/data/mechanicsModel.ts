@@ -300,7 +300,7 @@ export const MECHANIC_NODE_TYPE_META: Record<MechanicNodeKind, {
     blurb: 'Gameplay output that defines what effect happens in the world.',
   },
   action: {
-    label: 'Action',
+    label: 'BG action',
     color: '#58C7A6',
     icon: 'zap',
     blurb: 'One atomic physical, cognitive, or social step performed by a player or team.',

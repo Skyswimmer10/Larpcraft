@@ -1,6 +1,9 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 export function frameworkBaseSize(framework = {}) {
+  if (framework.layout === 'preferenceSpectra') return { w: 460, h: 1050 };
+  if (framework.layout === 'languageSpectrum') return { w: 560, h: 1800 };
+  if (framework.layout === 'profileDomains') return { w: 420, h: 680 };
   if (framework.id === 'jungianMasculineArchetypes' || framework.layout === 'archetypes') return { w: 360, h: 330 };
   if (framework.id === 'kolbLearningCycle' || framework.layout === 'cycle') return { w: 300, h: 260 };
   if (framework.id === 'descentAndRecovery' || framework.layout === 'storyArc') return { w: 330, h: 215 };

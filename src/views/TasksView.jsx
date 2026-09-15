@@ -1,3 +1,4 @@
+import { useAppearance } from '../components/AppearanceContext.jsx';
 import React, { useState } from 'react';
 import { useGame, useLibrary, useDispatch } from '../state/store.jsx';
 import { locateGraph } from '../state/reducer.js';
@@ -18,6 +19,8 @@ const TASK_PALETTE = [{ id: 'task', label: 'Task', color: '#5BC0BE', icon: 'laye
 const DETAIL_PALETTE = Object.values(TASK_DETAIL_TYPES);
 
 export default function TasksView({ selection, onSelect }) {
+  const { refreshed } = useAppearance();
+  const workspaceTitle = refreshed ? "Mechanics Weaver" : "Mechanics Fever";
   const s = useGame();
   const lib = useLibrary();
   const dispatch = useDispatch();
@@ -80,10 +83,10 @@ export default function TasksView({ selection, onSelect }) {
           <div>
             <div className="crumb">
               {s.meta.name} / {inside
-                ? <><button className="crumblink" onClick={() => { setOpenPath([]); onSelect(null); }}>Mechanics Fever</button> / <b>{openNode?.title || rootTask?.title || 'Detail graph'}</b></>
-                : <b>Mechanics Fever</b>}
+                ? <><button className="crumblink" onClick={() => { setOpenPath([]); onSelect(null); }}>{workspaceTitle}</button> / <b>{openNode?.title || rootTask?.title || 'Detail graph'}</b></>
+                : <b>{workspaceTitle}</b>}
             </div>
-            <h2>{inside ? (openNode?.title || rootTask?.title || 'Mechanics Detail') : 'Mechanics Fever'}</h2>
+            <h2>{inside ? (openNode?.title || rootTask?.title || 'Mechanics Detail') : workspaceTitle}</h2>
           </div>
           <div className="right">
             <CsvButtons coll="taskNodes" />
@@ -132,7 +135,7 @@ export default function TasksView({ selection, onSelect }) {
         <div className="statusbar">
           <span>{inside
             ? 'Build this task with mechanic nodes, subnodes, physical refs and sensors. Back returns to the clean session task view.'
-            : 'Mechanics Fever shows collapsed session tasks by default. Use the sidebar to add tasks, task templates, mechanic nodes, and physical refs.'}</span>
+            : `${workspaceTitle} shows collapsed session tasks by default. Use the sidebar to add tasks, task templates, mechanic nodes, and physical refs.`}</span>
         </div>
         {browsingLibrary && (
           <NarrativeLibraryBrowser

@@ -1,0 +1,82 @@
+// Original storytelling descriptions; shadow poles for Wolff's forms are a game adaptation.
+export const masculineDetails = {
+  King: {
+    adult: 'Leads by creating fair order, recognizing others, and accepting responsibility. In a story, tests of succession reveal whether the ruler serves the community or demands its service.',
+    child: 'The Divine Child carries possibility, wonder, and a sense of precious potential. Growth means accepting limits while retaining hope and creativity.',
+    adultActiveShadow: 'The Tyrant treats disagreement as disloyalty and controls others to protect a fragile position. A threatened ruler might punish the adviser who brings bad news.',
+    adultPassiveShadow: 'The Weakling abandons responsibility and depends on others to provide direction. A leader might let a powerful courtier make every difficult decision.',
+    childActiveShadow: 'The High Chair Tyrant expects every need to take priority and erupts when frustrated. Others become servants instead of people with needs of their own.',
+    childPassiveShadow: 'The Weakling Prince waits to be rescued and doubts the ability to act. A promised heir might refuse a small responsibility for fear of failing.',
+  },
+  Warrior: {
+    adult: 'Uses courage, discipline, and boundaries in service of a chosen purpose. The dramatic test is whether strength can remain proportionate when anger or loyalty demands excess.',
+    child: 'The Hero seeks independence through challenge and achievement. Growth means exchanging the need to prove invincibility for realistic courage and cooperation.',
+    adultActiveShadow: 'The Sadist turns discipline into cruelty, enjoying domination or treating vulnerability as something to punish. Victory becomes an excuse to humiliate the defeated.',
+    adultPassiveShadow: 'The Masochist endures needless harm and cannot defend personal limits. A loyal guard might accept exploitation because suffering feels like proof of worth.',
+    childActiveShadow: 'The Grandstander Bully needs an audience for superiority and attacks those perceived as weaker. Boasting conceals fear of being ordinary or defeated.',
+    childPassiveShadow: 'The Coward avoids necessary confrontation and gives away agency to escape fear. The story can offer a small, achievable act of courage as a turning point.',
+  },
+  Magician: {
+    adult: 'Develops knowledge and craft, sees hidden patterns, and helps others understand change. The test is whether expertise will be shared responsibly when secrecy offers power.',
+    child: 'The Precocious Child is curious, inventive, and eager to understand. Growth requires humility: knowing an answer does not remove the need to learn or care.',
+    adultActiveShadow: 'The Detached Manipulator withholds knowledge to control outcomes and treats people as pieces in an experiment. An expert may engineer dependence by never explaining the solution.',
+    adultPassiveShadow: 'The Denying Innocent One avoids accountability by pretending not to know or not to be involved. Useful knowledge is withheld behind claims of helplessness.',
+    childActiveShadow: 'The Know-it-all Trickster uses cleverness to embarrass, deceive, or escape limits. Winning the argument becomes more important than discovering what is true.',
+    childPassiveShadow: 'The Dummy hides curiosity and ability to avoid expectations or exposure. A capable apprentice may act confused so that nobody can judge an honest attempt.',
+  },
+  Lover: {
+    adult: 'Meets life with feeling, connection, imagination, and appreciation of beauty. The test is remaining open to experience while respecting boundaries and commitments.',
+    child: 'The Oedipal Child seeks closeness, comfort, and an ideal source of love. Growth means allowing loved people to be separate and imperfect, while building wider relationships.',
+    adultActiveShadow: 'The Addicted Lover chases intensity without limits, moving from one consuming experience to the next. Desire displaces commitments and never delivers lasting satisfaction.',
+    adultPassiveShadow: 'The Impotent Lover loses contact with feeling and pleasure. This symbolic label describes emotional disengagement: the character watches life without participating.',
+    childActiveShadow: "Momma's Boy remains bound to an ideal caregiver and resists independent attachment. New relationships are compared with an impossible promise of perfect care.",
+    childPassiveShadow: 'The Dreamer retreats into imagined love or adventure instead of risking real contact. A turning point asks for an imperfect relationship or action in the present.',
+  },
+};
+
+export const feminineArchetypes = {
+  id: 'jungianFeminineArchetypes', label: 'Jungian Feminine Archetypes', title: 'Jungian Feminine Archetypes',
+  color: '#CD91C8', icon: 'layers', layout: 'archetypes',
+  blurb: 'Mother, Companion, Amazon, and Medial Woman: four feminine forms with balanced strengths and shadow tensions.',
+  summary: 'Based on Toni Wolff’s four structural forms of the feminine psyche. These are character-building lenses; any character can express several forms.',
+  attribution: 'Toni Wolff, Structural Forms of the Feminine Psyche (1956 translation). The active/passive shadow names and story examples below are Larpcraft adaptations, not a canonical child/adult system from Wolff.',
+  sourceUrl: 'https://www.miembrosadepac.org/wp-content/uploads/2015Copia/09/Wolff-Forms-Feminine-Psyche.pdf',
+  phases: [
+    { key: 'Mother', name: 'Nurture & growth',
+      short: 'Care that helps another person become capable and independent.',
+      detail: 'Creates conditions for others to grow. In a story, the crucial choice is when to shelter someone and when to trust their ability to leave.',
+      adultActiveShadow: 'Controlling Caregiver', adultPassiveShadow: 'Self-erasing Caregiver',
+      descriptions: {
+        adult: 'Creates conditions for others to grow. In a story, the crucial choice is when to shelter someone and when to trust their ability to leave.',
+        adultActiveShadow: 'Makes help conditional on obedience and treats independence as rejection. A mentor may sabotage a pupil’s departure while insisting it is for their protection.',
+        adultPassiveShadow: 'Gives beyond personal limits until needs and identity disappear. A caretaker might accept every demand, then become exhausted or silently resentful.',
+      } },
+    { key: 'Companion', name: 'Hetaira · relationship',
+      short: 'Attends to the particular person and the possibilities within a relationship.',
+      detail: 'Builds meaningful connection through attention and honest exchange. A story tests whether intimacy can support two distinct people rather than require them to become one.',
+      adultActiveShadow: 'Possessive Companion', adultPassiveShadow: 'Dependent Companion',
+      descriptions: {
+        adult: 'Builds meaningful connection through attention and honest exchange. A story tests whether intimacy can support two distinct people rather than require them to become one.',
+        adultActiveShadow: 'Uses closeness, jealousy, or privileged confidences to monopolize another person. A trusted ally may undermine every competing friendship.',
+        adultPassiveShadow: 'Lets belonging replace personal judgment and direction. A character agrees to betray a value rather than risk losing a treasured bond.',
+      } },
+    { key: 'Amazon', name: 'Autonomy & achievement',
+      short: 'Acts independently and pursues work, causes, and competence.',
+      detail: 'Chooses a direction and develops the skills to follow it. A story tests the balance between self-reliance and accepting help or shared responsibility.',
+      adultActiveShadow: 'Ruthless Competitor', adultPassiveShadow: 'Isolated Defender',
+      descriptions: {
+        adult: 'Chooses a direction and develops the skills to follow it. A story tests the balance between self-reliance and accepting help or shared responsibility.',
+        adultActiveShadow: 'Makes achievement the measure of human worth and treats cooperation as weakness. A commander might sacrifice allies to preserve a record of winning.',
+        adultPassiveShadow: 'Protects autonomy by refusing involvement, vulnerability, or assistance. A capable loner may abandon a worthy shared task rather than risk needing anyone.',
+      } },
+    { key: 'Medial Woman', name: 'Meaning & intuition',
+      short: 'Responds to emerging meanings, images, and the atmosphere of a group.',
+      detail: 'Gives form to intuitions through reflection, art, or symbolic language. A story tests whether an evocative insight can be grounded in responsible action.',
+      adultActiveShadow: 'Inflated Oracle', adultPassiveShadow: 'Overwhelmed Vessel',
+      descriptions: {
+        adult: 'Gives form to intuitions through reflection, art, or symbolic language. A story tests whether an evocative insight can be grounded in responsible action.',
+        adultActiveShadow: 'Treats an interpretation as unquestionable truth and claims special authority. An oracle might demand obedience instead of allowing others to question a vision.',
+        adultPassiveShadow: 'Absorbs impressions without enough distance to choose a response. A sensitive character becomes carried by the group’s fears and needs time to distinguish them from personal judgment.',
+      } },
+  ],
+};

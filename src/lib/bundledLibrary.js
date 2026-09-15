@@ -1,8 +1,8 @@
-export const BUNDLED_LIBRARY_VERSION = 3;
+export const BUNDLED_LIBRARY_VERSION = 4;
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const RICH_GRAPH_COLLECTIONS = new Set(['concepts', 'stories', 'mechStructures']);
-const MECHANISM_COLLECTIONS = new Set(['actionPatternMechanisms', 'actionProbabilityMechanisms']);
+const MECHANISM_COLLECTIONS = new Set(['actionPatternMechanisms', 'actionProbabilityMechanisms', 'victoryConditionMechanisms', 'uncertaintyMechanisms', 'economyMechanisms', 'auctionMechanisms', 'workerPlacementMechanisms', 'movementMechanisms', 'areaControlMechanisms', 'setCollectionMechanisms', 'cardMechanisms']);
 
 const graphScore = (record) => {
   if (!isRecord(record)) return 0;

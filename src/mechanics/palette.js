@@ -1,7 +1,7 @@
 import { ENTITY_COLORS } from '../components/bits.jsx';
 import { MECHANIC_SUBNODE_TYPES, TASK_DETAIL_TYPES } from '../data/seed.js';
 import { genId } from '../data/csvSchemas.js';
-import { isCurrentMechanicPrimitive, isCurrentMechanicSubnode } from './nodeArchive.js';
+import { isCurrentMechanicPrimitive, isCurrentMechanicSubnode, isRetiredMechanicPrimitive } from './nodeArchive.js';
 
 export const MECHANICS_PALETTE_FILTERS = [
   { id: 'all', label: 'All', color: '#8B7BF5' },
@@ -161,7 +161,7 @@ export function buildMechanicsPaletteGroups(lib, {
       id: 'boardGame',
       type: 'boardGame',
       label: 'Board Game Nodes',
-      hint: 'Action, sequence, and resolution building blocks for board-game-style systems.',
+      hint: 'Add a BG action, then choose its mechanism from the browser.',
       items: actionPrimitives.map((node) => ({
         id: payload('mech', node.id), label: node.name,
         blurb: node.defaultBody || (node.mechKind === 'playerFacingInstruction' ? 'The exact instruction presented or read to players.' : ''),
@@ -392,7 +392,7 @@ export function mechanicsPayloadToNode(payloadText, lib, existingNodes = {}, x =
   }
   if (type === 'mech') {
     const p = lib.mechPrimitives?.[id];
-    if (!p) return null;
+    if (!p || isRetiredMechanicPrimitive(p)) return null;
     if (p.deprecated) {
       globalThis.window?.alert?.(p.migrationHint || 'This mechanic node is deprecated. Use the newer replacement node instead.');
       return null;
@@ -455,9 +455,8 @@ export function mechanicsPayloadToNode(payloadText, lib, existingNodes = {}, x =
     if (!template) return null;
     const actionTemplate = template.templateKind === 'action';
     return {
-      ...base, primitiveId: template.id, kind: actionTemplate ? 'mechanic' : 'task', mechKind: actionTemplate ? 'actionSequence' : 'taskTemplate', title: template.name,
+      ...base, primitiveId: template.id, kind: 'task', mechKind: 'taskTemplate', title: template.name,
       body: template.description || '', color: actionTemplate ? '#58C7A6' : '#8B7BF5', templateId: template.id,
-      sequenceMode: actionTemplate ? 'Custom' : undefined,
       sub: {
         nodes: JSON.parse(JSON.stringify(template.nodes || {})),
         edges: JSON.parse(JSON.stringify(template.edges || [])),

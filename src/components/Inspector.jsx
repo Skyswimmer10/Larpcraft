@@ -1,3 +1,7 @@
+import PreferenceSpectra from './PreferenceSpectra.jsx';
+import LanguageSpectrum from './LanguageSpectrum.jsx';
+import ProfileDomainDetails from './ProfileDomainDetails.jsx';
+import ArchetypeDetails from './ArchetypeDetails.jsx';
 import React, { useState } from 'react';
 import { useGame, useDispatch, useLibrary, useLibraryDispatch } from '../state/store.jsx';
 import { resolveNode, itemsAssignedToPlayer, sensorsAssignedToPlayer, locateGraph, playersOfTeam } from '../state/reducer.js';
@@ -37,12 +41,14 @@ import {
   updateActionPatternSelection,
 } from '../data/actionMechanics.js';
 import MechanismBrowser from './MechanismBrowser.jsx';
+import { mechanismCollectionForKind, appliedMechanismRecord } from '../data/mechanismCatalog.js';
 
 const minToTime = (m) => (Number.isFinite(m) ? `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}` : '');
 const timeToMin = (t) => { const [h, m] = (t || '').split(':').map(Number); return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null; };
 const baseTemplateMeta = (kind) => BASE_NODE_TYPES[kind] || (kind === 'masterAct' ? MASTER_ACT_TYPE : null);
 const STORY_ITEM_TYPES = ['Artifact', 'Gadget', 'Consumable', 'Key', 'Status', 'Tool', 'Wearable'];
 const CONCEPT_UNSET = 'unset';
+
 const opt = (id, label) => ({ id, label });
 const CONCEPT_CORE_SELECTS = {
   conceptType: [
@@ -2400,8 +2406,8 @@ function FrameworkPanel({ framework, onSelect }) {
         <div className="hint">Framework cards are thinking aids while you build. They can be dragged around and deleted, but they do not connect to story nodes or affect game data.</div>
       </ISection>
       <TextField label="Framework title" value={framework.title || type.title} onCommit={(v) => upd({ title: v })} />
-      <ISection label={isValueFramework ? 'Value Poles' : 'Acronym / Phases'}>
-        <div className="fwphase-list">
+      <ISection label={isValueFramework ? 'Value Poles' : type.layout === 'archetypes' ? 'Archetypes & Shadows' : type.layout === 'profileDomains' ? 'Profile Domains' : type.layout === 'languageSpectrum' ? 'Language Spectrum' : type.layout === 'preferenceSpectra' ? 'Preference Spectra' : 'Acronym / Phases'}>
+        {type.layout === 'preferenceSpectra' ? <PreferenceSpectra framework={type} detailed /> : type.layout === 'languageSpectrum' ? <LanguageSpectrum framework={type} detailed /> : type.layout === 'profileDomains' ? <ProfileDomainDetails framework={type} /> : type.layout === 'archetypes' ? <ArchetypeDetails framework={type} /> : <div className="fwphase-list">
           {type.phases.map((phase) => (
             <div key={phase.key} className={`fwphase${isValueFramework ? ' valuepole' : ''}`}>
               <span style={{ background: framework.color || type.color }}>{phase.key}</span>
@@ -2412,7 +2418,7 @@ function FrameworkPanel({ framework, onSelect }) {
               </div>
             </div>
           ))}
-        </div>
+        </div>}
       </ISection>
       <ISection label="Canvas">
         <div className="chips">
@@ -2729,8 +2735,8 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
           <div className="hint">{type.summary}</div>
         </div>
         <div className="isect">
-          <SectionLabel>{type.layout === 'values' ? 'Value Poles' : 'Acronym / Phases'}</SectionLabel>
-          <div className="fwphase-list">
+          <SectionLabel>{type.layout === 'values' ? 'Value Poles' : type.layout === 'archetypes' ? 'Archetypes & Shadows' : type.layout === 'profileDomains' ? 'Profile Domains' : type.layout === 'languageSpectrum' ? 'Language Spectrum' : type.layout === 'preferenceSpectra' ? 'Preference Spectra' : 'Acronym / Phases'}</SectionLabel>
+          {type.layout === 'preferenceSpectra' ? <PreferenceSpectra framework={type} detailed /> : type.layout === 'languageSpectrum' ? <LanguageSpectrum framework={type} detailed /> : type.layout === 'profileDomains' ? <ProfileDomainDetails framework={type} /> : type.layout === 'archetypes' ? <ArchetypeDetails framework={type} /> : <div className="fwphase-list">
             {type.phases.map((phase) => (
               <div key={phase.key} className={`fwphase${type.layout === 'values' ? ' valuepole' : ''}`}>
                 <span style={{ background: frameworkColor }}>{phase.key}</span>
@@ -2741,7 +2747,7 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
                 </div>
               </div>
             ))}
-          </div>
+          </div>}
         </div>
         <div className="isect">
           <SectionLabel>Color</SectionLabel>
@@ -3740,23 +3746,8 @@ function ActionSystemsEditor({ node, onPatch }) {
 
   return (
     <>
-      <ISection key={`${node.id}-action-systems`} label="Action Systems" collapsed={false}>
-        <div className="mechanism-slot-list">
-          {Object.values(ACTION_PATTERN_SYSTEMS).map((system) => {
-            const selected = lib.actionPatternMechanisms?.[node[`${system.id}MechanismId`]];
-            return (
-              <div className="mechanism-slot" key={system.id}>
-                <span>{system.id}</span>
-                <b title={selected?.label || 'Not selected'}>{selected?.label || 'Not selected'}</b>
-                <div className="mechanism-slot-actions">
-                  <button className="btn tiny" onClick={() => setBrowserFilter(system.id)}>
-                    {system.id === 'token' ? 'Token' : system.id === 'order' ? 'Order' : 'Special'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      <ISection key={`${node.id}-action-systems`} label="Mechanism" collapsed={false}>
+        <button className="btn wide" onClick={() => setBrowserFilter('all')}>Browse Mechanisms</button>
       </ISection>
       <ISection key={`${node.id}-action-details`} label="Selected Mechanism Details" collapsed={false}>
         {selectedMechanisms.length ? (
@@ -3777,7 +3768,7 @@ function ActionSystemsEditor({ node, onPatch }) {
               </section>
             ))}
           </div>
-        ) : <div className="hint">Choose a Token, Order, or Special mechanism to see its details.</div>}
+        ) : <div className="hint">Choose a mechanism from the browser to see its details.</div>}
         {hasLegacyDetails && (
           <div className="action-mechanism-legacy">
             <b>Existing node details</b>
@@ -3787,17 +3778,26 @@ function ActionSystemsEditor({ node, onPatch }) {
             {readOnlyList('Variation', legacyDetails.variations)}
           </div>
         )}
-        <div className="hint">Use the Token, Order, or Special buttons above to edit these details in Mechanism Browser.</div>
+        <div className="hint">Use Browse Mechanisms to choose or edit a mechanism.</div>
       </ISection>
       {browserFilter && (
         <MechanismBrowser
           initialFilter={browserFilter}
           patternMechanisms={mechanisms}
           probabilityMechanisms={Object.values(lib.actionProbabilityMechanisms || {})}
+          victoryMechanisms={Object.values(lib.victoryConditionMechanisms || {})}
+          uncertaintyMechanisms={Object.values(lib.uncertaintyMechanisms || {})}
+          economyMechanisms={Object.values(lib.economyMechanisms || {})}
+          auctionMechanisms={Object.values(lib.auctionMechanisms || {})}
+          workerPlacementMechanisms={Object.values(lib.workerPlacementMechanisms || {})}
+          movementMechanisms={Object.values(lib.movementMechanisms || {})}
+          areaControlMechanisms={Object.values(lib.areaControlMechanisms || {})}
+          setCollectionMechanisms={Object.values(lib.setCollectionMechanisms || {})}
+          cardMechanisms={Object.values(lib.cardMechanisms || {})}
           selectedPatternIds={Object.keys(ACTION_PATTERN_SYSTEMS).map((system) => node[`${system}MechanismId`])}
-          allowedKind="pattern"
+          allowedKind="all"
           onPick={selectMechanism}
-          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: record.kind === 'probability' ? 'actionProbabilityMechanisms' : 'actionPatternMechanisms', id: record.id, patch: record })}
+          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: mechanismCollectionForKind(record.kind), id: record.id, patch: record })}
           onClose={() => setBrowserFilter(null)}
         />
       )}
@@ -3810,8 +3810,7 @@ function ActionMechanismEditor({ node, onPatch }) {
   const libDispatch = useLibraryDispatch();
   const [browsing, setBrowsing] = useState(false);
   const mechanisms = Object.values(lib.actionPatternMechanisms || {});
-  const stored = lib.actionPatternMechanisms?.[node.actionMechanismId];
-  const system = node.mechanismSystem || stored?.system || 'token';
+  const stored = appliedMechanismRecord(lib, node);
   const image = node.image || stored?.image;
   const imageScale = Number(node.imageScale ?? stored?.imageScale) || 1;
   const imagePositionX = Number(node.imagePositionX ?? stored?.imagePositionX) || 0;
@@ -3840,16 +3839,16 @@ function ActionMechanismEditor({ node, onPatch }) {
           </span>
         )}
         <div className="mechanism-applied-summary">
-          <small>{node.mechanismCategory || ACTION_PATTERN_SYSTEMS[system]?.label || 'Action Mechanism'}</small>
+          <small>{node.mechanismCategory || stored?.category || 'Mechanism'}</small>
           <strong>{node.title}</strong>
-          <span>This node is the selected mechanism itself, not a generic Action container.</span>
         </div>
-        <button className="btn wide" onClick={() => setBrowsing(true)}>Change Mechanism</button>
+        <button className="btn wide" onClick={() => setBrowsing(true)}>Browse Mechanisms</button>
       </ISection>
       <ISection key={`${node.id}-mechanism-details`} label="Mechanism Details" collapsed={false}>
         <div className="action-mechanism-readonly-list single">
           <section style={{ '--accent': node.color || stored?.color || '#58C7A6' }}>
-            {detailList('Advantage', node.advantages ?? stored?.advantages)}
+            {(node.mechanismKind || 'pattern') === 'pattern' && detailList('Advantage', node.advantages ?? stored?.advantages)}
+            {node.mechanismKind === 'probability' && detailList('Emotional spike', [node.emotionalSpike ?? stored?.emotionalSpike])}
             {detailList('Effect', node.effects ?? stored?.effects)}
             {detailList('Variation', node.variations ?? stored?.variations)}
           </section>
@@ -3858,13 +3857,22 @@ function ActionMechanismEditor({ node, onPatch }) {
       </ISection>
       {browsing && (
         <MechanismBrowser
-          initialFilter={system}
+          initialFilter="all"
           patternMechanisms={mechanisms}
           probabilityMechanisms={Object.values(lib.actionProbabilityMechanisms || {})}
-          selectedPatternIds={[node.actionMechanismId]}
-          allowedKind="pattern"
+          victoryMechanisms={Object.values(lib.victoryConditionMechanisms || {})}
+          uncertaintyMechanisms={Object.values(lib.uncertaintyMechanisms || {})}
+          economyMechanisms={Object.values(lib.economyMechanisms || {})}
+          auctionMechanisms={Object.values(lib.auctionMechanisms || {})}
+          workerPlacementMechanisms={Object.values(lib.workerPlacementMechanisms || {})}
+          movementMechanisms={Object.values(lib.movementMechanisms || {})}
+          areaControlMechanisms={Object.values(lib.areaControlMechanisms || {})}
+          setCollectionMechanisms={Object.values(lib.setCollectionMechanisms || {})}
+          cardMechanisms={Object.values(lib.cardMechanisms || {})}
+          selectedMechanismId={node.actionMechanismId}
+          allowedKind="all"
           onPick={choose}
-          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: record.kind === 'probability' ? 'actionProbabilityMechanisms' : 'actionPatternMechanisms', id: record.id, patch: record })}
+          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: mechanismCollectionForKind(record.kind), id: record.id, patch: record })}
           onClose={() => setBrowsing(false)}
         />
       )}
@@ -3947,10 +3955,19 @@ function ActionTypePatternEditor({ node, onPatch, manageLibrary = false }) {
           initialFilter={browserFilter}
           patternMechanisms={mechanisms}
           probabilityMechanisms={Object.values(lib.actionProbabilityMechanisms || {})}
+          victoryMechanisms={Object.values(lib.victoryConditionMechanisms || {})}
+          uncertaintyMechanisms={Object.values(lib.uncertaintyMechanisms || {})}
+          economyMechanisms={Object.values(lib.economyMechanisms || {})}
+          auctionMechanisms={Object.values(lib.auctionMechanisms || {})}
+          workerPlacementMechanisms={Object.values(lib.workerPlacementMechanisms || {})}
+          movementMechanisms={Object.values(lib.movementMechanisms || {})}
+          areaControlMechanisms={Object.values(lib.areaControlMechanisms || {})}
+          setCollectionMechanisms={Object.values(lib.setCollectionMechanisms || {})}
+          cardMechanisms={Object.values(lib.cardMechanisms || {})}
           selectedPatternIds={Object.keys(ACTION_PATTERN_SYSTEMS).map((system) => fields[`${system}MechanismId`])}
           allowedKind="pattern"
           onPick={selectMechanism}
-          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: record.kind === 'probability' ? 'actionProbabilityMechanisms' : 'actionPatternMechanisms', id: record.id, patch: record })}
+          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: mechanismCollectionForKind(record.kind), id: record.id, patch: record })}
           onClose={() => setBrowserFilter(null)}
         />
       )}
@@ -4030,10 +4047,19 @@ function ActionProbabilityEditor({ node, onPatch }) {
           initialFilter="probability"
           patternMechanisms={Object.values(lib.actionPatternMechanisms || {})}
           probabilityMechanisms={probabilityMechanisms}
+          victoryMechanisms={Object.values(lib.victoryConditionMechanisms || {})}
+          uncertaintyMechanisms={Object.values(lib.uncertaintyMechanisms || {})}
+          economyMechanisms={Object.values(lib.economyMechanisms || {})}
+          auctionMechanisms={Object.values(lib.auctionMechanisms || {})}
+          workerPlacementMechanisms={Object.values(lib.workerPlacementMechanisms || {})}
+          movementMechanisms={Object.values(lib.movementMechanisms || {})}
+          areaControlMechanisms={Object.values(lib.areaControlMechanisms || {})}
+          setCollectionMechanisms={Object.values(lib.setCollectionMechanisms || {})}
+          cardMechanisms={Object.values(lib.cardMechanisms || {})}
           selectedProbability={selected.id}
           allowedKind="probability"
           onPick={choose}
-          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: record.kind === 'probability' ? 'actionProbabilityMechanisms' : 'actionPatternMechanisms', id: record.id, patch: record })}
+          onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: mechanismCollectionForKind(record.kind), id: record.id, patch: record })}
           onClose={() => setBrowsing(false)}
         />
       )}
@@ -4250,8 +4276,8 @@ function LibFrameworkTypePanel({ frameworkId }) {
         <div className="hint">{type.summary}</div>
       </div>
       <div className="isect">
-        <SectionLabel>{isValueFramework ? 'Value Poles' : 'Acronym / Phases'}</SectionLabel>
-        <div className="fwphase-list">
+        <SectionLabel>{isValueFramework ? 'Value Poles' : type.layout === 'archetypes' ? 'Archetypes & Shadows' : type.layout === 'profileDomains' ? 'Profile Domains' : type.layout === 'languageSpectrum' ? 'Language Spectrum' : type.layout === 'preferenceSpectra' ? 'Preference Spectra' : 'Acronym / Phases'}</SectionLabel>
+        {type.layout === 'preferenceSpectra' ? <PreferenceSpectra framework={type} detailed /> : type.layout === 'languageSpectrum' ? <LanguageSpectrum framework={type} detailed /> : type.layout === 'profileDomains' ? <ProfileDomainDetails framework={type} /> : type.layout === 'archetypes' ? <ArchetypeDetails framework={type} /> : <div className="fwphase-list">
           {type.phases.map((phase) => (
             <div key={phase.key} className={`fwphase${isValueFramework ? ' valuepole' : ''}`}>
               <span style={{ background: type.color }}>{phase.key}</span>
@@ -4262,7 +4288,7 @@ function LibFrameworkTypePanel({ frameworkId }) {
               </div>
             </div>
           ))}
-        </div>
+        </div>}
       </div>
     </>
   );
@@ -4356,8 +4382,8 @@ function LibBuilderNodePanel({ selection }) {
       {isMechanicSchemaNode && <MechanicsNodeFields node={n} onPatch={patch} lib={lib} />}
       {isFramework && (
         <div className="isect">
-          <SectionLabel>{isValueFramework ? 'Value Poles' : 'Acronym / Phases'}</SectionLabel>
-          <div className="fwphase-list">
+          <SectionLabel>{isValueFramework ? 'Value Poles' : type.layout === 'archetypes' ? 'Archetypes & Shadows' : type.layout === 'profileDomains' ? 'Profile Domains' : type.layout === 'languageSpectrum' ? 'Language Spectrum' : type.layout === 'preferenceSpectra' ? 'Preference Spectra' : 'Acronym / Phases'}</SectionLabel>
+          {type.layout === 'preferenceSpectra' ? <PreferenceSpectra framework={type} detailed /> : type.layout === 'languageSpectrum' ? <LanguageSpectrum framework={type} detailed /> : type.layout === 'profileDomains' ? <ProfileDomainDetails framework={type} /> : type.layout === 'archetypes' ? <ArchetypeDetails framework={type} /> : <div className="fwphase-list">
             {type.phases.map((phase) => (
               <div key={phase.key} className={`fwphase${isValueFramework ? ' valuepole' : ''}`}>
                 <span style={{ background: color }}>{phase.key}</span>
@@ -4368,7 +4394,7 @@ function LibBuilderNodePanel({ selection }) {
                 </div>
               </div>
             ))}
-          </div>
+          </div>}
         </div>
       )}
       {n.kind !== 'item' && <div className="isect">
@@ -4546,8 +4572,8 @@ function LibStructFrameworkPanel({ storyId, frameworkId, coll = 'stories' }) {
       </div>
       <TextField label="Framework title" value={fw.title || type.title} onCommit={(v) => upd({ title: v })} />
       <div className="isect">
-        <SectionLabel>{type.layout === 'values' ? 'Value Poles' : 'Acronym / Phases'}</SectionLabel>
-        <div className="fwphase-list">
+        <SectionLabel>{type.layout === 'values' ? 'Value Poles' : type.layout === 'archetypes' ? 'Archetypes & Shadows' : type.layout === 'profileDomains' ? 'Profile Domains' : type.layout === 'languageSpectrum' ? 'Language Spectrum' : type.layout === 'preferenceSpectra' ? 'Preference Spectra' : 'Acronym / Phases'}</SectionLabel>
+        {type.layout === 'preferenceSpectra' ? <PreferenceSpectra framework={type} detailed /> : type.layout === 'languageSpectrum' ? <LanguageSpectrum framework={type} detailed /> : type.layout === 'profileDomains' ? <ProfileDomainDetails framework={type} /> : type.layout === 'archetypes' ? <ArchetypeDetails framework={type} /> : <div className="fwphase-list">
           {type.phases.map((phase) => (
             <div key={phase.key} className={`fwphase${type.layout === 'values' ? ' valuepole' : ''}`}>
               <span style={{ background: fw.color || type.color }}>{phase.key}</span>
@@ -4558,7 +4584,7 @@ function LibStructFrameworkPanel({ storyId, frameworkId, coll = 'stories' }) {
               </div>
             </div>
           ))}
-        </div>
+        </div>}
       </div>
       <div className="isect">
         <button className="linkbtn danger" onClick={remove}>Delete reference card</button>

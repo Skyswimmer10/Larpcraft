@@ -1,4 +1,5 @@
 import { mechanismImage } from './mechanismVisual.js';
+import { mechanismCollectionForKind } from './mechanismCatalog.js';
 
 export const ACTION_MECHANISM_FAMILIES = {
   economy: { label: 'Action Token Systems', color: '#E8D25C', icon: 'pin' },
@@ -52,13 +53,14 @@ const copyMechanismList = (values) => (
 // a self-contained canvas node. Geometry and graph identity are deliberately
 // omitted so the caller's existing position, size, and relationships survive.
 export function actionMechanismNodePatch(record) {
-  if (!record || record.kind !== 'pattern') return null;
+  if (!record?.id || !mechanismCollectionForKind(record.kind)) return null;
   return {
     primitiveId: null,
     mechKind: ACTION_MECHANISM_NODE_KIND,
     actionMechanismId: record.id,
+    mechanismKind: record.kind,
     mechanismSystem: record.system,
-    mechanismCategory: ACTION_PATTERN_SYSTEMS[record.system]?.label || record.category || 'Action Mechanism',
+    mechanismCategory: (record.kind === 'pattern' ? ACTION_PATTERN_SYSTEMS[record.system]?.label : null) || record.category || 'Mechanism',
     title: record.label || 'Action Mechanism',
     body: record.description || '',
     color: record.color || '#58C7A6',
@@ -70,10 +72,10 @@ export function actionMechanismNodePatch(record) {
     advantages: copyMechanismList(record.advantages),
     effects: copyMechanismList(record.effects),
     variations: copyMechanismList(record.variations),
+    emotionalSpike: record.emotionalSpike ?? '',
     tokenMechanismId: undefined,
     orderMechanismId: undefined,
     specialMechanismId: undefined,
-    attachedSubnodeIds: undefined,
     actionCode: undefined,
   };
 }

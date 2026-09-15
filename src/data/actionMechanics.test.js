@@ -1,3 +1,5 @@
+import { MECHANISM_COLLECTIONS, appliedMechanismRecord } from './mechanismCatalog.js';
+import { makeLibrarySeed, migrateLibrary } from './seed.js';
 import { describe, expect, it } from 'vitest';
 import {
   ACTION_MECHANISM_NODE_KIND,
@@ -110,5 +112,33 @@ describe('action mechanics catalogue', () => {
     expect(patch).not.toHaveProperty('y');
     expect(patch).not.toHaveProperty('w');
     expect(patch).not.toHaveProperty('h');
+  });
+});
+
+
+describe('Action selection across the mechanism browser', () => {
+  it.each(Object.entries(MECHANISM_COLLECTIONS))('keeps %s mechanisms intact through selection, serialization, and migration', (kind, collection) => {
+    const library = makeLibrarySeed();
+    const source = Object.values(library[collection])[0];
+    const record = { ...source, kind, description: 'Authored description', image: { dataUrl: 'data:image/png;base64,custom' }, imageScale: 1.7, imagePositionX: -18, imagePositionY: 22, effects: ['Effect'], variations: ['Variation'], emotionalSpike: kind === 'probability' ? 'Tension' : '' };
+    const patch = actionMechanismNodePatch(record);
+    const node = { id: 'A', kind: 'mechanic', x: 120, y: 90, w: 400, attachedSubnodeIds: ['MOD'], ...patch };
+    library.mechStructures.CUSTOM = { id: 'CUSTOM', name: 'Test structure', nodes: { A: node }, edges: [] };
+    const saved = migrateLibrary(JSON.parse(JSON.stringify(library))).mechStructures.CUSTOM.nodes.A;
+    expect(saved).toMatchObject({ id: 'A', x: 120, y: 90, w: 400, attachedSubnodeIds: ['MOD'], mechanismKind: kind, actionMechanismId: source.id, body: 'Authored description', image: record.image, imageScale: 1.7, imagePositionX: -18, imagePositionY: 22, effects: ['Effect'], variations: ['Variation'], emotionalSpike: record.emotionalSpike });
+    expect(appliedMechanismRecord(library, saved)).toBe(library[collection][source.id]);
+    patch.effects.push('Detached edit');
+    expect(record.effects).toEqual(['Effect']);
+  });
+
+  it('can change categories and still resolve older pattern snapshots', () => {
+    const lib = makeLibrarySeed();
+    const probability = actionMechanismNodePatch(Object.values(lib.actionProbabilityMechanisms)[0]);
+    const pattern = Object.values(lib.actionPatternMechanisms)[0];
+    const switched = { ...probability, ...actionMechanismNodePatch(pattern) };
+    expect(switched.emotionalSpike).toBe('');
+    expect(appliedMechanismRecord(lib, switched)).toBe(pattern);
+    expect(appliedMechanismRecord(lib, { actionMechanismId: pattern.id })).toBe(pattern);
+    expect(actionMechanismNodePatch({ id: 'invalid', kind: 'unknown' })).toBeNull();
   });
 });

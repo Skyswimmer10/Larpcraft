@@ -1,3 +1,5 @@
+import { useAppearance } from '../components/AppearanceContext.jsx';
+import AnnotationTools from '../components/AnnotationTools.jsx';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useGame, useDispatch, useLibrary, useLibraryDispatch } from '../state/store.jsx';
 import { ENTITY_COLORS } from '../components/bits.jsx';
@@ -25,6 +27,8 @@ const normalizeTimelineStep = (step) => (TIMELINE_STEPS.includes(step) ? step : 
 // this canvas holds the short act-level shape of the game, while the timeline
 // shows task estimates that can be conceptually aligned to those acts.
 export default function Weaver({ selection, onSelect = () => {} }) {
+  const { refreshed } = useAppearance();
+  const [panelMode, setPanelMode] = useState("split");
   const s = useGame();
   const dispatch = useDispatch();
   const lib = useLibrary();
@@ -278,7 +282,8 @@ export default function Weaver({ selection, onSelect = () => {} }) {
         </span></div>
       </div>
 
-      <div className="weaver2" ref={containerRef} onScroll={() => setTick((t) => t + 1)}>
+      {refreshed && <div className="story-view-options" aria-label="Master Story view">{["story", "timeline", "split"].map(mode => <button key={mode} aria-pressed={panelMode === mode} onClick={() => setPanelMode(mode)}>{mode === "story" ? "Story" : mode === "timeline" ? "Timeline" : "Split view"}</button>)}</div>}
+      <div className={`weaver2${refreshed ? " mode-" + panelMode : ""}`} ref={containerRef} onScroll={() => setTick((t) => t + 1)}>
         <svg className="align-overlay" width="100%" height="100%" aria-hidden="true">
           {aligns.map((a, i) => {
             const p = anchors[`story:${a.story}`]; const q = anchors[`task:${a.task}`];
@@ -299,7 +304,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
             <span>Macro Story Track - <b>{Object.keys(masterNodes).length} acts</b></span>
             <div className="canvas-add-groups">
               <div className="canvas-tool-cluster node-tool-group"><span className="tool-kind-label">Nodes</span><button className="btn ghost small" onClick={addAct}>+ Add act</button></div>
-              <div className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
+              <AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
               <button className="btn ghost small" onClick={addFrame}>+ Frame</button>
               <button className="btn ghost small" onClick={addCircle}>+ Circle</button>
               <button className="btn ghost small" onClick={() => addVisualMarker('number')}>+ Number</button>
@@ -307,7 +312,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
               <button className="btn ghost small" onClick={addTitleMarker}>+ Title</button>
               <button className="btn ghost small" onClick={addArrow}>+ Arrow</button>
               <button className="btn ghost small" onClick={addSpline}>+ Spline</button>
-              </div>
+              </AnnotationTools>
               <button className="btn ghost small" onClick={saveTemplate}>Save as Template</button>
             </div>
           </div>

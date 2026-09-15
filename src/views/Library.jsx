@@ -1,3 +1,6 @@
+import AnnotationTools from '../components/AnnotationTools.jsx';
+import { useAppearance } from '../components/AppearanceContext.jsx';
+import FrameworkDetail from '../components/FrameworkDetail.jsx';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLibrary, useLibraryDispatch, useGame, useDispatch } from '../state/store.jsx';
 import { Thumb, ENTITY_COLORS, PrimIcon, SectionLabel } from '../components/bits.jsx';
@@ -75,7 +78,6 @@ function useUndoableLocalState(initialValue) {
 
   return [stack.present, setPresent, undo];
 }
-
 // Library catalogue order for Additional Node ("concept") categories.
 const CONCEPT_ORDER = ['storyConcept', 'structureConcept', 'characterConcept', 'functionConcept', 'styleConcept'];
 const baseTemplateMeta = (kind) => BASE_NODE_TYPES[kind] || (kind === 'masterAct' ? MASTER_ACT_TYPE : null);
@@ -184,7 +186,6 @@ function SupportingMechanicPreview({ node, game, onSelect }) {
     </div>
   );
 }
-
 function ProgressMechanicPreview({ node }) {
   if (!isProgressStateNode(node)) return null;
   const value = progressValue(node);
@@ -421,7 +422,7 @@ function ConceptEditor({ concept, selection, onSelect, onBack, onNavigate }) {
         <button className="addnode" title={LINKING_NODE_TYPE.blurb} onClick={addLinkingNode}>
           <span className="sq" style={{ background: LINKING_NODE_TYPE.color }}><PrimIcon icon={LINKING_NODE_TYPE.icon} color="#fff" size={11} /></span>{LINKING_NODE_TYPE.label}
         </button></div>
-        <div className="canvas-tool-group support-tool-group"><span className="tool-kind-label">Support</span>
+        <AnnotationTools className="canvas-tool-group support-tool-group"><span className="tool-kind-label">Support</span>
         <button className="addnode frameadd" title="Add a visual grouping frame" onClick={addFrame}>
           <span className="sq" style={{ background: '#8B92A6' }}><PrimIcon icon="layers" color="#fff" size={11} /></span>Frame
         </button>
@@ -443,7 +444,7 @@ function ConceptEditor({ concept, selection, onSelect, onBack, onNavigate }) {
         <button className="addnode frameadd" title="Add an editable curved support line" onClick={addSpline}>
           <span className="sq splineglyph" style={{ color: '#5CA8F5' }}>∿</span>Spline
         </button>
-        </div>
+        </AnnotationTools>
       </div>
       <FlowCanvas
         nodes={conceptCanvasNodes} edges={currentGraph.edges} selId={selId} colorOf={canvasColorOf}
@@ -776,7 +777,7 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack, onNavig
         </div>
         <div className="right">
           {nested && <button className="btn" onClick={() => { setOpenPath(openPath.slice(0, -1)); onSelect(null); }}>Back one level</button>}
-          <div className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
+          <AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
             <button className="btn" onClick={addFrame}>Frame</button>
             <button className="btn" onClick={addCircle}>Circle</button>
             <button className="btn" onClick={() => addVisualMarker('number')}>Number</button>
@@ -784,7 +785,7 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack, onNavig
             <button className="btn" onClick={addTitleMarker}>Title</button>
             <button className="btn" onClick={addArrow}>Arrow</button>
             <button className="btn" onClick={addSpline}>Spline</button>
-          </div>
+          </AnnotationTools>
           <span className="mono dim">~{structure.estMinutes} min · {Object.keys(currentGraph.nodes).length} nodes · {currentGraph.edges.length} links</span>
         </div>
       </div>
@@ -1001,6 +1002,8 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack, onNavig
 }
 
 export default function Library({ group = 'physical', selection, onSelect, onNavigate }) {
+  const { refreshed } = useAppearance();
+  const [detailFramework, setDetailFramework] = React.useState(null);
   const lib = useLibrary();
   const libDispatch = useLibraryDispatch();
   const proj = useGame();
@@ -1745,7 +1748,7 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
             activeFilter={mechBuilderFilter}
             onFilter={setMechBuilderFilter}
             groups={mechBuilderPaletteGroups}
-            headerAction={<><div className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
+            headerAction={<><AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
               <button className="btn tiny" onClick={() => addBuilderFrame()}>Frame</button>
               <button className="btn tiny" onClick={() => addBuilderCircle()}>Circle</button>
               <button className="btn tiny" onClick={() => addBuilderVisualMarker('number')}>Number</button>
@@ -1753,7 +1756,7 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
               <button className="btn tiny" onClick={() => addBuilderTitle()}>Title</button>
               <button className="btn tiny" onClick={() => addBuilderArrow()}>Arrow</button>
               <button className="btn tiny" onClick={() => addBuilderSpline()}>Spline</button>
-              </div>
+              </AnnotationTools>
               <button className="btn tiny" onClick={() => setBrowsingMechanicsLibrary(true)}>Browse Library</button>
             </>}
           />
@@ -1990,7 +1993,7 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
             title="NodeStructureBuilder"
             subtitle="Create reusable templates"
             groups={libraryPaletteGroups}
-            headerAction={<><div className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
+            headerAction={<><AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
               <button className="btn tiny" onClick={() => addBuilderFrame()}>Frame</button>
               <button className="btn tiny" onClick={() => addBuilderCircle()}>Circle</button>
               <button className="btn tiny" onClick={() => addBuilderVisualMarker('number')}>Number</button>
@@ -1998,7 +2001,7 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
               <button className="btn tiny" onClick={() => addBuilderTitle()}>Title</button>
               <button className="btn tiny" onClick={() => addBuilderArrow()}>Arrow</button>
               <button className="btn tiny" onClick={() => addBuilderSpline()}>Spline</button>
-              </div>
+              </AnnotationTools>
               <button className="btn tiny" onClick={() => setBrowsingNarrativeLibrary(true)}>Browse Library</button>
             </>}
           />
@@ -2387,24 +2390,22 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
       )}
 
       {tab === 'frameworks' && (
-        <div className="cptcatalogue">
+        <div className="cptcatalogue framework-catalogue">
+          {refreshed && detailFramework && <FrameworkDetail framework={detailFramework} onClose={() => setDetailFramework(null)} />}
           <div className="cptsection">
             <div className="cptsectionhead">Frameworks</div>
             <div className="cptgrid">
               {Object.values(FRAMEWORK_TYPES).map((fw) => (
                 <button key={fw.id} className={`cptcard${selId === fw.id ? ' sel' : ''}`} style={{ borderTopColor: fw.color }}
-                  onClick={() => pick('frameworkType', fw.id)}>
+                  onClick={() => { pick('frameworkType', fw.id); if (refreshed) setDetailFramework(fw); }}>
                   <div className="primhead">
                     <span className="primic" style={{ background: fw.color }}><PrimIcon icon={fw.icon} color="#fff" /></span>
                     <b>{fw.label}</b>
                   </div>
-                  <StructureThumb structure={{ nodes: {}, edges: [] }} lib={lib} width={216} height={28} />
+
                   <small>{fw.blurb}</small>
-                  <div className={`fw-inspector-card${fw.layout === 'values' ? ' values' : ''}`}>
-                    {fw.phases.map((phase, idx) => (
-                      <div key={phase.key}><span>{idx + 1}</span><b>{phase.key}</b><small>{phase.name}</small></div>
-                    ))}
-                  </div>
+                  <div className="framework-card-preview"><FrameworkPreview frameworkId={fw.id} /></div>
+                  {refreshed && <span className="framework-open-label">Open full framework →</span>}
                 </button>
               ))}
             </div>
