@@ -1,4 +1,4 @@
-export const BUNDLED_LIBRARY_VERSION = 4;
+export const BUNDLED_LIBRARY_VERSION = 5;
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const RICH_GRAPH_COLLECTIONS = new Set(['concepts', 'stories', 'mechStructures']);

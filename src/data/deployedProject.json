@@ -3,7 +3,7 @@
   "meta": {
     "name": "Operation Chimera",
     "prefix": "CHM",
-    "createdAt": 1783617580313,
+    "createdAt": 1784654854843,
     "backdrops": {
       "header": {
         "image": null,
@@ -27,85 +27,85 @@
     "characterCardTemplate": {
       "questions": [
         {
-          "id": "ccq-mrlhxvet-09kpvc",
+          "id": "ccq-mruxf73v-e60xjc",
           "prompt": "What do they want, and why right now?",
           "answer": ""
         },
         {
-          "id": "ccq-mrlhxvet-ark0cu",
+          "id": "ccq-mruxf73v-m65wl3",
           "prompt": "What would they never do?",
           "answer": ""
         },
         {
-          "id": "ccq-mrlhxvet-est3qn",
+          "id": "ccq-mruxf73v-46ibgd",
           "prompt": "What do they give a team - object, information, or permission?",
           "answer": ""
         },
         {
-          "id": "ccq-mrlhxvet-w0pzzo",
+          "id": "ccq-mruxf73v-aub6k5",
           "prompt": "One sentence only this character could say.",
           "answer": ""
         },
         {
-          "id": "ccq-mrlhxvet-mdtg0y",
+          "id": "ccq-mruxf73v-etbe3j",
           "prompt": "What does a team see or hear in the first ten seconds?",
           "answer": ""
         }
       ],
       "typeGroups": [
         {
-          "id": "ccg-mrlhxvet-97nbcc",
+          "id": "ccg-mruxf73v-6yg01h",
           "label": "Role",
           "options": [
             {
-              "id": "cco-mrlhxvet-uxlug8",
+              "id": "cco-mruxf73v-yi6g7v",
               "label": "Guide"
             },
             {
-              "id": "cco-mrlhxvet-blfhep",
+              "id": "cco-mruxf73v-ujg5x5",
               "label": "Antagonist"
             },
             {
-              "id": "cco-mrlhxvet-9km62a",
+              "id": "cco-mruxf73v-cfb1l3",
               "label": "Gatekeeper"
             },
             {
-              "id": "cco-mrlhxvet-7rzi6y",
+              "id": "cco-mruxf73v-mb1n8h",
               "label": "Ensemble"
             },
             {
-              "id": "cco-mrlhxvet-4buhdt",
+              "id": "cco-mruxf73v-t3oari",
               "label": "Lore figure"
             }
           ],
           "selectedId": null
         },
         {
-          "id": "ccg-mrlhxvet-edvwaz",
+          "id": "ccg-mruxf73v-uevgkp",
           "label": "Archetype",
           "options": [
             {
-              "id": "cco-mrlhxvet-7rns3h",
+              "id": "cco-mruxf73v-46ixl9",
               "label": "Explorer"
             },
             {
-              "id": "cco-mrlhxvet-rha3q7",
+              "id": "cco-mruxf73v-mg8gpl",
               "label": "Sage"
             },
             {
-              "id": "cco-mrlhxvet-2id9ys",
+              "id": "cco-mruxf73v-6tyva2",
               "label": "Muse"
             },
             {
-              "id": "cco-mrlhxvet-4y4ata",
+              "id": "cco-mruxf73v-q3n16d",
               "label": "Rebel"
             },
             {
-              "id": "cco-mrlhxvet-s240n5",
+              "id": "cco-mruxf73v-v1m43u",
               "label": "Defender"
             },
             {
-              "id": "cco-mrlhxvet-vss4ay",
+              "id": "cco-mruxf73v-00cg6e",
               "label": "Warrior"
             }
           ],
@@ -257,7 +257,7 @@
       "name": "Sector 8 Gate",
       "zone": "Act 2",
       "notes": "Locked until quest flag key_obtained.",
-      "safety": "Gate is heavy — crew operates it, never players.",
+      "safety": "Gate is heavy â€” crew operates it, never players.",
       "image": null,
       "schematic": null,
       "sensorIds": [
@@ -353,7 +353,7 @@
       "buildStatus": "build",
       "availability": "ready",
       "description": "A weathered military dataslate containing corrupted operational data. Needs to be decoded.",
-      "propNotes": "Custom plastic + metal case, low-res OLED, four buttons. Battery 2×AA — swap before game.",
+      "propNotes": "Custom plastic + metal case, low-res OLED, four buttons. Battery 2Ã—AA â€” swap before game.",
       "loreNotes": "Recovered from a crash site; rumored to hold the 'Operation Chimera' flight path.",
       "locationId": "LOC-S7",
       "mechanicIds": [
@@ -461,7 +461,7 @@
       "buildStatus": "packed",
       "availability": "ready",
       "description": "Reveals hidden ink markings.",
-      "propNotes": "Consumer UV flashlight ×4, batteries fresh.",
+      "propNotes": "Consumer UV flashlight Ã—4, batteries fresh.",
       "loreNotes": "",
       "locationId": null,
       "mechanicIds": [
@@ -627,7 +627,7 @@
       "title": "Sector 7 Warehouse",
       "x": 380,
       "y": 40,
-      "body": "2 patrols · marked safety zone",
+      "body": "2 patrols Â· marked safety zone",
       "color": null,
       "teamId": null,
       "sets": [],
@@ -669,7 +669,7 @@
       "title": "Security Patrols",
       "x": 1060,
       "y": 40,
-      "body": "NPC crew: Mank +1 · Tier 2 · 7 min loop",
+      "body": "NPC crew: Mank +1 Â· Tier 2 Â· 7 min loop",
       "color": null,
       "teamId": null,
       "sets": [],
@@ -712,7 +712,7 @@
       "title": "Sector 8 gate opens",
       "x": 1060,
       "y": 340,
-      "body": "The gate answers — however the attempt went.",
+      "body": "The gate answers â€” however the attempt went.",
       "color": null,
       "teamId": null,
       "sets": [
@@ -799,7 +799,7 @@
             "title": "The City",
             "x": 40,
             "y": 260,
-            "body": "What is worth protecting — a place, a community, a way of life.",
+            "body": "What is worth protecting â€” a place, a community, a way of life.",
             "color": null
           },
           "S3": {
@@ -817,7 +817,7 @@
             "title": "Find the Weakness",
             "x": 640,
             "y": 60,
-            "body": "Players hunt the Dragon’s price or blind spot.",
+            "body": "Players hunt the Dragonâ€™s price or blind spot.",
             "color": null
           },
           "S5": {
@@ -890,7 +890,7 @@
             "title": "The City",
             "x": 40,
             "y": 260,
-            "body": "What is worth protecting — a place, a community, a way of life.",
+            "body": "What is worth protecting â€” a place, a community, a way of life.",
             "color": null
           },
           "S3": {
@@ -908,7 +908,7 @@
             "title": "Find the Weakness",
             "x": 640,
             "y": 60,
-            "body": "Players hunt the Dragon’s price or blind spot.",
+            "body": "Players hunt the Dragonâ€™s price or blind spot.",
             "color": null
           },
           "S5": {
@@ -1056,17 +1056,17 @@
       "selectionType": "single",
       "branches": [
         {
-          "label": "Clean lift (Yes, and…)",
-          "outcome": "Key retrieved unseen; the patrol log still shows all-clear — a free head start.",
+          "label": "Clean lift (Yes, andâ€¦)",
+          "outcome": "Key retrieved unseen; the patrol log still shows all-clear â€” a free head start.",
           "mechanicId": "LIB-MECH-LOCK"
         },
         {
-          "label": "Noisy grab (Yes, but…)",
+          "label": "Noisy grab (Yes, butâ€¦)",
           "outcome": "Key retrieved, but the alarm reroutes the patrols toward the comms bench.",
           "mechanicId": "LIB-MECH-LOCK"
         },
         {
-          "label": "Driven off (No, but…)",
+          "label": "Driven off (No, butâ€¦)",
           "outcome": "The key stays locked away, but a dropped patrol roster reveals the maintenance bypass.",
           "mechanicId": null
         }
@@ -1100,7 +1100,7 @@
       "keywords": [],
       "history": [],
       "relType": "Trust",
-      "targets": "Quartermaster Mank → the named team",
+      "targets": "Quartermaster Mank â†’ the named team",
       "direction": "no-but",
       "intensity": "moderate",
       "trigger": "The intercept names the team as decoys.",
@@ -1159,7 +1159,7 @@
   "frames": {
     "FR-1": {
       "id": "FR-1",
-      "label": "Act 1 — the key",
+      "label": "Act 1 â€” the key",
       "x": 20,
       "y": 10,
       "w": 660,
@@ -1422,7 +1422,7 @@
       "primitiveId": "LIB-MPRIM-ACTION",
       "kind": "mechanic",
       "mechKind": "action",
-      "title": "Action",
+      "title": "BG action",
       "body": "One atomic physical, cognitive, or social step performed by a player or team.",
       "refs": {},
       "category": "action",
@@ -1485,7 +1485,7 @@
       "primitiveId": "LIB-MPRIM-ACTION",
       "kind": "mechanic",
       "mechKind": "action",
-      "title": "Action",
+      "title": "BG action",
       "body": "One atomic physical, cognitive, or social step performed by a player or team.",
       "refs": {},
       "category": "action",
@@ -1664,19 +1664,19 @@
       "id": "T-RAVEN",
       "name": "Team Raven",
       "color": "#5CA8F5",
-      "focus": "Infiltration specialists · returning crew"
+      "focus": "Infiltration specialists Â· returning crew"
     },
     "T-WOLF": {
       "id": "T-WOLF",
       "name": "Team Wolfpack",
       "color": "#E0A23C",
-      "focus": "Puzzle-heavy playstyle · mixed experience"
+      "focus": "Puzzle-heavy playstyle Â· mixed experience"
     },
     "T-CINDER": {
       "id": "T-CINDER",
       "name": "Team Cinder",
       "color": "#A87BF0",
-      "focus": "First-timers · assign shepherd NPC"
+      "focus": "First-timers Â· assign shepherd NPC"
     }
   },
   "players": {
@@ -1892,5 +1892,5 @@
       }
     ]
   },
-  "bundledProjectVersion": 1
+  "bundledProjectVersion": 2
 }

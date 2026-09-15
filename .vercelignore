@@ -1,0 +1,4 @@
+.larpcraft/
+node_modules/
+.git/
+.codex-vite.*.log

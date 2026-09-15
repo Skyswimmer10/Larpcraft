@@ -50,3 +50,9 @@ The disk API is a local-development service restricted to local same-origin
 requests. GitHub and Vercel were not updated. Production builds still use browser
 storage until a hosted persistence service or explicit publication workflow is
 implemented. A running local server is required for disk autosave.
+
+## Published snapshot — 15 September 2026
+
+The deployed library includes 44 concepts and all 176 recovered mechanism image entries (175 unique image files). Original image bytes are published under `public/library-images/`; deployed JSON references those assets rather than embedding large base64 strings. Local canonical JSON and recovery archives remain unchanged and excluded from Git and deployment uploads.
+
+Library bundle version 5 and project bundle version 2 publish the current local snapshot. Existing hosted browser edits retain the existing merge protections. Hosted edits still save in that browser; local Vite sessions save in `.larpcraft/`.

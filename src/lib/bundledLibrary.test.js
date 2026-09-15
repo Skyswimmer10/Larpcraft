@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import deployedLibrary from '../data/deployedLibrary.json';
 import { BUNDLED_LIBRARY_VERSION, mergeBundledLibrary } from './bundledLibrary.js';
@@ -9,11 +10,21 @@ describe('mergeBundledLibrary', () => {
     expect(Object.values(deployedLibrary.concepts).reduce((sum, concept) => sum + (concept.edges || []).length, 0)).toBe(371);
     expect(deployedLibrary.concepts['LIB-CPT-N039']).toMatchObject({ name: 'Drive stories' });
     expect(Object.keys(deployedLibrary.concepts['LIB-CPT-N039'].nodes)).toHaveLength(27);
-    expect(Object.keys(deployedLibrary.mechStructures || {})).toHaveLength(24);
+    expect(Object.keys(deployedLibrary.mechStructures || {})).toHaveLength(26);
     expect(Object.keys(deployedLibrary.actionPatternMechanisms || {})).toHaveLength(23);
     expect(Object.keys(deployedLibrary.actionProbabilityMechanisms || {})).toHaveLength(26);
     expect(Object.values(deployedLibrary.actionPatternMechanisms).every((record) => record.image?.dataUrl)).toBe(true);
     expect(Object.values(deployedLibrary.actionProbabilityMechanisms).every((record) => record.image?.dataUrl)).toBe(true);
+  });
+
+  it('ships every recovered mechanism image as a public asset', () => {
+    const records = Object.entries(deployedLibrary).filter(([key]) => key.endsWith('Mechanisms')).flatMap(([, value]) => Object.values(value));
+    expect(records).toHaveLength(176);
+    for (const record of records) {
+      expect(record.image.kind).toBe('upload');
+      expect(record.image.dataUrl).toMatch(/^\/library-images\//);
+      expect(existsSync(new URL('../../public' + record.image.dataUrl, import.meta.url))).toBe(true);
+    }
   });
 
   it('adds missing bundled records while preserving saved records', () => {

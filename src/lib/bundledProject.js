@@ -1,4 +1,4 @@
-export const BUNDLED_PROJECT_VERSION = 1;
+export const BUNDLED_PROJECT_VERSION = 2;
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const sizeOf = (value) => Array.isArray(value)
