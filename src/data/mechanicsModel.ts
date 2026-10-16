@@ -300,13 +300,13 @@ export const MECHANIC_NODE_TYPE_META: Record<MechanicNodeKind, {
     blurb: 'Gameplay output that defines what effect happens in the world.',
   },
   action: {
-    label: 'BG action',
+    label: 'BG Mechanics',
     color: '#58C7A6',
     icon: 'zap',
     blurb: 'One atomic physical, cognitive, or social step performed by a player or team.',
   },
   playerFacingInstruction: {
-    label: 'Player-Facing Instruction',
+    label: 'Instructions for players',
     color: '#E8D25C',
     icon: 'book',
     blurb: 'The exact instruction presented or read to players for an action.',
@@ -594,7 +594,7 @@ export const MECHANIC_SUBNODE_TYPE_META: Record<MechanicSubnodeKind, {
     purpose: 'Forces the designer to define how success in one part of the task makes the next part easier or more obvious. Creates a positive feedback loop so players feel progress.',
   },
   failSafeScaffolding: {
-    label: 'Fail-Safe + Scaffolding Mod',
+    label: 'Help when players get stuck',
     color: '#E8D25C',
     icon: 'layers',
     reusable: false,
@@ -602,7 +602,7 @@ export const MECHANIC_SUBNODE_TYPE_META: Record<MechanicSubnodeKind, {
     purpose: 'Provides structured ways to recover from failure or near-failure. Prevents players from feeling like total failures when they were close to succeeding.',
   },
   escalatingPressure: {
-    label: 'Escalating Pressure Mod',
+    label: 'Increasing pressure',
     color: '#E86464',
     icon: 'clock',
     reusable: false,
@@ -663,7 +663,7 @@ export const MECHANIC_SUBNODE_TYPE_META: Record<MechanicSubnodeKind, {
     icon: 'clock',
     reusable: true,
     category: 'gameplayModifiers',
-    purpose: 'Deprecated. Frequency limiting now lives inside Sensor and Actuator nodes.',
+    purpose: 'Deprecated. Limit how often this happens now lives inside Sensor and Actuator nodes.',
   },
   multipleOutputLogic: {
     label: 'Multi-Output Resolver',

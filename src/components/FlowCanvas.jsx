@@ -1,3 +1,5 @@
+import { isMechanicIO } from '../lib/mechanicIO.js';
+import { GameTypePreview } from './GameType.jsx';
 import { useAppearance } from './AppearanceContext.jsx';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ENTITY_COLORS, PrimIcon } from './bits.jsx';
@@ -20,6 +22,14 @@ import { createCanvasClipboard, offsetCanvasClipboard } from '../lib/canvasClipb
 // template, paste on the game canvas, and vice versa).
 let nodeClipboard = null;
 let activeCanvasElement = null;
+
+function keyboardCanvas() {
+  const visible = el => el.getClientRects().length > 0;
+  const dialogs = Array.from(document.querySelectorAll('.modal-backdrop, dialog[open], [aria-modal="true"]')).filter(visible);
+  const root = dialogs.at(-1) || document;
+  const canvases = Array.from(root.querySelectorAll('.canvas')).filter(visible);
+  return canvases.includes(activeCanvasElement) ? activeCanvasElement : canvases[0];
+}
 
 export function visibleCanvasPlacement(fallback = { x: 80, y: 80 }, size = { w: NODE_W, h: 130 }) {
   const visibleCanvases = Array.from(document.querySelectorAll('.canvas')).filter((el) => {
@@ -172,7 +182,14 @@ export default function FlowCanvas({
   // typing in a field or copying real text.
   useEffect(() => {
     const onKey = (e) => {
-      if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      if (e.target.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+      if (keyboardCanvas() !== canvasRef.current) return;
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        window.getSelection()?.removeAllRanges();
+        setMultiSel(new Set(Object.keys(nodes)));
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'Delete' && onClearCanvas) {
         e.preventDefault();
         onClearCanvas();
@@ -280,8 +297,9 @@ export default function FlowCanvas({
     if (n.kind === 'framework' && n.frameworkId === 'storyBuildingSystem') return 400;
     return String(nodeClass?.(n) || '').includes('subnode') ? 196 : NODE_W;
   };
-  const nodeW = (n) => Math.max(MIN_NODE_W, Number(n.w) || nodeDefaultW(n));
+  const nodeW = (n) => isMechanicIO(n) ? 180 : Math.max(MIN_NODE_W, Number(n.w) || nodeDefaultW(n));
   const nodeH = (n) => {
+    if (isMechanicIO(n)) return 48;
     if (n._titleTarget) return Math.max(20, Number(measuredTitleSizes[n.id]?.h) || Number(n.fontSize) * 1.2 || 34);
     if (Number(n.h)) return Math.max(MIN_NODE_H, Number(n.h));
     return Math.max(MIN_NODE_H, Number(measuredHeights[n.id]) || 130);
@@ -346,7 +364,7 @@ export default function FlowCanvas({
     setAlignmentGuides({ vertical: unique(vertical), horizontal: unique(horizontal) });
   };
   const clearAlignmentGuides = () => setAlignmentGuides({ vertical: [], horizontal: [] });
-  const explicitNodeH = (n) => (Number(n.h) ? Math.max(MIN_NODE_H, Number(n.h)) : null);
+  const explicitNodeH = (n) => isMechanicIO(n) ? 48 : (Number(n.h) ? Math.max(MIN_NODE_H, Number(n.h)) : null);
   const extentX = Math.max(1400, ...list.map((n) => n.x + nodeW(n) + 320), ...Object.values(frames || {}).map((f) => frameRect(f).x + frameRect(f).w + 180), ...markerList.map((m) => m.x + 180), ...titleList.map((m) => m.x + 520));
   const extentY = Math.max(620, ...list.map((n) => n.y + nodeH(n) + 260), ...Object.values(frames || {}).map((f) => frameRect(f).y + frameRect(f).h + 180), ...markerList.map((m) => m.y + 180), ...titleList.map((m) => m.y + 160));
 
@@ -1199,6 +1217,8 @@ export default function FlowCanvas({
     <div
       className={`canvas${refreshed && selId ? ' canvas-selection-emphasis' : ''}`} ref={canvasRef}
       data-canvas-zoom={zoom}
+      onPointerDownCapture={(e) => { activeCanvasElement = e.currentTarget; }}
+      onFocusCapture={(e) => { activeCanvasElement = e.currentTarget; }}
       onPointerEnter={(e) => { activeCanvasElement = e.currentTarget; }}
       onScroll={(e) => { activeCanvasElement = e.currentTarget; }}
       onPointerDown={onCanvasDown}
@@ -1428,7 +1448,7 @@ export default function FlowCanvas({
 
       {list.map((n) => {
         const color = colorOf(n);
-        const icon = iconOf?.(n);
+        const icon = isMechanicIO(n) ? (n.mechKind === 'sensorNode' ? 'zap' : 'flag') : iconOf?.(n);
         const team = teamOf?.(n);
         const isFramework = n.kind === 'framework';
         const isActionMechanism = n.mechKind === 'actionMechanism';
@@ -1448,7 +1468,7 @@ export default function FlowCanvas({
         return (
           <div
             key={n.id} data-node={n.id} data-edge-target={n.id} role="button" tabIndex={0}
-            className={`node${isActionMechanism ? ' action-mechanism-node' : ''}${selId === n.id || multiSel.has(n.id) ? ' sel' : ''}${multiSel.has(n.id) ? ' multisel' : ''}${linkDrag && linkDrag.from !== n.id ? ' droppable' : ''}${dimNode?.(n) ? ' dim' : ''}${nodeClass ? ` ${nodeClass(n) || ''}` : ''}`}
+            className={`node${isMechanicIO(n) ? ' mechanic-io-compact' : ''}${isActionMechanism ? ' action-mechanism-node' : ''}${selId === n.id || multiSel.has(n.id) ? ' sel' : ''}${multiSel.has(n.id) ? ' multisel' : ''}${linkDrag && linkDrag.from !== n.id ? ' droppable' : ''}${dimNode?.(n) ? ' dim' : ''}${nodeClass ? ` ${nodeClass(n) || ''}` : ''}`}
             style={{ left: n.x, top: n.y, width: w, ...(h ? { height: h } : {}), borderTopColor: color }}
             onPointerDown={(e) => onNodeDown(e, n)}
             onPointerMove={onNodeMove}
@@ -1495,8 +1515,8 @@ export default function FlowCanvas({
                     </div>
                   ))}
                 </div>
-              ) : body}
-              {renderExtra?.(n, { width: w, height: h })}
+              ) : n.mechKind === 'gameType' ? <GameTypePreview node={n} /> : body}
+              {n.mechKind !== 'gameType' && renderExtra?.(n, { width: w, height: h })}
             </div>
             {onConnect && EDGE_SIDES.map((side) => (
               <span key={side} data-side={side}

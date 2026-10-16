@@ -560,688 +560,60 @@
       ]
     }
   },
-  "nodes": {
-    "N-BRIEF": {
-      "id": "N-BRIEF",
-      "kind": "event",
-      "title": "Briefing",
-      "x": 40,
-      "y": 90,
-      "body": "Teams receive the crash-site dossier and a sealed radio frequency.",
-      "color": null,
-      "teamId": null,
-      "sets": [],
-      "locationId": null,
-      "itemId": null,
-      "mechanicIds": [],
-      "sensorIds": [],
-      "sub": {
-        "nodes": {
-          "D1": {
-            "id": "D1",
-            "kind": "event",
-            "title": "Muster point",
-            "x": 40,
-            "y": 60,
-            "body": "All teams gather at the loading dock, out-of-game, before the clock starts.",
-            "color": null
-          },
-          "D2": {
-            "id": "D2",
-            "kind": "item",
-            "title": "Dossier + sealed frequency",
-            "x": 340,
-            "y": 60,
-            "body": "One printed dossier per team; radio frequency in a sealed envelope opened on the GM cue.",
-            "color": null
-          },
-          "D3": {
-            "id": "D3",
-            "kind": "event",
-            "title": "Cold-open read",
-            "x": 640,
-            "y": 60,
-            "body": "GM reads the cold-open aloud; house lights drop to work-lights on the last line.",
-            "color": null
-          }
-        },
-        "edges": [
-          {
-            "from": "D1",
-            "to": "D2",
-            "label": "hand out",
-            "color": null
-          },
-          {
-            "from": "D2",
-            "to": "D3",
-            "label": "then",
-            "color": null
-          }
-        ]
-      }
-    },
-    "N-S7": {
-      "id": "N-S7",
-      "kind": "storyLocation",
-      "title": "Sector 7 Warehouse",
-      "x": 380,
-      "y": 40,
-      "body": "2 patrols Â· marked safety zone",
-      "color": null,
-      "teamId": null,
-      "sets": [],
-      "locationId": "LOC-S7",
-      "itemId": null,
-      "mechanicIds": [],
-      "sensorIds": [
-        "RFID-07",
-        "MOT-04"
-      ]
-    },
-    "N-KEY": {
-      "id": "N-KEY",
-      "kind": "quest",
-      "title": "Retrieve Cipher-Key",
-      "x": 380,
-      "y": 300,
-      "body": "Success unlocks Sector 8.",
-      "color": null,
-      "teamId": "T-RAVEN",
-      "sets": [
-        {
-          "factId": "F-KEY",
-          "to": "set"
-        }
-      ],
-      "locationId": "LOC-S7",
-      "itemId": "CHM-A-004",
-      "mechanicIds": [
-        "LIB-MECH-LOCK"
-      ],
-      "sensorIds": [
-        "RFID-07"
-      ]
-    },
-    "N-PATROL": {
-      "id": "N-PATROL",
-      "kind": "character",
-      "title": "Security Patrols",
-      "x": 1060,
-      "y": 40,
-      "body": "NPC crew: Mank +1 Â· Tier 2 Â· 7 min loop",
-      "color": null,
-      "teamId": null,
-      "sets": [],
-      "locationId": "LOC-S7",
-      "itemId": null,
-      "mechanicIds": [],
-      "sensorIds": [],
-      "archetypeEnabled": false,
-      "archetypeDarkSideUp": "",
-      "archetypeDarkSideBack": ""
-    },
-    "N-DECRYPT": {
-      "id": "N-DECRYPT",
-      "kind": "quest",
-      "title": "Decrypt the Dataslate",
-      "x": 720,
-      "y": 360,
-      "body": "Solve the cipher at the comms bench.",
-      "color": null,
-      "teamId": "T-WOLF",
-      "sets": [
-        {
-          "factId": "F-DECODE",
-          "to": "set"
-        }
-      ],
-      "locationId": "LOC-COMMS",
-      "itemId": "CHM-A-007",
-      "mechanicIds": [
-        "LIB-MECH-DECRYPT"
-      ],
-      "sensorIds": [
-        "BTN-11",
-        "NFC-03"
-      ]
-    },
-    "N-GATE": {
-      "id": "N-GATE",
-      "kind": "event",
-      "title": "Sector 8 gate opens",
-      "x": 1060,
-      "y": 340,
-      "body": "The gate answers â€” however the attempt went.",
-      "color": null,
-      "teamId": null,
-      "sets": [
-        {
-          "factId": "F-GATE",
-          "to": "set"
-        }
-      ],
-      "locationId": "LOC-S8",
-      "itemId": "CHM-A-002",
-      "mechanicIds": [
-        "LIB-MECH-ACCESS"
-      ],
-      "sensorIds": [
-        "PRX-02"
-      ]
-    },
-    "N-TWIST": {
-      "id": "N-TWIST",
-      "kind": "event",
-      "title": "False-flag intercept",
-      "x": 1060,
-      "y": 560,
-      "body": "A radio intercept names one player team as \"the decoys\". Broadcast on comms at the act break.",
-      "color": null,
-      "teamId": null,
-      "sets": [
-        {
-          "factId": "F-TRAITOR",
-          "to": "set"
-        }
-      ],
-      "locationId": null,
-      "itemId": null,
-      "mechanicIds": [],
-      "sensorIds": []
-    },
-    "N-END": {
-      "id": "N-END",
-      "kind": "event",
-      "title": "Extraction",
-      "x": 1400,
-      "y": 560,
-      "body": "Teams call in the beacon and exfiltrate before the timer.",
-      "color": null,
-      "teamId": null,
-      "sets": [],
-      "locationId": null,
-      "itemId": null,
-      "mechanicIds": [],
-      "sensorIds": []
-    },
-    "N-CPT1": {
-      "id": "N-CPT1",
-      "kind": "concept",
-      "conceptKind": "storyConcept",
-      "conceptId": "LIB-CPT-DRAGON",
-      "title": "Dragon & the City",
-      "x": 40,
-      "y": 430,
-      "body": "",
-      "color": null,
-      "teamId": null,
-      "sets": [],
-      "collapsed": true,
-      "conceptAnswers": {
-        "dragon": "The creditor syndicate (played by the patrol crew).",
-        "city": "The Sector 7 stallholders."
-      },
-      "sub": {
-        "nodes": {
-          "S1": {
-            "id": "S1",
-            "kind": "character",
-            "title": "The Dragon",
-            "x": 40,
-            "y": 60,
-            "body": "The looming threat. Cast it per game: creditor, rival, storm, plague.",
-            "color": null
-          },
-          "S2": {
-            "id": "S2",
-            "kind": "storyLocation",
-            "title": "The City",
-            "x": 40,
-            "y": 260,
-            "body": "What is worth protecting â€” a place, a community, a way of life.",
-            "color": null
-          },
-          "S3": {
-            "id": "S3",
-            "kind": "event",
-            "title": "First Tribute",
-            "x": 340,
-            "y": 160,
-            "body": "The Dragon takes something small. The defenders feel the shape of the threat.",
-            "color": null
-          },
-          "S4": {
-            "id": "S4",
-            "kind": "quest",
-            "title": "Find the Weakness",
-            "x": 640,
-            "y": 60,
-            "body": "Players hunt the Dragonâ€™s price or blind spot.",
-            "color": null
-          },
-          "S5": {
-            "id": "S5",
-            "kind": "event",
-            "title": "The Confrontation",
-            "x": 640,
-            "y": 260,
-            "body": "The City stands or falls. Use Outcome Branches, never pass/fail.",
-            "color": null
-          }
-        },
-        "edges": [
-          {
-            "from": "S1",
-            "to": "S3",
-            "label": "threatens",
-            "color": null
-          },
-          {
-            "from": "S2",
-            "to": "S3",
-            "label": "suffers",
-            "color": null
-          },
-          {
-            "from": "S3",
-            "to": "S4",
-            "label": "provokes",
-            "color": null
-          },
-          {
-            "from": "S4",
-            "to": "S5",
-            "label": "armed with truth",
-            "color": null
-          }
-        ]
-      }
-    },
-    "CHM-N-010": {
-      "id": "CHM-N-010",
-      "kind": "concept",
-      "conceptKind": "storyConcept",
-      "conceptId": "LIB-CPT-DRAGON",
-      "title": "Dragon & the City",
-      "x": 229,
-      "y": 199,
-      "body": "The classic threat-versus-home frame: name the Dragon, name the City, and every event gains stakes. Swap in your own dragon (a debt, a rival crew, a storm) per game.",
-      "color": null,
-      "teamId": null,
-      "sets": [],
-      "collapsed": true,
-      "conceptAnswers": {},
-      "history": [],
-      "sub": {
-        "nodes": {
-          "S1": {
-            "id": "S1",
-            "kind": "character",
-            "title": "The Dragon",
-            "x": 40,
-            "y": 60,
-            "body": "The looming threat. Cast it per game: creditor, rival, storm, plague.",
-            "color": null
-          },
-          "S2": {
-            "id": "S2",
-            "kind": "storyLocation",
-            "title": "The City",
-            "x": 40,
-            "y": 260,
-            "body": "What is worth protecting â€” a place, a community, a way of life.",
-            "color": null
-          },
-          "S3": {
-            "id": "S3",
-            "kind": "event",
-            "title": "First Tribute",
-            "x": 340,
-            "y": 160,
-            "body": "The Dragon takes something small. The defenders feel the shape of the threat.",
-            "color": null
-          },
-          "S4": {
-            "id": "S4",
-            "kind": "quest",
-            "title": "Find the Weakness",
-            "x": 640,
-            "y": 60,
-            "body": "Players hunt the Dragonâ€™s price or blind spot.",
-            "color": null
-          },
-          "S5": {
-            "id": "S5",
-            "kind": "event",
-            "title": "The Confrontation",
-            "x": 640,
-            "y": 260,
-            "body": "The City stands or falls. Use Outcome Branches, never pass/fail.",
-            "color": null
-          }
-        },
-        "edges": [
-          {
-            "from": "S1",
-            "to": "S3",
-            "label": "threatens",
-            "color": null
-          },
-          {
-            "from": "S2",
-            "to": "S3",
-            "label": "suffers",
-            "color": null
-          },
-          {
-            "from": "S3",
-            "to": "S4",
-            "label": "provokes",
-            "color": null
-          },
-          {
-            "from": "S4",
-            "to": "S5",
-            "label": "armed with truth",
-            "color": null
-          }
-        ]
-      }
-    },
-    "CHM-N-011": {
-      "id": "CHM-N-011",
-      "kind": "concept",
-      "conceptKind": "storyConcept",
-      "conceptId": "LIB-CPT-N003",
-      "title": "New story concept",
-      "x": 90,
-      "y": 90,
-      "body": "",
-      "color": null,
-      "teamId": null,
-      "sets": [],
-      "collapsed": true,
-      "conceptAnswers": {},
-      "history": [],
-      "sub": {
-        "nodes": {},
-        "edges": []
-      }
-    },
-    "CHM-N-012": {
-      "id": "CHM-N-012",
-      "kind": "concept",
-      "conceptKind": "storyConcept",
-      "conceptId": "LIB-CPT-N003",
-      "title": "New story concept",
-      "x": 90,
-      "y": 90,
-      "body": "",
-      "color": null,
-      "teamId": null,
-      "sets": [],
-      "collapsed": true,
-      "conceptAnswers": {},
-      "history": [],
-      "sub": {
-        "nodes": {},
-        "edges": []
-      }
-    },
-    "CHM-N-013": {
-      "id": "CHM-N-013",
-      "kind": "concept",
-      "conceptKind": "storyConcept",
-      "conceptId": "LIB-CPT-N003",
-      "title": "New story concept",
-      "x": 90,
-      "y": 90,
-      "body": "",
-      "color": null,
-      "teamId": null,
-      "sets": [],
-      "collapsed": true,
-      "conceptAnswers": {},
-      "history": [],
-      "sub": {
-        "nodes": {},
-        "edges": []
-      }
-    },
-    "CHM-LINK-1": {
-      "id": "CHM-LINK-1",
-      "kind": "linkingNode",
-      "title": "Link to library",
-      "body": "Choose a narrative node, concept, or story structure in the inspector.",
-      "x": 89,
-      "y": 251,
-      "w": 280,
-      "h": 150,
-      "color": "#68D7C0",
-      "linkTarget": {
-        "type": "concepts",
-        "id": "LIB-CPT-DRAGON"
-      },
-      "history": [
-        {
-          "t": 1785784280841,
-          "fields": [
-            "linkTarget"
-          ]
-        },
-        {
-          "t": 1785784288139,
-          "fields": [
-            "linkTarget"
-          ]
-        }
-      ]
-    }
-  },
-  "subnodes": {
-    "SB-OB1": {
-      "id": "SB-OB1",
-      "kind": "outcomeBranches",
-      "title": "Key attempt outcomes",
-      "x": 380,
-      "y": 560,
-      "parentRef": {
-        "nodeId": "N-KEY"
-      },
-      "notes": "",
-      "keywords": [],
-      "history": [],
-      "mode": "mixed",
-      "selectionType": "single",
-      "branches": [
-        {
-          "label": "Clean lift (Yes, andâ€¦)",
-          "outcome": "Key retrieved unseen; the patrol log still shows all-clear â€” a free head start.",
-          "mechanicId": "LIB-MECH-LOCK"
-        },
-        {
-          "label": "Noisy grab (Yes, butâ€¦)",
-          "outcome": "Key retrieved, but the alarm reroutes the patrols toward the comms bench.",
-          "mechanicId": "LIB-MECH-LOCK"
-        },
-        {
-          "label": "Driven off (No, butâ€¦)",
-          "outcome": "The key stays locked away, but a dropped patrol roster reveals the maintenance bypass.",
-          "mechanicId": null
-        }
-      ]
-    },
-    "SB-NR1": {
-      "id": "SB-NR1",
-      "kind": "narrativeResponse",
-      "title": "Alarm aftermath",
-      "x": 700,
-      "y": 640,
-      "parentRef": {
-        "subnodeId": "SB-OB1",
-        "branchIndex": 1
-      },
-      "notes": "",
-      "keywords": [],
-      "history": [],
-      "text": "Mank hears the alarm from the depot and quietly moves his ledger. Whoever visits him next finds him wary and the prices doubled."
-    },
-    "SB-RC1": {
-      "id": "SB-RC1",
-      "kind": "relChange",
-      "title": "Mank turns wary",
-      "x": 1060,
-      "y": 780,
-      "parentRef": {
-        "nodeId": "N-TWIST"
-      },
-      "notes": "",
-      "keywords": [],
-      "history": [],
-      "relType": "Trust",
-      "targets": "Quartermaster Mank â†’ the named team",
-      "direction": "no-but",
-      "intensity": "moderate",
-      "trigger": "The intercept names the team as decoys.",
-      "effects": "Mank stops trading with the named team unless they return his equipment first.",
-      "mechanicId": null
-    },
-    "SB-ET1": {
-      "id": "SB-ET1",
-      "kind": "emotionalTone",
-      "title": "Tone",
-      "x": 1360,
-      "y": 820,
-      "parentRef": {
-        "subnodeId": "SB-RC1"
-      },
-      "notes": "",
-      "keywords": [],
-      "history": [],
-      "tags": [
-        "Lingering Distrust",
-        "Quiet Hope"
-      ]
-    },
-    "SB-LA1": {
-      "id": "SB-LA1",
-      "kind": "locationArchetype",
-      "title": "Warehouse identity",
-      "x": 700,
-      "y": 40,
-      "parentRef": {
-        "nodeId": "N-S7"
-      },
-      "notes": "",
-      "keywords": [],
-      "history": [],
-      "archetype": "Good Place to Defend",
-      "influence": "Events here favor holding ground and ambush framing; quests here should reward preparation."
-    },
-    "SB-IS1": {
-      "id": "SB-IS1",
-      "kind": "internalState",
-      "title": "Grief (unassigned)",
-      "x": 1400,
-      "y": 90,
-      "parentRef": null,
-      "notes": "Attach to whichever character loses the most in Act 2.",
-      "keywords": [],
-      "history": [],
-      "stateType": "Grief",
-      "level": "rising",
-      "trigger": "The loss at the act break.",
-      "effects": "The character refuses comms and must be met face to face.",
-      "mechanicId": null
-    }
-  },
-  "frames": {
-    "FR-1": {
-      "id": "FR-1",
-      "label": "Act 1 â€” the key",
-      "x": 20,
-      "y": 10,
-      "w": 660,
-      "h": 700,
-      "color": "#5CA8F5"
-    },
-    "SPL-002": {
-      "id": "SPL-002",
-      "label": "Spline",
-      "shape": "spline",
-      "x": 110,
-      "y": 198,
-      "w": 220,
-      "h": 80,
-      "curveX": 0,
-      "curveY": -70,
-      "color": "#5CA8F5"
-    }
-  },
-  "edges": [
-    {
-      "from": "SB-OB1",
-      "to": "N-PATROL",
-      "label": "Noisy grab",
-      "kindColor": "character",
-      "factId": "F-ALARM",
-      "expect": "set"
-    },
-    {
-      "from": "SB-OB1",
-      "to": "N-DECRYPT",
-      "label": "any key branch",
-      "kindColor": "quest"
-    },
-    {
-      "from": "N-KEY",
-      "to": "N-GATE",
-      "label": "IF Cipher-Key retrieved",
-      "kindColor": "event",
-      "factId": "F-KEY",
-      "expect": "set"
-    },
-    {
-      "from": "N-DECRYPT",
-      "to": "N-GATE",
-      "label": "REQUIRES decode",
-      "kindColor": "quest",
-      "factId": "F-DECODE",
-      "expect": "set"
-    },
-    {
-      "from": "N-GATE",
-      "to": "N-TWIST",
-      "label": "act break",
-      "kindColor": "event"
-    },
-    {
-      "from": "N-TWIST",
-      "to": "N-END",
-      "label": "the turn",
-      "kindColor": "event",
-      "factId": "F-TRAITOR",
-      "expect": "set"
-    }
-  ],
+  "nodes": {},
+  "subnodes": {},
+  "frames": {},
+  "edges": [],
   "masterNodes": {
     "ACT-1": {
       "id": "ACT-1",
       "kind": "masterAct",
       "title": "Act 1 - The Briefing",
-      "x": 60,
-      "y": 60,
+      "x": 8,
+      "y": 44,
       "body": "Players receive the crash-site mission and enter Sector 7.",
       "phaseNotes": "Discovery phase: teams learn who thinks fast, who organizes, who takes risks, and who naturally follows.",
-      "color": null
+      "color": null,
+      "actLanes": {
+        "story": "ACT-LANE-001",
+        "mechanics": "ACT-LANE-002"
+      },
+      "sub": {
+        "nodes": {
+          "ACT-LANE-001": {
+            "id": "ACT-LANE-001",
+            "kind": "actLane",
+            "title": "Story",
+            "x": 0,
+            "y": 0,
+            "sub": {
+              "nodes": {},
+              "edges": [],
+              "frames": {}
+            }
+          },
+          "ACT-LANE-002": {
+            "id": "ACT-LANE-002",
+            "kind": "actLane",
+            "title": "Game Mechanics",
+            "x": 0,
+            "y": 0,
+            "sub": {
+              "nodes": {},
+              "edges": [],
+              "frames": {}
+            }
+          }
+        },
+        "edges": []
+      }
     },
     "ACT-2": {
       "id": "ACT-2",
       "kind": "masterAct",
       "title": "Act 2 - The Key",
-      "x": 360,
-      "y": 60,
+      "x": 334,
+      "y": 42,
       "body": "The teams search the warehouse and recover the Cipher-Key.",
       "phaseNotes": "Role pressure phase: practical leaders, scouts, solvers, and cautious players start becoming visible.",
       "color": null
@@ -1327,50 +699,6 @@
     }
   },
   "taskNodes": {
-    "TSK-1": {
-      "id": "TSK-1",
-      "kind": "task",
-      "title": "Assemble at Sector 7",
-      "x": 8,
-      "y": 309,
-      "startMin": 540,
-      "durationMin": 30,
-      "body": "All teams reach the warehouse floor and check in.",
-      "color": null
-    },
-    "TSK-2": {
-      "id": "TSK-2",
-      "kind": "task",
-      "title": "Retrieve the Cipher-Key",
-      "x": 360,
-      "y": 200,
-      "startMin": 600,
-      "durationMin": 45,
-      "body": "Recover the brass key from the locker corridor.",
-      "color": null
-    },
-    "TSK-3": {
-      "id": "TSK-3",
-      "kind": "task",
-      "title": "Decode the Dataslate",
-      "x": 680,
-      "y": 90,
-      "startMin": 780,
-      "durationMin": 60,
-      "body": "Solve the cipher at the comms bench.",
-      "color": null
-    },
-    "TSK-4": {
-      "id": "TSK-4",
-      "kind": "task",
-      "title": "Score the extraction beacon",
-      "x": 680,
-      "y": 320,
-      "startMin": 900,
-      "durationMin": 45,
-      "body": "Land the beacon in the extraction crate to call exfil.",
-      "color": null
-    },
     "TRV-1": {
       "id": "TRV-1",
       "kind": "travel",
@@ -1395,171 +723,17 @@
       "body": "Route choice between warehouse lanes and the comms bench. Delay covers crowds, wrong turns, and waiting for a clear path.",
       "color": null
     },
-    "CHM-TSK-MACRODROID": {
-      "id": "CHM-TSK-MACRODROID",
-      "primitiveId": "LIB-ITM-MACRODROID-PHONE",
-      "kind": "objective",
-      "physicalKind": "item",
-      "itemId": "LIB-ITM-MACRODROID-PHONE",
-      "title": "MacroDroid Phone Bridge",
-      "x": 1000,
-      "y": 190,
-      "body": "Android phone running MacroDroid to receive the GPS trigger and play the assigned MP3 through a speaker.",
-      "color": "#3EC6D6",
-      "refs": {
-        "itemIds": [
-          "LIB-ITM-MACRODROID-PHONE"
-        ],
-        "sensorIds": [],
-        "mechanicIds": []
-      }
-    },
-    "CHM-TSK-008": {
-      "id": "CHM-TSK-008",
-      "x": 43,
-      "y": 181,
-      "color": "#58C7A6",
-      "primitiveId": "LIB-MPRIM-ACTION",
-      "kind": "mechanic",
-      "mechKind": "action",
-      "title": "BG action",
-      "body": "One atomic physical, cognitive, or social step performed by a player or team.",
-      "refs": {},
-      "category": "action",
-      "estMinutes": 1,
-      "crew": 0,
-      "collapseDepth": 0,
-      "attachedSubnodeIds": [],
-      "advantages": [
-        ""
-      ],
-      "effects": [
-        ""
-      ],
-      "variations": [
-        ""
-      ],
-      "tokenMechanismId": "",
-      "orderMechanismId": "",
-      "specialMechanismId": ""
-    },
-    "CHM-TSK-009": {
-      "id": "CHM-TSK-009",
-      "x": 182,
-      "y": 10,
-      "color": "#F08CB4",
-      "primitiveId": "LIB-MPRIM-ACTION-PROBABILITY",
-      "kind": "mechanic",
-      "mechKind": "actionProbability",
-      "title": "Resolution",
-      "body": "Compare generated totals; the highest qualifying result wins or succeeds.",
-      "refs": {},
-      "category": "action",
-      "estMinutes": 1,
-      "crew": 0,
-      "collapseDepth": 0,
-      "resolutionType": "High Number",
-      "image": {
-        "kind": "svg",
-        "name": "high-number.svg",
-        "dataUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20420%20210%22%3E%3Crect%20width%3D%22420%22%20height%3D%22210%22%20rx%3D%2218%22%20fill%3D%22%23151821%22%2F%3E%3Crect%20x%3D%2214%22%20y%3D%2214%22%20width%3D%22392%22%20height%3D%22182%22%20rx%3D%2214%22%20fill%3D%22%235CA8F5%22%20opacity%3D%22.16%22%2F%3E%3Ccircle%20cx%3D%2284%22%20cy%3D%2293%22%20r%3D%2249%22%20fill%3D%22%235CA8F5%22%20opacity%3D%22.92%22%2F%3E%3Ccircle%20cx%3D%2284%22%20cy%3D%2293%22%20r%3D%2236%22%20fill%3D%22%23151821%22%20opacity%3D%22.34%22%2F%3E%3Ctext%20x%3D%2284%22%20y%3D%22106%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%20font-family%3D%22Segoe%20UI%2CArial%22%20font-size%3D%2234%22%20font-weight%3D%22800%22%3EHN%3C%2Ftext%3E%3Ctext%20x%3D%22151%22%20y%3D%2279%22%20fill%3D%22%23fff%22%20font-family%3D%22Segoe%20UI%2CArial%22%20font-size%3D%2223%22%20font-weight%3D%22700%22%3EHigh%20Number%3C%2Ftext%3E%3Ctext%20x%3D%22151%22%20y%3D%22111%22%20fill%3D%22%23C9CEDC%22%20font-family%3D%22Segoe%20UI%2CArial%22%20font-size%3D%2215%22%3ENumeric%20resolution%3C%2Ftext%3E%3Cpath%20d%3D%22M151%20137%20H366%22%20stroke%3D%22%235CA8F5%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20opacity%3D%22.9%22%2F%3E%3Cpath%20d%3D%22M151%20154%20H315%22%20stroke%3D%22%238B92A6%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%20opacity%3D%22.45%22%2F%3E%3C%2Fsvg%3E"
-      },
-      "resolutionMechanismId": "APR-HIGH-NUMBER",
-      "oldNode": false,
-      "variations": [
-        ""
-      ],
-      "emotionalSpike": "",
-      "effects": [
-        ""
-      ],
-      "imageScale": 1,
-      "imagePositionX": 0,
-      "imagePositionY": 0
-    },
-    "CHM-TSK-010": {
-      "id": "CHM-TSK-010",
-      "x": 25,
-      "y": 8,
-      "color": "#58C7A6",
-      "primitiveId": "LIB-MPRIM-ACTION",
-      "kind": "mechanic",
-      "mechKind": "action",
-      "title": "BG action",
-      "body": "One atomic physical, cognitive, or social step performed by a player or team.",
-      "refs": {},
-      "category": "action",
-      "estMinutes": 1,
-      "crew": 0,
-      "collapseDepth": 0,
-      "attachedSubnodeIds": [],
-      "advantages": [
-        ""
-      ],
-      "effects": [
-        ""
-      ],
-      "variations": [
-        ""
-      ],
-      "tokenMechanismId": "",
-      "orderMechanismId": "",
-      "specialMechanismId": "",
-      "oldNode": false
-    },
-    "CHM-TSK-011": {
-      "id": "CHM-TSK-011",
-      "x": 88,
-      "y": 407,
-      "color": "#E86464",
-      "primitiveId": "LIB-MSUB-escalatingPressure",
-      "kind": "mechanicSubnode",
-      "subnodeKind": "escalatingPressure",
-      "title": "Escalating Pressure Mod",
-      "body": "Creates growing urgency and difficulty during the task. Pressure can increase through time, physical demand, environmental changes, or other escalating factors.",
-      "icon": "clock",
-      "category": "gameplayModifiers",
-      "fields": {
-        "pressureType": [],
-        "baseDurationMinutes": 1,
-        "escalationTrigger": "",
-        "escalationEffect": "",
-        "canBePaused": false
-      },
-      "attachesTo": [
-        "cooperation",
-        "taskTemplate"
-      ],
-      "w": 293,
-      "h": 289
+    "CHM-TSK-003": {
+      "id": "CHM-TSK-003",
+      "x": 90,
+      "y": 90,
+      "color": "#E0A23C",
+      "kind": "rule",
+      "title": "New rule",
+      "body": ""
     }
   },
-  "taskEdges": [
-    {
-      "from": "TSK-1",
-      "to": "TSK-2",
-      "label": "assembled",
-      "color": null
-    },
-    {
-      "from": "TSK-2",
-      "to": "TSK-3",
-      "label": "key in hand -> decode",
-      "color": null
-    },
-    {
-      "from": "TSK-2",
-      "to": "TSK-4",
-      "label": "or skip straight to exfil",
-      "color": null
-    },
-    {
-      "from": "TSK-3",
-      "to": "TSK-4",
-      "label": "decoded",
-      "color": null
-    }
-  ],
+  "taskEdges": [],
   "taskFrames": {},
   "storyboardNodes": {
     "TSK-1": {
@@ -1738,7 +912,10 @@
       "initials": "DK",
       "role": "Leader",
       "teamId": "T-CINDER",
-      "flags": []
+      "flags": [],
+      "playerTypeIds": [
+        "bartle:killer"
+      ]
     },
     "P-SANITA": {
       "id": "P-SANITA",
@@ -1758,8 +935,9 @@
       "markerType": "number",
       "value": 1,
       "x": 24,
-      "y": 351,
-      "color": "#E8D25C"
+      "y": 353,
+      "color": "#E8D25C",
+      "scale": 0.996
     }
   },
   "masterNumberMarkers": {},
@@ -1799,8 +977,8 @@
             "y": 58
           },
           {
-            "x": 50,
-            "y": 22
+            "x": 52.274205238915606,
+            "y": 32.277001069158445
           },
           {
             "x": 58,
@@ -1886,11 +1064,11 @@
         "id": "tag-dip",
         "type": "problem",
         "label": "Problems get worse",
-        "x": 54,
-        "y": 18,
+        "x": 51.59083054987741,
+        "y": 66.05111029346014,
         "color": "#E86464"
       }
     ]
   },
-  "bundledProjectVersion": 2
+  "bundledProjectVersion": 3
 }

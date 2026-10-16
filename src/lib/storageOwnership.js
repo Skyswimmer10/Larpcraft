@@ -1,4 +1,5 @@
 export const MASTER_LIBRARY_COLLECTIONS = new Set([
+  'mechanicsSources',
   'actionPatternMechanisms',
   'actionProbabilityMechanisms',
   'victoryConditionMechanisms',

@@ -1,0 +1,16 @@
+.master-act-workspace { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+.master-act-split { display:grid; flex:1; min-height:0; overflow:hidden; }
+.act-lane-host { min-width:0; min-height:0; overflow:hidden; }
+.act-lane-host[hidden] { display:none; }
+.act-lane { height:100%; display:flex; flex-direction:column; min-height:0; }
+.act-lane-story { background:#172231; }
+.act-lane-mechanics { background:#231e2c; }
+.act-lane-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 14px; flex-shrink:0; border-bottom:1px solid #ffffff18; }
+.act-lane-story .act-lane-header b { color:#98c6ff; }
+.act-lane-mechanics .act-lane-header b { color:#d4b5ff; }
+.act-crumbs { min-width:0; overflow:auto; white-space:nowrap; }
+.act-lane > .canvas,.act-lane > .empty { flex:1; min-height:0; }
+.act-lane > .toolrow { flex-shrink:0; }
+.act-lane .canvas { background-color:transparent !important; }
+.act-divider { background:#41475a; cursor:row-resize; touch-action:none; }
+.act-divider:hover,.act-divider:focus-visible { background:#9b8be8; outline:none; }

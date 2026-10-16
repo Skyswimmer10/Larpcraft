@@ -56,3 +56,14 @@ implemented. A running local server is required for disk autosave.
 The deployed library includes 44 concepts and all 176 recovered mechanism image entries (175 unique image files). Original image bytes are published under `public/library-images/`; deployed JSON references those assets rather than embedding large base64 strings. Local canonical JSON and recovery archives remain unchanged and excluded from Git and deployment uploads.
 
 Library bundle version 5 and project bundle version 2 publish the current local snapshot. Existing hosted browser edits retain the existing merge protections. Hosted edits still save in that browser; local Vite sessions save in `.larpcraft/`.
+
+## Release snapshot — 16 October 2026
+
+Library bundle version 6 and project bundle version 3 capture the current local
+workspace for publication with the mechanics collection, toolbox, Master Act
+lanes, player types, Game Type, and narrative wizard. All 44 concepts and 176
+mechanism image entries are retained; the original image bytes match the 175
+already published image files. Local canonical files and recovery archives stay
+excluded from Git and deployment uploads. Existing hosted saves retain their
+merge protections, including richer authored graphs. New hosted browser profiles
+start from this release snapshot. Hosted edits still save in that browser.

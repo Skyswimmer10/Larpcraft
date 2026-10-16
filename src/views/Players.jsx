@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { useGame, useDispatch } from '../state/store.jsx';
 import CsvButtons from '../components/CsvButtons.jsx';
 import { CSV_SCHEMAS } from '../data/csvSchemas.js';
+import PlayerTypes from './PlayerTypes.jsx';
+import { PLAYER_TYPES } from '../data/playerTypes.js';
 
 const PROFILE_FIELDS = [
   { key: 'personality', label: 'Personality / social style', placeholder: 'Calm organizer, high-energy explorer, quiet observer, comic relief...' },
@@ -57,8 +59,9 @@ export default function Players({ selection, onSelect }) {
   const players = useMemo(() => Object.values(s.players || {}).sort((a, b) => (s.teams[a.teamId]?.name || '').localeCompare(s.teams[b.teamId]?.name || '') || a.name.localeCompare(b.name)), [s.players, s.teams]);
   const [localId, setLocalId] = useState(players[0]?.id ?? null);
   const [tab, setTab] = useState('profile');
+  const [section, setSection] = useState('players');
   const selectedId = selection?.kind === 'player' && s.players[selection.id] ? selection.id : localId;
-  const player = selectedId ? s.players[selectedId] : players[0];
+  const player = s.players[selectedId] || players[0];
   const team = player ? s.teams[player.teamId] : null;
 
   const pick = (id) => {
@@ -71,6 +74,7 @@ export default function Players({ selection, onSelect }) {
     const firstTeam = Object.keys(s.teams || {})[0] ?? null;
     dispatch({ type: 'ADD_ENTITY', coll: 'players', entity: { ...CSV_SCHEMAS.players.blank(id), teamId: firstTeam } });
     pick(id);
+    setSection('players');
   };
 
   return (
@@ -78,7 +82,7 @@ export default function Players({ selection, onSelect }) {
       <div className="mhead">
         <div>
           <div className="crumb">{s.meta.name} / <b>Players</b></div>
-          <h2>Player Profiles</h2>
+          <h2>{section === 'types' ? 'Player Types' : 'Player Profiles'}</h2>
         </div>
         <div className="right">
           <CsvButtons coll="players" />
@@ -86,7 +90,11 @@ export default function Players({ selection, onSelect }) {
         </div>
       </div>
 
-      <div className="playersplit">
+      <div className="playertabs player-section-tabs" aria-label="Players sections">
+        <button className={section === 'players' ? 'on' : ''} aria-pressed={section === 'players'} onClick={() => setSection('players')}>Player Profiles</button>
+        <button className={section === 'types' ? 'on' : ''} aria-pressed={section === 'types'} onClick={() => setSection('types')}>Player Types</button>
+      </div>
+      {section === 'types' ? <PlayerTypes players={players} player={player} onPick={pick} onUpdate={update} /> : <div className="playersplit">
         <div className="playerlist">
           {players.map((p) => {
             const t = s.teams[p.teamId];
@@ -128,6 +136,7 @@ export default function Players({ selection, onSelect }) {
                 <button className={tab === 'profile' ? 'on' : ''} onClick={() => setTab('profile')}>Profile</button>
                 <button className={tab === 'record' ? 'on' : ''} onClick={() => setTab('record')}>Game Record</button>
               </div>
+              {tab === 'profile' && <div className="player-type-summary"><b>Player types:</b>{PLAYER_TYPES.filter(type => player.playerTypeIds?.includes(type.id)).map(type => <span className="chip" key={type.id}>{type.name} · {type.id.startsWith('bartle:') ? 'Bartle' : 'Play styles'}</span>)}<button className="btn ghost small" onClick={() => setSection('types')}>Choose types</button></div>}
               <div className="playerfields">
                 {(tab === 'profile' ? PROFILE_FIELDS : GAME_RECORD_FIELDS).map((field) => (
                   <Field key={field.key} label={field.label} value={player[field.key]} placeholder={field.placeholder}
@@ -143,7 +152,7 @@ export default function Players({ selection, onSelect }) {
             </div>
           )}
         </div>
-      </div>
+      </div>}
       <div className="statusbar"><span>Use this page for participant understanding; team rosters and kit issuing stay on the Teams page.</span></div>
     </div>
   );

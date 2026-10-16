@@ -3,19 +3,20 @@ import React, { useState } from 'react';
 import { useGame, useLibrary, useDispatch } from '../state/store.jsx';
 import { locateGraph } from '../state/reducer.js';
 import GraphEditor from '../components/GraphEditor.jsx';
-import NodePalette from '../components/NodePalette.jsx';
+import { useMechanicsToolbox } from '../components/MechanicsToolbox.jsx';
+import { visibleCanvasPlacement } from '../components/FlowCanvas.jsx';
+import { mechanicWizardGraph } from '../mechanics/toolbox.js';
+import { libraryWithMechanismDraft } from '../mechanics/collections.js';
 import CsvButtons from '../components/CsvButtons.jsx';
 import NarrativeLibraryBrowser from '../components/NarrativeLibraryBrowser.jsx';
 import { TASK_DETAIL_TYPES } from '../data/seed.js';
 import {
   buildMechanicsLibrarySections,
   buildMechanicsPaletteGroups,
-  filterMechanicsPaletteGroups,
   mechanicsPayloadToNode,
-  MECHANICS_PALETTE_FILTERS,
 } from '../mechanics/palette.js';
 
-const TASK_PALETTE = [{ id: 'task', label: 'Task', color: '#5BC0BE', icon: 'layers', blurb: 'A clean session task. Double-click it to build its details.' }];
+const TASK_PALETTE = [];
 const DETAIL_PALETTE = Object.values(TASK_DETAIL_TYPES);
 
 export default function TasksView({ selection, onSelect }) {
@@ -25,8 +26,6 @@ export default function TasksView({ selection, onSelect }) {
   const lib = useLibrary();
   const dispatch = useDispatch();
   const [openPath, setOpenPath] = useState([]);
-  const [query, setQuery] = useState('');
-  const [paletteFilter, setPaletteFilter] = useState('all');
   const [browsingLibrary, setBrowsingLibrary] = useState(false);
   const inside = openPath.length > 0;
   const scope = inside ? { coll: 'taskNodes', parentPath: openPath } : { coll: 'taskNodes' };
@@ -47,37 +46,43 @@ export default function TasksView({ selection, onSelect }) {
     onSelect(null);
   };
 
-  const addFromPayload = (payload, pos = null) => {
+  const addFromPayload = (payload, pos = null, record = null) => {
     const graph = locateGraph(s, scope);
-    const node = mechanicsPayloadToNode(payload, lib, graph.nodes, pos?.x ?? 90, pos?.y ?? 90, idPrefix);
+    if (payload === 'task') return;
+    const point = pos || visibleCanvasPlacement({ x: 90, y: 90 });
+    const node = mechanicsPayloadToNode(payload, libraryWithMechanismDraft(lib, record), graph.nodes, point.x, point.y, idPrefix);
     if (!node) return;
     dispatch({ type: 'GRAPH_ADD_NODE', scope, node });
     onSelect({ kind: 'graphnode', scope, id: node.id });
   };
 
-  const createNodeFromPalette = (payload, pos, nodes) => mechanicsPayloadToNode(payload, lib, nodes, pos.x, pos.y, idPrefix);
+  const createNodeFromPalette = (payload, pos, nodes) => payload === 'task' ? null : mechanicsPayloadToNode(payload, lib, nodes, pos.x, pos.y, idPrefix);
   const paletteGroups = buildMechanicsPaletteGroups(lib, {
     onAdd: (payload) => addFromPayload(payload),
-    includeTask: !inside,
+    includeTask: false,
     includeDetail: !!inside,
     includeTemplates: !inside,
   });
-  const visiblePaletteGroups = filterMechanicsPaletteGroups(paletteGroups, paletteFilter);
   const mechanicsLibrarySections = buildMechanicsLibrarySections(lib, (payload) => addFromPayload(payload));
+  const toolbox = useMechanicsToolbox({ groups: paletteGroups, lib,
+    onAdd: (payload, record) => addFromPayload(payload, null, record),
+    headerAction: <button className="btn tiny" onClick={() => setBrowsingLibrary(true)}>Browse Library</button>,
+    onCreateWizard: answers => {
+      const graph = locateGraph(s, scope);
+      const additions = mechanicWizardGraph(answers, graph.nodes, visibleCanvasPlacement({ x: 90, y: 90 }, { w: 600, h: 420 }));
+      dispatch({ type: 'BATCH', actions: [
+        ...Object.values(additions.nodes).map(node => ({ type: 'GRAPH_ADD_NODE', scope, node })),
+        ...additions.edges.map(edge => ({ type: 'GRAPH_ADD_EDGE', scope, ...edge })),
+      ] });
+      const node = Object.values(additions.nodes)[0];
+      if (node) onSelect({ kind: 'graphnode', scope, id: node.id });
+    },
+  });
 
   return (
     <div className="main splitmain">
-      <NodePalette
-        title="Mechanics Nodes"
-        subtitle="Click or drag onto the canvas"
-        search={query}
-        onSearch={setQuery}
-        filters={MECHANICS_PALETTE_FILTERS}
-        activeFilter={paletteFilter}
-        onFilter={setPaletteFilter}
-        groups={visiblePaletteGroups}
-        headerAction={<button className="btn tiny" onClick={() => setBrowsingLibrary(true)}>Browse Library</button>}
-      />
+      {toolbox.palette}
+      {toolbox.dialogs}
       <div className="mainpane">
         <div className="mhead">
           <div>
@@ -89,6 +94,7 @@ export default function TasksView({ selection, onSelect }) {
             <h2>{inside ? (openNode?.title || rootTask?.title || 'Mechanics Detail') : workspaceTitle}</h2>
           </div>
           <div className="right">
+            {toolbox.actions}
             <CsvButtons coll="taskNodes" />
             {inside && <button className="btn" onClick={backOneLevel}>{openPath.length > 1 ? 'Back one level' : 'Back to task flow'}</button>}
           </div>
@@ -115,7 +121,7 @@ export default function TasksView({ selection, onSelect }) {
         ) : (
           <>
             <div className="subintro dim">
-              Runtime task view for actual sessions. Drop Task Templates as clean collapsed nodes, then drill in only when detail is needed.
+              Build the backbone, adjust the rules, add equipment, then prepare to run it. Add nodes yourself or use the Mechanics Wizard.
             </div>
             <GraphEditor
               scope={scope}
@@ -135,7 +141,7 @@ export default function TasksView({ selection, onSelect }) {
         <div className="statusbar">
           <span>{inside
             ? 'Build this task with mechanic nodes, subnodes, physical refs and sensors. Back returns to the clean session task view.'
-            : `${workspaceTitle} shows collapsed session tasks by default. Use the sidebar to add tasks, task templates, mechanic nodes, and physical refs.`}</span>
+            : 'Your toolbox shows the categories you choose. Quick Add searches all available nodes.'}</span>
         </div>
         {browsingLibrary && (
           <NarrativeLibraryBrowser

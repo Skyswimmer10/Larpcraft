@@ -73,6 +73,7 @@ export function actionMechanismNodePatch(record) {
     effects: copyMechanismList(record.effects),
     variations: copyMechanismList(record.variations),
     emotionalSpike: record.emotionalSpike ?? '',
+    ...Object.fromEntries(['playerActions', 'gameRules', 'successCondition'].filter(key => record[key] != null).map(key => [key, record[key]])),
     tokenMechanismId: undefined,
     orderMechanismId: undefined,
     specialMechanismId: undefined,

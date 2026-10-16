@@ -1,0 +1,41 @@
+.narrative-wizard { width: min(1120px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 32px)); max-width: none; max-height: none; margin: auto; padding: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--ink); box-shadow: 0 28px 100px #0008; }
+.narrative-wizard::backdrop { background: #080b14b8; }
+.nw-shell { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.nw-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 20px 24px; border-bottom: 1px solid var(--border, #35394a); }
+.nw-header small, .nw-kicker { color: #c8b5ff; }
+.nw-header h2 { margin: 4px 0 0; font-size: 21px; }
+.nw-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); flex: 1; min-height: 0; }
+.nw-sidebar { padding: 24px 18px; overflow: auto; border-right: 1px solid var(--border, #35394a); background: #10131a55; }
+.nw-sidebar p, .nw-sidebar li, .nw-sidebar small { font-size: 12px; line-height: 1.6; color: var(--muted, #a9b0c6); }
+.nw-sidebar ol { padding-left: 20px; }
+.nw-sidebar li { padding: 5px 0; }
+.nw-sidebar .current { color: #d3c5ff; font-weight: 600; }
+.nw-question-nav { display: grid; gap: 5px; margin-top: 12px; }
+.nw-question-nav button { display: flex; text-align: left; gap: 8px; padding: 7px; border: 0; border-radius: 6px; background: transparent; color: var(--muted, #a9b0c6); font: inherit; font-size: 11px; cursor: pointer; }
+.nw-question-nav button.current, .nw-question-nav button:hover { background: #a68aef15; }
+.nw-main { overflow: auto; padding: 28px 32px; min-width: 0; line-height: 1.6; }
+.nw-main h3 { font-size: 22px; line-height: 1.4; margin: 8px 0 20px; }
+.nw-main p { font-size: 14px; }
+.nw-field { display: grid; gap: 8px; margin: 18px 0; font-size: 13px; font-weight: 600; }
+.nw-field .field-input { width: 100%; min-height: 40px; font: inherit; font-weight: 400; padding: 10px 12px; box-sizing: border-box; }
+.nw-field textarea { resize: vertical; line-height: 1.6; }
+.nw-field .nw-answer { min-height: 200px; font-size: 16px; }
+.nw-field small, .nw-help { color: var(--muted, #a9b0c6); font-weight: 400; }
+.nw-help { padding: 12px 14px; border-radius: 8px; background: #a68aef0d; border-left: 2px solid #a68aef77; }
+.nw-filters, .nw-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.nw-source-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.nw-source { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--border, #35394a); border-radius: 10px; background: #11141c66; color: inherit; text-align: left; cursor: pointer; }
+.nw-source:hover { border-color: #a68aef; background: #a68aef0d; }
+.nw-source small { color: #c8b5ff; }
+.nw-source b { font-size: 15px; }
+.nw-source span { font-size: 12px; color: var(--muted, #a9b0c6); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.nw-role { margin: 18px 0; padding: 12px 16px; border: 1px solid var(--border, #35394a); border-radius: 10px; min-width: 0; }
+.nw-role legend { color: #c8b5ff; padding: 0 6px; }
+.nw-role > small, .nw-role > button { display: block; margin-bottom: 8px; }
+.nw-role > small { color: var(--muted, #a9b0c6); }
+.nw-preview { white-space: pre-wrap; overflow-wrap: anywhere; padding: 20px; border: 1px solid var(--border, #35394a); border-radius: 10px; background: #10131a66; font: inherit; font-size: 14px; }
+.nw-footer { display: flex; align-items: center; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--border, #35394a); }
+.nw-footer > span { margin-right: auto; font-size: 11px; color: var(--muted, #a9b0c6); }
+.nw-main:focus { outline: none; }
+.narrative-wizard button:focus-visible, .narrative-wizard input:focus-visible, .narrative-wizard select:focus-visible, .narrative-wizard textarea:focus-visible { outline: 2px solid #c8b5ff; outline-offset: 3px; }
+@media (max-width: 740px) { .nw-body { grid-template-columns: 1fr; } .nw-sidebar { display: none; } .nw-main { padding: 20px; } .nw-header { padding: 14px 20px; } .nw-footer { flex-wrap: wrap; padding: 12px; } .nw-footer > span { display: none; } .nw-source-grid { grid-template-columns: 1fr; } }

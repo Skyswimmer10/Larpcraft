@@ -16,6 +16,8 @@ export default function NodePalette({
   teams = [],
   onLane,
   headerAction,
+  controls,
+  emptyMessage = 'No matching nodes.',
   footer,
 }) {
   const [collapsed, setCollapsed] = React.useState(false);
@@ -79,6 +81,7 @@ export default function NodePalette({
           </button>
         </div>
       </div>
+      {controls}
       {onSearch && (
         <input
           className="field-input nodepal-search"
@@ -150,7 +153,7 @@ export default function NodePalette({
           </section>
         ))}
         {visibleGroups.every((g) => g.items.length === 0) && (
-          <div className="nodepal-empty">No matching nodes.</div>
+          <div className="nodepal-empty">{q ? 'No matching nodes.' : emptyMessage}</div>
         )}
       </div>
       {footer && <div className="nodepal-footer">{footer}</div>}

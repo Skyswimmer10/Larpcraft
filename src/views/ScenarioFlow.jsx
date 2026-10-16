@@ -7,6 +7,7 @@ import StructureThumb from '../components/StructureThumb.jsx';
 import CsvButtons from '../components/CsvButtons.jsx';
 import NodePalette from '../components/NodePalette.jsx';
 import NarrativeLibraryBrowser from '../components/NarrativeLibraryBrowser.jsx';
+import { NarrativeWizardButton } from '../components/NarrativeWizard.jsx';
 import FrameworkPreview from '../components/FrameworkPreview.jsx';
 import { genId } from '../data/csvSchemas.js';
 import {
@@ -138,6 +139,7 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
             <h2>{openTitles[openTitles.length - 1]} · internal structure</h2>
           </div>
           <div className="right">
+            <NarrativeWizardButton gameScope={{ coll: 'nodes', parentPath: openPath }} onSaved={id => onSelect({ kind: 'graphnode', scope: { coll: 'nodes', parentPath: openPath }, id })} />
             <button className="btn" onClick={() => { setOpenPath(openPath.slice(0, -1)); onSelect(null); }}>← Up one level</button>
           </div>
         </div>
@@ -310,7 +312,9 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
         referenceFrameworkIds: JSON.parse(JSON.stringify(template?.referenceFrameworkIds || [])),
         ...(template?.conceptModules ? { conceptModules: JSON.parse(JSON.stringify(template.conceptModules)) } : {}),
         color: null, teamId: null, sets: [],
-        collapsed: true, conceptAnswers: {}, history: [],
+        collapsed: true, conceptAnswers: JSON.parse(JSON.stringify(template?.conceptAnswers || {})), history: [],
+        ...(template?.narrativeWizard ? { narrativeWizard: JSON.parse(JSON.stringify(template.narrativeWizard)) } : {}),
+        ...(template?.conceptQuestions ? { conceptQuestions: JSON.parse(JSON.stringify(template.conceptQuestions)) } : {}),
         sub: JSON.parse(JSON.stringify({
           nodes: {
             ...(template?.nodes || {}),
@@ -566,6 +570,7 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
           <h2>Narrative</h2>
         </div>
         <div className="right">
+          <NarrativeWizardButton onSaved={id => onSelect({ kind: 'node', id })} />
           <AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
             <button className="btn" onClick={() => addFrame()}>Frame</button>
             <button className="btn" onClick={() => addCircle()}>Circle</button>

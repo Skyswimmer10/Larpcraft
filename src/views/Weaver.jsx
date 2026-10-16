@@ -1,5 +1,7 @@
 import { useAppearance } from '../components/AppearanceContext.jsx';
 import AnnotationTools from '../components/AnnotationTools.jsx';
+import MasterAct from './MasterAct.jsx';
+import { prepareMasterAct } from '../lib/masterAct.js';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useGame, useDispatch, useLibrary, useLibraryDispatch } from '../state/store.jsx';
 import { ENTITY_COLORS } from '../components/bits.jsx';
@@ -29,6 +31,7 @@ const normalizeTimelineStep = (step) => (TIMELINE_STEPS.includes(step) ? step : 
 export default function Weaver({ selection, onSelect = () => {} }) {
   const { refreshed } = useAppearance();
   const [panelMode, setPanelMode] = useState("split");
+  const [openAct, setOpenAct] = useState(null);
   const s = useGame();
   const dispatch = useDispatch();
   const lib = useLibrary();
@@ -61,7 +64,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
     ? (t.marginAfterMin ?? defaultMargin(effDur(t)))
     : (isLastTaskItem(t) ? 0 : (t.marginAfterMin ?? defaultMargin(effDur(t))));
   const itemColor = (t) => t.color || (t.kind === 'travel' ? TRAVEL_COLOR : TASK_COLOR);
-  const itemKindLabel = (t) => t.kind === 'travel' ? 'Travel Time' : 'Task';
+  const itemKindLabel = (t) => t.kind === 'travel' ? 'Travel Time' : 'Site time';
   const masterSelId = selection?.kind === 'graphnode' && selection.scope?.coll === 'masterNodes' ? selection.id : null;
   const masterFrameSelId = selection?.kind === 'graphframe' && selection.scope?.coll === 'masterNodes' ? selection.id : null;
   const taskSelId = selection?.kind === 'graphnode' && selection.scope?.coll === 'storyboardNodes' ? selection.id : null;
@@ -169,7 +172,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
     const last = timelineItems[timelineItems.length - 1];
     const startMin = last ? Math.min(win.endMin - 15, (last.startMin ?? win.startMin) + (last.durationMin ?? 30) + 10) : win.startMin + 30;
     const node = {
-      id, kind: 'task', title: 'Storyboard task',
+      id, kind: 'task', title: 'Site time',
       x: 80 + Object.keys(s.storyboardNodes || {}).length * 80, y: 220,
       startMin, durationMin: 30, marginBeforeMin: 10, marginAfterMin: 10,
       body: 'Stable master-story activity. This is not connected to the mechanics schematic graph.',
@@ -270,6 +273,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
   for (let m = Math.ceil(win.startMin / timelineStep) * timelineStep; m <= win.endMin; m += timelineStep) ticks.push(m);
   const rowH = 54; const headH = 30;
 
+  if (openAct && masterNodes[openAct]?.actLanes) return <MasterAct key={openAct} actId={openAct} selection={selection} onSelect={onSelect} onClose={() => { setOpenAct(null); onSelect(null); }} />;
   return (
     <div className="main masterstory">
       <div className="mhead">
@@ -278,7 +282,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
           <h2>Master Story of {s.meta.name}</h2>
         </div>
         <div className="right"><span className="dim" style={{ fontSize: 12 }}>
-          {armed ? 'Now click a task on the timeline to link it; click the act again to cancel' : 'Click an act, then a task, to align them'}
+          {armed ? 'Now click a site time on the timeline to link it; click the act again to cancel' : 'Click an act, then a site time, to align them'}
         </span></div>
       </div>
 
@@ -317,6 +321,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
             </div>
           </div>
           <FlowCanvas
+            onOpenNode={id => { dispatch({ type: 'GRAPH_UPDATE_NODE', scope: { coll: 'masterNodes' }, id, patch: prepareMasterAct(masterNodes[id]) }); setOpenAct(id); setArmed(null); onSelect(null); }}
             nodes={masterNodes} edges={masterEdges} selId={armed || masterSelId} colorOf={(n) => n.color || MASTER_COLOR}
             onSelect={(id) => { setArmed((cur) => (cur === id ? null : id)); onSelect({ kind: 'graphnode', scope: { coll: 'masterNodes' }, id }); }}
             onMove={(id, x, y) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope: { coll: 'masterNodes' }, id, patch: { x, y } })}
@@ -414,7 +419,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
                 <span>{timelineStep < 60 ? `${timelineStep} min` : `${timelineStep / 60} hr`}/section</span>
                 <button className="btn ghost small" onClick={zoomIn} disabled={stepIndex === 0}>+</button>
               </div>
-              <button className="btn ghost small" onClick={addTask}>+ Task</button>
+              <button className="btn ghost small" onClick={addTask}>+ Site time</button>
               <button className="btn ghost small" onClick={addTravel}>+ Travel time</button>
               <button className="btn ghost small" onClick={editWindow}>Edit window</button>
             </div>
@@ -462,7 +467,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
                   </React.Fragment>
                 );
               })}
-              {timelineItems.length === 0 && <div className="empty" style={{ padding: 24 }}>No storyboard tasks yet - add stable tasks or travel time here.</div>}
+              {timelineItems.length === 0 && <div className="empty" style={{ padding: 24 }}>No site times yet — add site time or travel time here.</div>}
             </div>
           </div>
         </div>
@@ -500,7 +505,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
       </section>
 
       <div className="statusbar">
-        <span><b>{aligns.length}</b> alignments | click a task or travel bar to inspect | drag a bar to reschedule | drag bar edges to resize | pale bands show estimated minimum/maximum timing.</span>
+        <span><b>{aligns.length}</b> alignments | click a site time or travel bar to inspect | drag a bar to reschedule | drag bar edges to resize | pale bands show estimated minimum/maximum timing.</span>
       </div>
     </div>
   );

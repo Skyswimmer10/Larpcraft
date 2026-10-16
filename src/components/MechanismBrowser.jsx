@@ -1,8 +1,13 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PrimIcon } from './bits.jsx';
 import MechanismPreviewImage from './MechanismPreviewImage.jsx';
 import { ACTION_PATTERN_SYSTEMS } from '../data/actionMechanics.js';
+import { useLibraryDispatch } from '../state/store.jsx';
+import { mechanismCollectionForKind } from '../data/mechanismCatalog.js';
+import { favoritesFirst } from '../mechanics/collections.js';
+import { useCollectionColumns, useCollectionModal, useColumnPreference } from './CollectionLayout.jsx';
+import './MechanicsCollection.css';
 
 export const MECHANISM_BROWSER_FILTERS = [
   { id: 'token', label: 'Token Systems', group: 'Action Type Pattern' },
@@ -25,16 +30,18 @@ const recordFilter = (record) => record.kind === 'pattern' ? record.system : rec
 const recordGroup = (record) => record.kind === 'pattern'
   ? ACTION_PATTERN_SYSTEMS[record.system]?.label || record.category
   : KIND_LABELS[record.kind] || record.category;
-const cloneRecord = (record) => record ? { ...record, image: record.image ? { ...record.image } : null } : null;
+const cloneRecord = (record) => { if (!record) return null; const { favorite, ...editable } = record; return { ...editable, image: record.image ? { ...record.image } : null }; };
 const clampImagePosition = (value) => Math.min(100, Math.max(-100, Number(value) || 0));
 const imageTransform = (record) => `translate(${clampImagePosition(record?.imagePositionX)}%, ${clampImagePosition(record?.imagePositionY)}%) scale(${Number(record?.imageScale) || 1})`;
 
-const MechanismTile = memo(function MechanismTile({ record, selected, focused, onFocus }) {
+const MechanismTile = memo(function MechanismTile({ record, selected, focused, onFocus, onFavorite }) {
   return (
+    <div className="mechanism-tile-wrap">
                   <button
                     className={`mechanism-tile${selected ? ' selected' : ''}${focused ? ' focused' : ''}`}
                     style={{ '--accent': record.color || '#8B7BF5' }}
                     onClick={() => onFocus(record)}
+                    aria-label={`Inspect ${record.label}`}
                   >
                     <span className={`mechanism-tile-image${record.image?.dataUrl ? ' has-image' : ''}`}>
                       {record.image?.dataUrl
@@ -50,6 +57,8 @@ const MechanismTile = memo(function MechanismTile({ record, selected, focused, o
                       <i>{record.custom ? 'Custom' : 'Built-in'}</i>
                     </span>
                   </button>
+      <button className="collection-star" aria-pressed={Boolean(record.favorite)} aria-label={`${record.favorite ? 'Remove' : 'Add'} ${record.label} ${record.favorite ? 'from' : 'to'} favorites`} onClick={() => onFavorite(record)}><PrimIcon icon="star" size={17} color="currentColor" /></button>
+    </div>
   );
 });
 
@@ -59,8 +68,8 @@ const equalValue = (a, b) => a === b || (
   && Object.keys(a).every((key) => a[key] === b[key])
 );
 const equalRecord = (a, b) => a === b || (
-  a && b && Object.keys(a).length === Object.keys(b).length
-  && Object.keys(a).every((key) => equalValue(a[key], b[key]))
+  a && b && Object.keys(a).filter(key => key !== 'favorite').length === Object.keys(b).filter(key => key !== 'favorite').length
+  && Object.keys(a).filter(key => key !== 'favorite').every((key) => equalValue(a[key], b[key]))
 );
 
 function RepeatableMechanismField({ label, values, onChange }) {
@@ -83,6 +92,10 @@ function RepeatableMechanismField({ label, values, onChange }) {
 }
 
 export default function MechanismBrowser({
+  embedded = false,
+  columns: suppliedColumns,
+  guardRef,
+  insertion = false,
   initialFilter,
   patternMechanisms = [],
   probabilityMechanisms = [],
@@ -108,10 +121,17 @@ export default function MechanismBrowser({
   selectedCardMechanism = '',
   allowedKind,
   selectedMechanismId = '',
+  appliedDraft = null,
+  saveTarget = 'game',
   onPick,
   onSave,
   onClose,
 }) {
+  const libDispatch = useLibraryDispatch();
+  const modalRef = useRef(null);
+  const gridRef = useRef(null);
+  const [columnPreference, setColumnPreference] = useColumnPreference();
+  const onFavorite = useCallback(record => libDispatch({ type: 'UPDATE_ENTITY', coll: mechanismCollectionForKind(record.kind), id: record.id, patch: { favorite: !record.favorite } }), [libDispatch]);
   const records = useMemo(() => [
     ...patternMechanisms.map((record) => ({ ...record, kind: 'pattern', category: record.category || ACTION_PATTERN_SYSTEMS[record.system]?.label || 'Action Type Pattern' })),
     ...probabilityMechanisms.map((record) => ({ ...record, kind: 'probability' })),
@@ -144,7 +164,7 @@ export default function MechanismBrowser({
     : records.find((record) => record.kind === allowedKind && (
       record.id === selectedByKind[allowedKind] || record.label === selectedByKind[allowedKind]
     ));
-  const firstInitial = initialSelected || records.find((record) => recordFilter(record) === initialFilter) || null;
+  const firstInitial = appliedDraft || initialSelected || records.find((record) => recordFilter(record) === initialFilter) || records[0] || null;
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('name');
   const [visible, setVisible] = useState(() => Object.fromEntries(MECHANISM_BROWSER_FILTERS.map((filter) => [filter.id, initialFilter === 'all' || filter.id === initialFilter])));
@@ -158,6 +178,8 @@ export default function MechanismBrowser({
     .filter((record) => visible[recordFilter(record)])
     .filter((record) => !q || `${record.label} ${record.description} ${record.category}`.toLowerCase().includes(q))
     .sort((a, b) => {
+      const priority = favoritesFirst(a, b);
+      if (priority) return priority;
       if (sort === 'category') return String(a.category).localeCompare(String(b.category)) || a.label.localeCompare(b.label);
       if (sort === 'custom') return Number(!!a.custom) - Number(!!b.custom) || a.label.localeCompare(b.label);
       return a.label.localeCompare(b.label);
@@ -165,22 +187,26 @@ export default function MechanismBrowser({
   const selected = new Set([selectedMechanismId, ...selectedPatternIds, ...Object.values(selectedByKind)].filter(Boolean));
   const compatible = !!draft && (allowedKind === 'all' || draft.kind === allowedKind);
   const stored = records.find((record) => record.id === draft?.id);
-  const dirty = !!draft && !equalRecord(draft, stored);
+  const dirty = !!draft && !equalRecord(draft, appliedDraft?.id === draft.id ? appliedDraft : stored);
 
-  useEffect(() => {
-    const updated = records.find((record) => record.id === focusedId);
-    if (updated) setDraft(cloneRecord(updated));
-  }, [focusedId, records]);
+  const canLeaveDraft = () => !dirty || window.confirm('Discard the changes in this mechanism?');
+  const close = () => { if (canLeaveDraft()) onClose(); };
+  if (guardRef) guardRef.current = () => { if (!canLeaveDraft()) return false; if (dirty) setDraft(cloneRecord(stored)); return true; };
+  const gridColumns = useCollectionColumns(gridRef, suppliedColumns || columnPreference, shown.length > 0);
+  useCollectionModal(modalRef, close, !embedded);
 
   const toggle = (id) => setVisible((current) => ({ ...current, [id]: !current[id] }));
   const allVisible = MECHANISM_BROWSER_FILTERS.every((filter) => visible[filter.id]);
   const toggleAll = () => setVisible(Object.fromEntries(
     MECHANISM_BROWSER_FILTERS.map((filter) => [filter.id, !allVisible]),
   ));
-  const focus = useCallback((record) => {
+  const focusHandler = useRef(null);
+  focusHandler.current = (record) => {
+    if (focusedId === record.id || !canLeaveDraft()) return;
     setFocusedId(record.id);
-    setDraft(cloneRecord(record));
-  }, []);
+    setDraft(cloneRecord(appliedDraft?.id === record.id ? appliedDraft : record));
+  };
+  const focus = useCallback(record => focusHandler.current(record), []);
   const updateDraft = (patch) => setDraft((current) => ({ ...current, ...patch }));
   const uploadImage = (file) => {
     if (!file) return;
@@ -230,16 +256,14 @@ export default function MechanismBrowser({
     imageDrag.current = null;
   };
 
-  return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal mechanism-browser" onClick={(event) => event.stopPropagation()}>
-        <div className="modalhead mechanism-browser-head">
+  const content = <>
+        {!embedded && <div className="modalhead mechanism-browser-head">
           <div>
             <b>Mechanism Browser</b>
-            <small>Browse in the middle, edit the selected library record on the right, then use it on the current node.</small>
+            <small>{saveTarget === 'game' ? 'Save to game changes this game only. Save to library updates this game and the reusable library entry.' : 'Edit this template here, or update the reusable mechanism entry as well.'}</small>
           </div>
-          <button className="x big" onClick={onClose} aria-label="Close">×</button>
-        </div>
+          <button className="x big" onClick={close} aria-label="Close">×</button>
+        </div>}
         <div className="mechanism-browser-layout">
           <aside className="mechanism-browser-filters">
             <b>Show / Hide</b>
@@ -261,7 +285,7 @@ export default function MechanismBrowser({
           </aside>
           <main className="mechanism-browser-main">
             <div className="mechanism-browser-toolbar">
-              <input className="search" autoFocus placeholder="Search mechanisms..." value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input className="search" autoFocus aria-label="Search board game mechanisms" placeholder="Search mechanisms..." value={query} onChange={(event) => setQuery(event.target.value)} />
               <label>
                 <span>Sort</span>
                 <select className="field-input" value={sort} onChange={(event) => setSort(event.target.value)}>
@@ -270,13 +294,15 @@ export default function MechanismBrowser({
                   <option value="custom">Built-in / Custom</option>
                 </select>
               </label>
+              {!embedded && <label><span>Columns</span><select className="field-input" aria-label="Mechanism columns" value={columnPreference} onChange={event => setColumnPreference(event.target.value)}><option value={4}>4 columns</option><option value={5}>5 columns</option></select></label>}
             </div>
+            <div className="collection-order-note"><PrimIcon icon="star" color="currentColor" size={13} />Favorites first<span>{shown.length} mechanisms · {gridColumns} columns</span></div>
             {shown.length > 0 ? (
-              <div className="mechanism-browser-grid">
+              <div className="mechanism-browser-grid" ref={gridRef} style={{ '--collection-columns': gridColumns }}>
                 {shown.map((record) => (
                   <MechanismTile key={record.id} record={record}
                     selected={selected.has(record.id) || selected.has(record.label)}
-                    focused={focusedId === record.id} onFocus={focus} />
+                    focused={focusedId === record.id} onFocus={focus} onFavorite={onFavorite} />
                 ))}
               </div>
             ) : (
@@ -326,6 +352,9 @@ export default function MechanismBrowser({
                 )}
                 <label className="mechanism-editor-field"><span>Name</span><input className="field-input" value={draft.label || ''} onChange={(event) => updateDraft({ label: event.target.value })} /></label>
                 <label className="mechanism-editor-field"><span>Description</span><textarea className="field-input" value={draft.description || ''} onChange={(event) => updateDraft({ description: event.target.value })} /></label>
+                <label className="mechanism-editor-field"><span>What do players do?</span><textarea className="field-input" value={draft.playerActions || ''} onChange={event => updateDraft({ playerActions: event.target.value })} /></label>
+                <label className="mechanism-editor-field"><span>What are the rules?</span><textarea className="field-input" value={draft.gameRules || ''} onChange={event => updateDraft({ gameRules: event.target.value })} /></label>
+                <label className="mechanism-editor-field"><span>How do we know they succeeded?</span><textarea className="field-input" value={draft.successCondition || ''} onChange={event => updateDraft({ successCondition: event.target.value })} /></label>
                 {draft.kind === 'pattern' ? (
                   <>
                     <label className="mechanism-editor-field"><span>System</span><input className="field-input" value={ACTION_PATTERN_SYSTEMS[draft.system]?.label || draft.system} readOnly /></label>
@@ -348,17 +377,14 @@ export default function MechanismBrowser({
                   </>
                 )}
                 <div className="mechanism-editor-actions">
-                  <button className="btn" disabled={!dirty} onClick={() => onSave?.(draft)}>Save Changes</button>
-                  <button className="btn primary" disabled={!compatible || dirty}
-                    title={!compatible ? 'This record can be edited here but cannot be assigned to the current node type.' : dirty ? 'Save your changes before using this mechanism.' : ''}
-                    onClick={() => onPick(draft)}>Use Mechanism</button>
+                  <button className="btn primary" disabled={!compatible} onClick={() => onPick(cloneRecord(draft))}>{insertion ? 'Add to canvas' : saveTarget === 'game' ? 'Save to game' : 'Save to this template'}</button>
+                  <button className="btn" disabled={!compatible || !onSave} onClick={() => { onSave(cloneRecord(draft)); onPick(cloneRecord(draft)); }}>Save to library</button>
                 </div>
               </>
             ) : <div className="mechanism-browser-empty">Select a tile to inspect and edit it.</div>}
           </aside>
         </div>
-      </div>
-    </div>,
-    document.body,
-  );
+  </>;
+  if (embedded) return content;
+  return createPortal(<div className="modal-backdrop" onClick={close}><div ref={modalRef} className="modal mechanism-browser fullscreen-browser" role="dialog" aria-modal="true" aria-label="Mechanism Browser" onClick={event => event.stopPropagation()}>{content}</div></div>, document.body);
 }

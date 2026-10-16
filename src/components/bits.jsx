@@ -45,6 +45,8 @@ export function SectionLabel({ children }) {
 
 // Designated icons for Narrative Primitives.
 const PRIM_PATHS = {
+  star: <path d="m12 3 2.8 5.7 6.3.9-4.55 4.45 1.07 6.28L12 17.36l-5.62 2.97 1.07-6.28L2.9 9.6l6.3-.9L12 3z" />,
+  search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="M16 16l5 5" /></>,
   wrench: <path d="M14 4a5 5 0 00-5 7L3.5 16.5a2.8 2.8 0 004 4L13 15a5 5 0 007-5l-3 3-4-4 3-3z" />,
   wrenches: <>{[0, 11].map(x => <g key={x} transform={`translate(${x} 0)`}><path d="M3 3v5h4V3a4 4 0 012 7l-2 1v8a2 2 0 01-4 0v-8l-2-1a4 4 0 012-7z" /></g>)}</>,
   workflow: <><rect x="3" y="3" width="7" height="6" rx="1.5" /><rect x="14" y="15" width="7" height="6" rx="1.5" /><path d="M6.5 9v9H14M11 15l3 3-3 3" /></>,

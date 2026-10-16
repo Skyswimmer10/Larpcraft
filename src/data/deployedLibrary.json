@@ -283,6 +283,48 @@
   },
   "narrative": {},
   "mechPrimitives": {
+    "LIB-MPRIM-GAME-TYPE": {
+      "id": "LIB-MPRIM-GAME-TYPE",
+      "name": "Game Type",
+      "mechKind": "gameType",
+      "category": "action",
+      "baseKind": "mechanic",
+      "color": "#65D6D0",
+      "icon": "users",
+      "defaultBody": "Who plays, how they work together, and what happens between tries.",
+      "gameType": {
+        "scope": "activity"
+      },
+      "w": 290,
+      "inputs": [
+        "in"
+      ],
+      "outputs": [
+        "out"
+      ],
+      "refs": {},
+      "collapseDepth": 0,
+      "oldNode": false
+    },
+    "LIB-MPRIM-GOAL": {
+      "id": "LIB-MPRIM-GOAL",
+      "name": "Goal",
+      "mechKind": "goal",
+      "category": "action",
+      "baseKind": "mechanic",
+      "color": "#E8D25C",
+      "icon": "target",
+      "defaultBody": "Describe what the player is going to achieve.",
+      "inputs": [
+        "in"
+      ],
+      "outputs": [
+        "achieved"
+      ],
+      "refs": {},
+      "collapseDepth": 0,
+      "oldNode": false
+    },
     "LIB-MPRIM-TASK-TEMPLATE": {
       "id": "LIB-MPRIM-TASK-TEMPLATE",
       "name": "Task Template",
@@ -425,7 +467,8 @@
       "frequencyTimePeriod": "1 minute",
       "cooldownEnabled": false,
       "cooldownDuration": "30 seconds",
-      "oldNode": false
+      "oldNode": false,
+      "firingCondition": ""
     },
     "LIB-MPRIM-ACTUATOR-NODE": {
       "id": "LIB-MPRIM-ACTUATOR-NODE",
@@ -458,11 +501,12 @@
       "frequencyTimePeriod": "1 minute",
       "cooldownEnabled": false,
       "cooldownDuration": "30 seconds",
-      "oldNode": false
+      "oldNode": false,
+      "outputBehaviour": ""
     },
     "LIB-MPRIM-ACTION": {
       "id": "LIB-MPRIM-ACTION",
-      "name": "BG action",
+      "name": "BG Mechanics",
       "mechKind": "action",
       "category": "action",
       "baseKind": "mechanic",
@@ -496,7 +540,7 @@
     },
     "LIB-MPRIM-PLAYER-INSTRUCTION": {
       "id": "LIB-MPRIM-PLAYER-INSTRUCTION",
-      "name": "Player-Facing Instruction",
+      "name": "Instructions for players",
       "mechKind": "playerFacingInstruction",
       "category": "supporting",
       "baseKind": "mechanic",
@@ -614,7 +658,7 @@
     "LIB-MSUB-failSafeScaffolding": {
       "id": "LIB-MSUB-failSafeScaffolding",
       "kind": "failSafeScaffolding",
-      "name": "Fail-Safe + Scaffolding Mod",
+      "name": "Help when players get stuck",
       "purpose": "Provides structured ways to recover from failure or near-failure. Prevents players from feeling like total failures when they were close to succeeding.",
       "color": "#E8D25C",
       "icon": "layers",
@@ -642,7 +686,7 @@
     "LIB-MSUB-escalatingPressure": {
       "id": "LIB-MSUB-escalatingPressure",
       "kind": "escalatingPressure",
-      "name": "Escalating Pressure Mod",
+      "name": "Increasing pressure",
       "purpose": "Creates growing urgency and difficulty during the task. Pressure can increase through time, physical demand, environmental changes, or other escalating factors.",
       "color": "#E86464",
       "icon": "clock",
@@ -811,7 +855,7 @@
       "id": "LIB-MSUB-frequencyControl",
       "kind": "frequencyControl",
       "name": "Frequency Control",
-      "purpose": "Deprecated. Frequency limiting now lives inside Sensor and Actuator nodes.",
+      "purpose": "Deprecated. Limit how often this happens now lives inside Sensor and Actuator nodes.",
       "color": "#E8D25C",
       "icon": "clock",
       "category": "gameplayModifiers",
@@ -4101,7 +4145,9 @@
                 "zoneReference": "Select GPS zone / geofence record",
                 "inputRequired": "Shell tracker enters the configured GPS zone.",
                 "triggerCondition": "Shell remains inside the configured GPS zone. No extra costume-state condition is required.",
-                "nodeColor": "#3EC6D6"
+                "nodeColor": "#3EC6D6",
+                "firingCondition": "Shell tracker enters the configured GPS zone.\nShell remains inside the configured GPS zone. No extra costume-state condition is required.",
+                "ioNotesMigrated": true
               },
               "D8": {
                 "id": "D8",
@@ -4186,7 +4232,23 @@
                 "outputIntensity": "Speaker volume set for the play area.",
                 "outputRhythm": "Single MP3 playback. No random voice categories or narrative line selection.",
                 "resetBehavior": "Ready for the next trigger after the Frequency Control cooldown/reset rule.",
-                "nodeColor": "#5CA8F5"
+                "nodeColor": "#5CA8F5",
+                "outputBehaviour": "Speaker volume set for the play area.\nSingle MP3 playback. No random voice categories or narrative line selection.",
+                "ioNotesMigrated": true
+              },
+              "D11-IO-NOTE": {
+                "id": "D11-IO-NOTE",
+                "kind": "mechanicSubnode",
+                "subnodeKind": "facilitatorNote",
+                "title": "Equipment fallback and reset",
+                "fields": {
+                  "facilitatorGuidance": "Reset: Ready for the next trigger after the Frequency Control cooldown/reset rule."
+                },
+                "ioNodeIds": [
+                  "D11"
+                ],
+                "x": 2140,
+                "y": 250
               }
             },
             "edges": [
@@ -4243,6 +4305,11 @@
                 "to": "D11",
                 "label": "play MP3",
                 "color": null
+              },
+              {
+                "from": "D11-IO-NOTE",
+                "to": "D11",
+                "label": "operational note"
               }
             ],
             "frames": {
@@ -4386,7 +4453,9 @@
           "frequencyTriggerCount": 1,
           "frequencyTimePeriod": "1 minute",
           "cooldownEnabled": false,
-          "cooldownDuration": "30 seconds"
+          "cooldownDuration": "30 seconds",
+          "firingCondition": "All switch inputs active at the same time.",
+          "ioNotesMigrated": true
         },
         "S4": {
           "id": "S4",
@@ -4410,7 +4479,9 @@
           "frequencyTriggerCount": 1,
           "frequencyTimePeriod": "1 minute",
           "cooldownEnabled": false,
-          "cooldownDuration": "30 seconds"
+          "cooldownDuration": "30 seconds",
+          "outputBehaviour": "",
+          "ioNotesMigrated": true
         }
       },
       "edges": [
@@ -19017,7 +19088,7 @@
       "subnodes": {}
     }
   },
-  "bundledLibraryVersion": 5,
+  "bundledLibraryVersion": 6,
   "mechanicSequenceModes": {
     "SQM-CUSTOM": {
       "id": "SQM-CUSTOM",
@@ -19124,7 +19195,7 @@
       "kind": "pattern",
       "system": "token",
       "label": "Action / Event",
-      "description": "A player chooses between using an action resource and resolving a special event.",
+      "description": "On their turn, the player plays a card that shows Action Points and an Event. They must \nchoose to either use the Action Points or perform the Event. If they choose to use the Action \nPoints, the Event may be performed by another player.",
       "category": "Action Token Systems",
       "color": "#E8D25C",
       "icon": "pin",
@@ -23461,5 +23532,6 @@
       },
       "custom": false
     }
-  }
+  },
+  "mechanicsSources": {}
 }

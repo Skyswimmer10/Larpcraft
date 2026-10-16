@@ -1,0 +1,40 @@
+.mechanics-toolbox-controls{padding:10px 12px 0}
+.mechanics-work-areas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.mechanics-work-areas .btn{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0}
+.mechanics-tools-hint{font-size:12px;line-height:1.5;margin:10px 0}
+.mechanics-toolbox-footer{display:flex;flex-direction:column;align-items:flex-start;gap:8px;font-size:12px}
+.mechanics-toolbox-extras{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:4px}
+.mechanics-toolbox-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mechanics-toolbox-actions .btn{display:inline-flex;align-items:center;gap:7px}
+.mechanics-toolbox-actions kbd{font:inherit;font-size:10px;opacity:.8;border:1px solid currentColor;border-radius:3px;padding:1px 3px}
+.mechanics-tools-dialog{color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;width:min(680px,calc(100vw - 32px));max-height:calc(100vh - 48px);overflow:auto;box-shadow:0 24px 80px #0008}
+.mechanics-tools-dialog::backdrop{background:#080a12b8}
+.mechanics-tools-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
+.mechanics-tools-dialog h2{font-size:19px;margin:0}
+.mechanics-tools-dialog h3{font-size:13px;margin:0 0 9px;color:var(--ink)}
+.mechanics-tools-dialog .field-input{width:100%;box-sizing:border-box}
+.mechanics-tools-dialog-foot{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;margin-top:18px}
+.mechanics-category-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}
+.mechanics-category-grid section{padding:12px;background:var(--ground);border:1px solid var(--line-soft);border-radius:8px;min-width:0}
+.mechanics-category-check{display:flex;align-items:center;gap:9px;padding:8px 0;font-size:13px;cursor:pointer}
+.mechanics-category-check span{flex:1;overflow-wrap:anywhere}
+.mechanics-category-check small{color:var(--muted)}
+.mechanics-category-check input{accent-color:var(--brand);flex:none;width:16px;height:16px}
+.mechanics-search-results{display:flex;flex-direction:column;gap:5px;max-height:48vh;overflow:auto}
+.mechanics-search-result{display:flex;align-items:center;gap:12px;text-align:left;background:var(--ground);color:var(--ink);border:1px solid var(--line-soft);border-radius:7px;padding:12px;cursor:pointer;flex:none}
+.mechanics-search-result.active,.mechanics-search-result:hover{background:var(--raised);border-color:var(--brand)}
+.mechanics-search-result>span:first-of-type{flex:1;min-width:0;overflow-wrap:anywhere}
+.mechanics-search-result b,.mechanics-search-result small,.mechanics-search-result>span>span{display:block}
+.mechanics-search-result small{font-size:11px;color:var(--muted);margin-top:3px}
+.mechanics-search-result>span>span{font-size:12px;color:var(--muted);margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mechanics-wizard-steps{display:flex;gap:12px;list-style:none;margin:0 0 22px;padding:0;flex-wrap:wrap}
+.mechanics-wizard-steps li{display:flex;gap:5px;align-items:center;color:var(--muted);font-size:12px}
+.mechanics-wizard-steps li[aria-current]{color:var(--ink)}
+.mechanics-wizard-steps li span{display:grid;place-items:center;width:24px;height:24px;background:var(--raised);border-radius:50%}
+.mechanics-wizard-steps li[aria-current] span{background:var(--brand);color:var(--ground)}
+.mechanics-wizard-question{display:flex;flex-direction:column;gap:12px;font-size:15px}
+.mechanics-wizard-question textarea{font-size:14px;line-height:1.6;resize:vertical;min-height:120px}
+.act-mechanics-workspace{display:flex;flex:1;min-height:0;min-width:0;overflow:hidden}
+.act-graph-editor{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
+.act-graph-editor>.canvas,.act-graph-editor>.emptyview{flex:1;min-height:0}
+@media(max-width:560px){.mechanics-category-grid{grid-template-columns:1fr}.mechanics-tools-dialog{padding:14px}.mechanics-toolbox-actions kbd{display:none}}

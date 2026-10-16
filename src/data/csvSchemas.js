@@ -144,19 +144,20 @@ export const CSV_SCHEMAS = {
 
   players: {
     filename: 'players.csv',
-    headers: ['id', 'name', 'nickname', 'initials', 'role', 'teamId', 'teamName', 'flags', 'personality', 'experience', 'strengths', 'weaknesses', 'motivation', 'communicationStyle', 'preferredRole', 'comfortNotes', 'safetyNotes', 'observerNotes', 'previousGames', 'totalPoints', 'stagePoints', 'achievements', 'accomplishments', 'performanceNotes', 'stageHistory', 'gmRewards'],
+    headers: ['id', 'name', 'nickname', 'initials', 'role', 'teamId', 'teamName', 'flags', 'personality', 'experience', 'strengths', 'weaknesses', 'motivation', 'communicationStyle', 'preferredRole', 'comfortNotes', 'safetyNotes', 'observerNotes', 'previousGames', 'totalPoints', 'stagePoints', 'achievements', 'accomplishments', 'performanceNotes', 'stageHistory', 'gmRewards', 'playerTypeIds'],
     newId: (s) => genId(s.players, 'P-N-'),
     blank: (id) => ({
       id, name: 'New player', nickname: '', initials: 'NP', role: 'Player', teamId: null, flags: [], image: null,
       personality: '', experience: '', strengths: '', weaknesses: '', motivation: '',
       communicationStyle: '', preferredRole: '', comfortNotes: '', safetyNotes: '', observerNotes: '',
       previousGames: '', totalPoints: 0, stagePoints: '', achievements: '', accomplishments: '',
-      performanceNotes: '', stageHistory: '', gmRewards: '',
+      performanceNotes: '', stageHistory: '', gmRewards: '', playerTypeIds: [],
     }),
     toRows: (s) => Object.values(s.players).map((p) => ({
       ...p,
       teamName: p.teamId ? (s.teams?.[p.teamId]?.name || p.teamId) : '',
       flags: p.flags.join(';'),
+      playerTypeIds: (p.playerTypeIds || []).join(';'),
     })),
     fromRow: (row, s, warn) => {
       if (!row.teamId || !s.teams[row.teamId]) {
@@ -190,6 +191,7 @@ export const CSV_SCHEMAS = {
         performanceNotes: row.performanceNotes ?? '',
         stageHistory: row.stageHistory ?? '',
         gmRewards: row.gmRewards ?? '',
+        playerTypeIds: row.playerTypeIds == null ? (s.players?.[row.id]?.playerTypeIds || []) : list(row.playerTypeIds),
       };
     },
   },

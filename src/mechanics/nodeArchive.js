@@ -1,5 +1,7 @@
 export const CURRENT_MECHANIC_PRIMITIVE_KINDS = new Set([
   'action',
+  'goal',
+  'gameType',
   'playerFacingInstruction',
   'sensorNode',
   'actuatorNode',
@@ -16,7 +18,6 @@ export const CURRENT_MECHANIC_SUBNODE_KINDS = new Set([
   'escalatingPressure',
   'teamDiscussionPrompt',
   'value',
-  'actionTypePattern',
   'facilitatorNote',
   'readinessStatus',
   'team',
@@ -29,6 +30,7 @@ export const isOldMechanicPrimitive = (node) => (
 );
 
 export const isOldMechanicSubnode = (node) => (
+  node?.kind === 'actionTypePattern' ||
   node?.oldNode === true
   || (node?.oldNode == null && !CURRENT_MECHANIC_SUBNODE_KINDS.has(node?.kind))
 );

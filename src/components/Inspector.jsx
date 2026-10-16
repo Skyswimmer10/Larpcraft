@@ -1,7 +1,10 @@
+import { addMechanicChild, normalizeIO } from '../lib/mechanicIO.js';
+import { GameTypeFields } from './GameType.jsx';
 import PreferenceSpectra from './PreferenceSpectra.jsx';
 import LanguageSpectrum from './LanguageSpectrum.jsx';
 import ProfileDomainDetails from './ProfileDomainDetails.jsx';
 import ArchetypeDetails from './ArchetypeDetails.jsx';
+import { NarrativeWizardButton } from './NarrativeWizard.jsx';
 import React, { useState } from 'react';
 import { useGame, useDispatch, useLibrary, useLibraryDispatch } from '../state/store.jsx';
 import { resolveNode, itemsAssignedToPlayer, sensorsAssignedToPlayer, locateGraph, playersOfTeam } from '../state/reducer.js';
@@ -41,7 +44,7 @@ import {
   updateActionPatternSelection,
 } from '../data/actionMechanics.js';
 import MechanismBrowser from './MechanismBrowser.jsx';
-import { mechanismCollectionForKind, appliedMechanismRecord } from '../data/mechanismCatalog.js';
+import { mechanismCollectionForKind, appliedMechanismRecord, mechanismDraftFromNode } from '../data/mechanismCatalog.js';
 
 const minToTime = (m) => (Number.isFinite(m) ? `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}` : '');
 const timeToMin = (t) => { const [h, m] = (t || '').split(':').map(Number); return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null; };
@@ -2763,7 +2766,7 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
     <>
       <div className="ihead">
         <div className="ihrow"><span className="sq big" style={{ background: color }}>{t && <PrimIcon icon={t.icon} color="#fff" size={13} />}</span><h3>{n.title}</h3></div>
-        <div className="sub">{t?.label ?? (isTask ? 'Task' : n.kind)}{scope.parentId || scope.parentPath ? ' · internal node' : ''} · {n.id}</div>
+        <div className="sub">{t?.label ?? (isTask ? 'Site time' : n.kind)}{scope.parentId || scope.parentPath ? ' · internal node' : ''} · {n.id}</div>
       </div>
       {deprecatedPrimitive && (
         <div className="isect">
@@ -2789,8 +2792,8 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
           <div className="field-input readonlyfield">Story Item</div>
         </div>
       )}
-      {n.kind !== 'item' && <TextField label={isTravel ? 'Travel label' : isTask ? 'Task name' : isMasterAct ? 'Act name' : isTaskTemplate ? 'Title' : 'Title'} value={n.title} onCommit={(v) => upd({ title: v })} />}
-      {n.kind !== 'item' && n.mechKind !== 'playerFacingInstruction' && <TextField label={isTravel ? 'Travel notes / route' : isTask ? 'Task description / notes' : isMasterAct ? 'Story description' : (isTaskTemplate || isMechanicSchemaNode) ? 'Description' : 'Detail'} textarea value={n.body} onCommit={(v) => upd({ body: v })} />}
+      {n.kind !== 'item' && <TextField label={isTravel ? 'Travel label' : isTask ? 'Site time name' : isMasterAct ? 'Act name' : isTaskTemplate ? 'Title' : 'Title'} value={n.title} onCommit={(v) => upd({ title: v })} />}
+      {n.kind !== 'item' && n.mechKind !== 'playerFacingInstruction' && <TextField label={isTravel ? 'Travel notes / route' : isTask ? 'Site time description / notes' : isMasterAct ? 'Story description' : (isTaskTemplate || isMechanicSchemaNode) ? 'Description' : 'Detail'} textarea value={n.body} onCommit={(v) => upd({ body: v })} />}
       {n.kind === 'item' && <StoryItemInspectorFields node={n} onPatch={upd} game={s} lib={lib} graph={g} />}
       {false && n.kind === 'item' && (
         <div className="isect">
@@ -2859,7 +2862,7 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
           <button className="linkbtn" onClick={() => upd({ color: null })}>Auto</button>
         </div>
       </div>}
-      {isTask && <div className="isect"><div className="hint">Double-click this task on the canvas to open its detail graph{subCount > 0 ? ` (${subCount} detail node${subCount === 1 ? '' : 's'})` : ''}.</div></div>}
+      {isTask && <div className="isect"><div className="hint">Double-click this site time on the canvas to open its detail graph{subCount > 0 ? ` (${subCount} detail node${subCount === 1 ? '' : 's'})` : ''}.</div></div>}
       {isMasterAct && (
         <div className="isect">
           <button className="btn primary wide" onClick={saveMasterAct}>{savedAs ? `Saved ${savedAs}` : 'Save as Base Node'}</button>
@@ -3152,8 +3155,8 @@ function LibMechPrimitivePanel({ template }) {
       )}
       <TextField label="Name" value={template.name} onCommit={(v) => upd({ name: v })} />
       <TextField label="Default description" textarea value={template.defaultBody} onCommit={(v) => upd({ defaultBody: v })} />
-      {template.mechKind === 'actionProbability' && (
-        <MechanicsNodeFields node={{ ...template, body: template.defaultBody }} onPatch={patchProbability} />
+      {['actionProbability', 'gameType'].includes(template.mechKind) && (
+        <MechanicsNodeFields node={{ ...template, body: template.defaultBody }} onPatch={patchProbability} saveTarget="library" />
       )}
       <div className="frow" style={{ padding: '13px 16px 0' }}>
         <div><SectionLabel>Est. minutes</SectionLabel>
@@ -3305,35 +3308,30 @@ const MECHANIC_NODE_FIELD_SECTIONS = {
   sensorNode: [
     { key: 'sensorType', label: 'Sensor Type', type: 'selectCustom', required: true, collection: 'mechanicSensorTypes', prompt: 'Sensor type name', idPrefix: 'SNT-' },
     { key: 'zoneReference', label: 'Zone Reference', type: 'text' },
-    { key: 'inputRequired', label: 'Input Required', type: 'textarea', required: true, placeholder: 'Describe the input in detail, including partial vs full activation.' },
-    { key: 'triggerCondition', label: 'Trigger Condition', type: 'textarea' },
-    { key: 'frequencyLimitEnabled', label: 'Frequency limiting', type: 'checkbox' },
+    { key: 'firingCondition', label: 'What has to be true for this to fire?', type: 'textarea', required: true },
+    { key: 'frequencyLimitEnabled', label: 'Limit how often this happens', type: 'checkbox' },
     { key: 'frequencyTriggerCount', label: 'Number of triggers', type: 'number', showWhen: (node) => !!node?.frequencyLimitEnabled },
     { key: 'frequencyTimePeriod', label: 'Time period', type: 'select', options: ['5 seconds', '30 seconds', '1 minute', '2 minutes', '5 minutes', '10 minutes'], showWhen: (node) => !!node?.frequencyLimitEnabled },
     { key: 'cooldownEnabled', label: 'Cooldown', type: 'checkbox', showWhen: (node) => !!node?.frequencyLimitEnabled },
     { key: 'cooldownDuration', label: 'Cooldown duration', type: 'select', options: ['5 seconds', '30 seconds', '1 minute', '2 minutes', '5 minutes', '10 minutes'], showWhen: (node) => !!node?.frequencyLimitEnabled && !!node?.cooldownEnabled },
-    { key: 'manualOverrideFallback', label: 'Manual Override / Fallback Procedure', type: 'textarea' },
     { key: 'reliability', label: 'Reliability', type: 'select', options: ['1', '2', '3', '4', '5'], defaultValue: '3' },
     { key: 'nodeColor', label: 'Node Color', type: 'color' },
   ],
   actuatorNode: [
     { key: 'actuatorType', label: 'Actuator Type', type: 'selectCustom', required: true, collection: 'mechanicActuatorTypes', prompt: 'Actuator type name', idPrefix: 'ACT-' },
     { key: 'audioFileRef', label: 'Audio File Reference', type: 'text', showWhen: (node) => String(node?.actuatorType || '').toLowerCase() === 'sound' },
-    { key: 'frequencyLimitEnabled', label: 'Frequency limiting', type: 'checkbox' },
+    { key: 'frequencyLimitEnabled', label: 'Limit how often this happens', type: 'checkbox' },
     { key: 'frequencyTriggerCount', label: 'Number of triggers', type: 'number', showWhen: (node) => !!node?.frequencyLimitEnabled },
     { key: 'frequencyTimePeriod', label: 'Time period', type: 'select', options: ['5 seconds', '30 seconds', '1 minute', '2 minutes', '5 minutes', '10 minutes'], showWhen: (node) => !!node?.frequencyLimitEnabled },
     { key: 'cooldownEnabled', label: 'Cooldown', type: 'checkbox', showWhen: (node) => !!node?.frequencyLimitEnabled },
     { key: 'cooldownDuration', label: 'Cooldown duration', type: 'select', options: ['5 seconds', '30 seconds', '1 minute', '2 minutes', '5 minutes', '10 minutes'], showWhen: (node) => !!node?.frequencyLimitEnabled && !!node?.cooldownEnabled },
+    { key: 'outputBehaviour', label: 'How it plays', type: 'textarea', placeholder: 'Two short buzzes, then a rising tone, loud enough for the courtyard, then silence.' },
     { key: 'outputDuration', label: 'Output Duration', type: 'text' },
-    { key: 'outputIntensity', label: 'Output Intensity', type: 'text' },
-    { key: 'outputRhythm', label: 'Output Rhythm / Sequence', type: 'textarea' },
-    { key: 'resetBehavior', label: 'Reset Behavior', type: 'textarea' },
-    { key: 'manualOverrideFallback', label: 'Manual Override / Fallback Procedure', type: 'textarea' },
     { key: 'nodeColor', label: 'Node Color', type: 'color' },
   ],
   action: [],
   playerFacingInstruction: [
-    { key: 'body', label: 'Player-Facing Instruction', type: 'textarea', required: true },
+    { key: 'body', label: 'Instructions for players', type: 'textarea', required: true },
   ],
   actionSequence: [
     { key: 'sequenceMode', label: 'Sequence Mode', type: 'selectCustom', required: true, collection: 'mechanicSequenceModes', prompt: 'Sequence mode name', idPrefix: 'SQM-' },
@@ -3658,19 +3656,21 @@ function MechanicsNodeField({ field, value, onChange, node, graph }) {
   );
 }
 
-function MechanicsNodeFields({ node, onPatch, lib, graph }) {
+function MechanicsNodeFields({ node, onPatch, lib, graph, saveTarget = 'game' }) {
+  if (node.mechKind === 'gameType') return <GameTypeFields node={node} onPatch={onPatch} />;
+  node = normalizeIO(node);
   const mechKind = node.mechKind;
   const isMechanicSubnode = node.kind === 'mechanicSubnode';
   const subMeta = isMechanicSubnode ? MECHANIC_SUBNODE_TYPES[node.subnodeKind] : null;
   const fields = isMechanicSubnode ? (subMeta?.fields || []) : (MECHANIC_NODE_FIELD_SECTIONS[mechKind] || []);
   if (isMechanicSubnode && node.subnodeKind === 'actionTypePattern') {
-    return <ActionTypePatternEditor node={node} onPatch={onPatch} />;
+    return <ActionTypePatternEditor node={node} onPatch={onPatch} saveTarget={saveTarget} />;
   }
   if (!isMechanicSubnode && mechKind === 'actionProbability') {
-    return <ActionProbabilityEditor node={node} onPatch={onPatch} />;
+    return <ActionProbabilityEditor node={node} onPatch={onPatch} saveTarget={saveTarget} />;
   }
   if (!isMechanicSubnode && mechKind === ACTION_MECHANISM_NODE_KIND) {
-    return <ActionMechanismEditor node={node} onPatch={onPatch} />;
+    return <><MechanicChildren node={node} onPatch={onPatch} /><ActionMechanismEditor node={node} onPatch={onPatch} saveTarget={saveTarget} /></>;
   }
   if (!isMechanicSubnode && !fields.length && !node.physicalKind && mechKind !== 'action') return null;
   const patchField = (field, value) => {
@@ -3709,12 +3709,13 @@ function MechanicsNodeFields({ node, onPatch, lib, graph }) {
           ))}
         </ISection>
       )}
-      {!isMechanicSubnode && mechKind === 'action' && <ActionSystemsEditor node={node} onPatch={onPatch} />}
+      {!isMechanicSubnode && ['action', 'taskTemplate', 'cooperation', 'propInteraction', 'challengeCore'].includes(mechKind) && <MechanicChildren node={node} onPatch={onPatch} />}
+      {!isMechanicSubnode && mechKind === 'action' && <ActionSystemsEditor node={node} onPatch={onPatch} saveTarget={saveTarget} />}
     </>
   );
 }
 
-function ActionSystemsEditor({ node, onPatch }) {
+function ActionSystemsEditor({ node, onPatch, saveTarget = 'game' }) {
   const lib = useLibrary();
   const libDispatch = useLibraryDispatch();
   const mechanisms = Object.values(lib.actionPatternMechanisms || {});
@@ -3782,6 +3783,7 @@ function ActionSystemsEditor({ node, onPatch }) {
       </ISection>
       {browserFilter && (
         <MechanismBrowser
+          saveTarget={saveTarget}
           initialFilter={browserFilter}
           patternMechanisms={mechanisms}
           probabilityMechanisms={Object.values(lib.actionProbabilityMechanisms || {})}
@@ -3805,7 +3807,7 @@ function ActionSystemsEditor({ node, onPatch }) {
   );
 }
 
-function ActionMechanismEditor({ node, onPatch }) {
+function ActionMechanismEditor({ node, onPatch, saveTarget = 'game' }) {
   const lib = useLibrary();
   const libDispatch = useLibraryDispatch();
   const [browsing, setBrowsing] = useState(false);
@@ -3853,10 +3855,11 @@ function ActionMechanismEditor({ node, onPatch }) {
             {detailList('Variation', node.variations ?? stored?.variations)}
           </section>
         </div>
-        <div className="hint">Edit this mechanism's picture and descriptive fields in Mechanism Browser, then choose it again to refresh this node.</div>
+        <div className="hint">Edit the picture and details in Mechanism Browser. Choose where to save your changes.</div>
       </ISection>
       {browsing && (
         <MechanismBrowser
+          saveTarget={saveTarget}
           initialFilter="all"
           patternMechanisms={mechanisms}
           probabilityMechanisms={Object.values(lib.actionProbabilityMechanisms || {})}
@@ -3870,6 +3873,7 @@ function ActionMechanismEditor({ node, onPatch }) {
           setCollectionMechanisms={Object.values(lib.setCollectionMechanisms || {})}
           cardMechanisms={Object.values(lib.cardMechanisms || {})}
           selectedMechanismId={node.actionMechanismId}
+          appliedDraft={mechanismDraftFromNode(lib, node)}
           allowedKind="all"
           onPick={choose}
           onSave={(record) => libDispatch({ type: 'UPDATE_ENTITY', coll: mechanismCollectionForKind(record.kind), id: record.id, patch: record })}
@@ -3880,7 +3884,7 @@ function ActionMechanismEditor({ node, onPatch }) {
   );
 }
 
-function ActionTypePatternEditor({ node, onPatch, manageLibrary = false }) {
+function ActionTypePatternEditor({ node, onPatch, manageLibrary = false, saveTarget = 'game' }) {
   const lib = useLibrary();
   const libDispatch = useLibraryDispatch();
   const fields = node.fields || {};
@@ -3952,6 +3956,7 @@ function ActionTypePatternEditor({ node, onPatch, manageLibrary = false }) {
       )}
       {browserFilter && (
         <MechanismBrowser
+          saveTarget={saveTarget}
           initialFilter={browserFilter}
           patternMechanisms={mechanisms}
           probabilityMechanisms={Object.values(lib.actionProbabilityMechanisms || {})}
@@ -3975,7 +3980,7 @@ function ActionTypePatternEditor({ node, onPatch, manageLibrary = false }) {
   );
 }
 
-function ActionProbabilityEditor({ node, onPatch }) {
+function ActionProbabilityEditor({ node, onPatch, saveTarget = 'game' }) {
   const lib = useLibrary();
   const libDispatch = useLibraryDispatch();
   const [browsing, setBrowsing] = useState(false);
@@ -4044,6 +4049,7 @@ function ActionProbabilityEditor({ node, onPatch }) {
       )}
       {browsing && (
         <MechanismBrowser
+          saveTarget={saveTarget}
           initialFilter="probability"
           patternMechanisms={Object.values(lib.actionPatternMechanisms || {})}
           probabilityMechanisms={probabilityMechanisms}
@@ -4379,7 +4385,7 @@ function LibBuilderNodePanel({ selection }) {
           </div>
         </>
       )}
-      {isMechanicSchemaNode && <MechanicsNodeFields node={n} onPatch={patch} lib={lib} />}
+      {isMechanicSchemaNode && <MechanicsNodeFields node={n} onPatch={patch} lib={lib} saveTarget="library" />}
       {isFramework && (
         <div className="isect">
           <SectionLabel>{isValueFramework ? 'Value Poles' : type.layout === 'archetypes' ? 'Archetypes & Shadows' : type.layout === 'profileDomains' ? 'Profile Domains' : type.layout === 'languageSpectrum' ? 'Language Spectrum' : type.layout === 'preferenceSpectra' ? 'Preference Spectra' : 'Acronym / Phases'}</SectionLabel>
@@ -4776,7 +4782,7 @@ function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [],
           </div>
         </>
       )}
-      {isMechanicSchemaNode && <MechanicsNodeFields node={n} onPatch={upd} lib={lib} graph={graph} />}
+      {isMechanicSchemaNode && <MechanicsNodeFields node={n} onPatch={upd} lib={lib} graph={graph} saveTarget="library" />}
       {n.kind !== 'item' && !['action', ACTION_MECHANISM_NODE_KIND].includes(n.mechKind) && <div className="isect">
         <SectionLabel>Node image · optional</SectionLabel>
         <ImageUploader entity={n} label="Node image" onImage={(img) => upd({ image: img })} />
@@ -4982,14 +4988,45 @@ export default function Inspector({ selection, onSelect, onNavigate, collapsed =
     ...(selection.scope?.parentPath || (selection.scope?.parentId ? [selection.scope.parentId] : [])),
     ...(selection.graphPath || []),
   ].join(':');
+  const wizardEntity = kind === 'lib-concepts' ? lib.concepts?.[id] : boxSize?.entity;
+  const wizardFramework = kind === 'lib-frameworkType' ? FRAMEWORK_TYPES[id]
+    : wizardEntity?.kind === 'framework' ? FRAMEWORK_TYPES[wizardEntity.frameworkId] : null;
+  const wizardConcept = kind === 'lib-concepts' || wizardEntity?.kind === 'concept' ? wizardEntity : null;
+  const wizardCharacter = wizardEntity?.kind === 'character';
   return (
     <aside className="inspector">
       {resizeHandle}
       {toggle}
       <React.Fragment key={selectionKey}>
+        {(wizardFramework || wizardConcept || wizardCharacter) && <div className="isect">
+          <NarrativeWizardButton
+            source={wizardFramework || wizardConcept || undefined}
+            sourceType={wizardFramework ? 'framework' : wizardConcept ? 'concept' : undefined}
+            targetId={wizardCharacter && ['node', 'graphnode'].includes(kind) ? id : undefined}
+            gameScope={kind === 'graphnode' ? selection.scope : undefined}
+            label={wizardFramework ? 'Create character with questions' : wizardConcept ? 'Adapt with questions' : 'Explore with a framework or concept'}
+            className="btn primary wide"
+            onSaved={createdId => onSelect?.(kind === 'graphnode' ? { kind: 'graphnode', scope: selection.scope, id: createdId } : { kind: 'node', id: createdId })}
+          />
+        </div>}
         {body ?? <div className="empty">Record not found in this game.</div>}
         {body && boxSize && <NodeBoxSizeFields entity={boxSize.entity} role={boxSize.role} onPatch={boxSize.onPatch} />}
       </React.Fragment>
     </aside>
   );
+}
+
+function MechanicChildren({ node, onPatch }) {
+  return <ISection label="Build the mechanic" collapsed={false}>
+    <TextField label="Goal" value={node.mechanicGoal || ''} onCommit={v => onPatch({ mechanicGoal: v })} />
+    <TextField label="How it works without electronics" textarea value={node.analogRule || ''} onCommit={v => onPatch({ analogRule: v })} />
+    {['action', ACTION_MECHANISM_NODE_KIND].includes(node.mechKind) && <>
+      <TextField label="What do players do?" textarea value={node.playerActions || ''} onCommit={v => onPatch({ playerActions: v })} />
+      <TextField label="What are the rules?" textarea value={node.gameRules || ''} onCommit={v => onPatch({ gameRules: v })} />
+      <TextField label="How do we know they succeeded?" textarea value={node.successCondition || ''} onCommit={v => onPatch({ successCondition: v })} />
+    </>}
+    <div className="hint">Define the goal and analog rule first. Add optional inputs and outputs below, then double-click the mechanic to open its children.</div>
+    <div className="chips"><button className="btn small" onClick={() => onPatch(addMechanicChild(node, 'sensorNode'))}>Add input (Sensor)</button><button className="btn small" onClick={() => onPatch(addMechanicChild(node, 'actuatorNode'))}>Add output (Actuator)</button><button className="btn small" onClick={() => onPatch(addMechanicChild(node, 'fallback'))}>If the equipment fails</button></div>
+    <div className="hint">{Object.keys(node.sub?.nodes || {}).length} child nodes</div>
+  </ISection>;
 }

@@ -1,3 +1,4 @@
+import { migrateMechanicIO } from '../lib/mechanicIO.js';
 import { nlpMetaPrograms } from './nlpMetaPrograms.js';
 import { nlpMetaModel } from './nlpMetaModel.js';
 import { mmpi2Framework } from './mmpi2Framework.js';
@@ -831,11 +832,11 @@ export const MECHANIC_SUBNODE_TYPES = {
       { key: 'triggerCondition', label: 'Trigger Condition', type: 'text', required: true },
       { key: 'effectDescription', label: 'Effect Description', type: 'textarea', required: true },
       { key: 'strengthIntensity', label: 'Strength / Intensity', type: 'select', options: ['Subtle', 'Moderate', 'Strong', 'Dramatic'] },
-      { key: 'canStack', label: 'Can Stack', type: 'checkbox' },
+      { key: 'canStack', label: 'Can this happen more than once?', type: 'checkbox' },
     ],
   },
   failSafeScaffolding: {
-    id: 'failSafeScaffolding', label: 'Fail-Safe + Scaffolding Mod', color: '#E8D25C', icon: 'layers',
+    id: 'failSafeScaffolding', label: 'Help when players get stuck', color: '#E8D25C', icon: 'layers',
     purpose: 'Provides structured ways to recover from failure or near-failure. Prevents players from feeling like total failures when they were close to succeeding.',
     attachesTo: ['cooperation', 'taskTemplate'], category: 'gameplayModifiers',
     fields: [
@@ -850,7 +851,7 @@ export const MECHANIC_SUBNODE_TYPES = {
     ],
   },
   escalatingPressure: {
-    id: 'escalatingPressure', label: 'Escalating Pressure Mod', color: '#E86464', icon: 'clock',
+    id: 'escalatingPressure', label: 'Increasing pressure', color: '#E86464', icon: 'clock',
     purpose: 'Creates growing urgency and difficulty during the task. Pressure can increase through time, physical demand, environmental changes, or other escalating factors.',
     attachesTo: ['cooperation', 'taskTemplate'], category: 'gameplayModifiers',
     fields: [
@@ -901,7 +902,6 @@ export const MECHANIC_SUBNODE_TYPES = {
     fields: [
       { key: 'discussionPrompt', label: 'Discussion Prompt', type: 'textarea', required: true },
       { key: 'whenToUse', label: 'When to Use', type: 'select', options: ['Before task', 'During task', 'After task', 'Between attempts'] },
-      { key: 'facilitatorNote', label: 'Facilitator Note', type: 'text' },
     ],
   },
   facilitatorNote: {
@@ -924,7 +924,7 @@ export const MECHANIC_SUBNODE_TYPES = {
   },
   frequencyControl: {
     id: 'frequencyControl', label: 'Frequency Control', color: '#E8D25C', icon: 'clock',
-    purpose: 'Deprecated. Frequency limiting now lives inside Sensor and Actuator nodes.',
+    purpose: 'Deprecated. Limit how often this happens now lives inside Sensor and Actuator nodes.',
     attachesTo: ['sensorNode', 'actuatorNode', 'taskTemplate', '*'], reusable: true, category: 'gameplayModifiers',
     deprecated: true, hiddenFromPalette: true,
     fields: [
@@ -1239,7 +1239,7 @@ const migrateActionGraph = (graph = {}, ensureInstruction = false) => {
         || node.advantage != null || node.effect != null || node.variation != null;
       node = {
         ...rest,
-        title: node.title === 'Action' ? 'BG action' : node.title,
+        title: node.title === 'Action' ? 'BG Mechanics' : node.title,
         ...(hasLegacyDetails ? {
           advantages: Array.isArray(node.advantages) && node.advantages.length ? node.advantages : [node.advantage || ''],
           effects: Array.isArray(node.effects) && node.effects.length ? node.effects : [node.effect || ''],
@@ -1666,7 +1666,7 @@ export function migrateLibrary(saved) {
         || node.advantage != null || node.effect != null || node.variation != null;
       return [id, {
         ...rest,
-        name: node.name === 'Action' ? 'BG action' : node.name,
+        name: node.name === 'Action' ? 'BG Mechanics' : node.name,
         ...(hasLegacyDetails ? {
           advantages: Array.isArray(node.advantages) && node.advantages.length ? node.advantages : [node.advantage || ''],
           effects: Array.isArray(node.effects) && node.effects.length ? node.effects : [node.effect || ''],
@@ -1829,7 +1829,7 @@ export function migrateLibrary(saved) {
   }
   delete merged.mechPrimitives['LIB-MPRIM-CHALLENGE-CORE'];
   merged.rev = LIB_REV;
-  return merged;
+  return migrateMechanicIO(merged);
 }
 
 const turtleSvg = (label, color) => ({
@@ -2170,6 +2170,7 @@ function makeTurtleCostumeMechanicsStructure() {
 export function makeLibrarySeed() {
   return {
     rev: LIB_REV,
+    mechanicsSources: {},
 
     // Mechanic templates carry default PARAMETERS (switch/sensor counts,
     // timings, thresholds). Importing a mechanic into a game copies these; the
@@ -2226,6 +2227,19 @@ export function makeLibrarySeed() {
     // task node types — sensor triggers, puzzles, challenges, timers, waypoints,
     // handoffs. These are the mechanics counterpart to the narrative nodes.
     mechPrimitives: {
+      'LIB-MPRIM-GAME-TYPE': {
+        id: 'LIB-MPRIM-GAME-TYPE', name: 'Game Type', mechKind: 'gameType', category: 'action',
+        baseKind: 'mechanic', color: '#65D6D0', icon: 'users',
+        defaultBody: 'Who plays, how they work together, and what happens between tries.',
+        gameType: { scope: 'activity' }, w: 290,
+        inputs: ['in'], outputs: ['out'], refs: {}, collapseDepth: 0, oldNode: false,
+      },
+      'LIB-MPRIM-GOAL': {
+        id: 'LIB-MPRIM-GOAL', name: 'Goal', mechKind: 'goal', category: 'action',
+        baseKind: 'mechanic', color: '#E8D25C', icon: 'target',
+        defaultBody: 'Describe what the player is going to achieve.',
+        inputs: ['in'], outputs: ['achieved'], refs: {}, collapseDepth: 0, oldNode: false,
+      },
       'LIB-MPRIM-TASK-TEMPLATE': {
         id: 'LIB-MPRIM-TASK-TEMPLATE', name: 'Task Template', mechKind: 'taskTemplate',
         baseKind: 'mechanic', color: '#8B7BF5', icon: 'layers', inputs: ['start'], outputs: ['complete', 'branch'],
@@ -2277,14 +2291,14 @@ export function makeLibrarySeed() {
         manualOverrideFallback: '', nodeColor: '#5CA8F5',
       },
       'LIB-MPRIM-ACTION': {
-        id: 'LIB-MPRIM-ACTION', name: 'BG action', mechKind: 'action', category: 'action',
+        id: 'LIB-MPRIM-ACTION', name: 'BG Mechanics', mechKind: 'action', category: 'action',
         baseKind: 'mechanic', color: '#58C7A6', icon: 'zap', inputs: ['available'], outputs: ['complete'],
         defaultBody: 'One atomic physical, cognitive, or social step performed by a player or team.',
         estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0,
         tokenMechanismId: '', orderMechanismId: '', specialMechanismId: '', attachedSubnodeIds: [],
       },
       'LIB-MPRIM-PLAYER-INSTRUCTION': {
-        id: 'LIB-MPRIM-PLAYER-INSTRUCTION', name: 'Player-Facing Instruction', mechKind: 'playerFacingInstruction', category: 'supporting',
+        id: 'LIB-MPRIM-PLAYER-INSTRUCTION', name: 'Instructions for players', mechKind: 'playerFacingInstruction', category: 'supporting',
         baseKind: 'mechanic', color: '#E8D25C', icon: 'book', inputs: ['in'], outputs: ['out'],
         defaultBody: '', estMinutes: 1, crew: 0, refs: {}, collapseDepth: 0,
       },
@@ -2875,7 +2889,7 @@ export function migrateProject(saved) {
     };
   }
   merged.rev = SEED_REV;
-  return merged;
+  return migrateMechanicIO(merged);
 }
 
 // Demo game: Operation Chimera, built from the library templates above.

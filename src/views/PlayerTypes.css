@@ -1,0 +1,20 @@
+.player-section-tabs { margin:0 20px; flex-shrink:0; }
+.player-types-page { flex:1; overflow:auto; padding:4px 24px 28px; min-height:0; }
+.player-types-page p { line-height:1.6; }
+.player-types-controls { display:flex; flex-wrap:wrap; gap:16px; margin:18px 0; }
+.player-types-controls label { display:grid; gap:6px; flex:1; min-width:190px; }
+.player-type-group { margin:28px 0; --type-accent:#80b9ff; }
+.player-type-group.playstyles { --type-accent:#baa0ff; }
+.player-type-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(290px,100%),1fr)); gap:16px; }
+.player-type-card { padding:18px; background:var(--panel,#1b1e28); border:1px solid var(--line-soft,#373b4e); border-top:3px solid var(--type-accent); border-radius:10px; display:flex; flex-direction:column; }
+.player-type-card.selected { box-shadow:inset 0 0 0 1px var(--type-accent); }
+.player-type-card h4 { margin:0 0 6px; font-size:17px; color:var(--type-accent); }
+.player-type-card header span { font-size:12px; opacity:.8; }
+.player-type-card p { font-size:13px; margin:8px 0 14px; }
+.player-type-card b { font-size:12px; }
+.player-type-prompt { border-top:1px solid var(--line-soft,#373b4e); padding-top:12px; }
+.player-type-check { display:flex; align-items:center; gap:8px; margin-top:auto; padding-top:10px; }
+.player-type-check input { accent-color:var(--type-accent); }
+.player-types-reference { padding:16px; border:1px solid var(--line-soft,#373b4e); border-radius:8px; }
+.player-types-reference summary { cursor:pointer; font-weight:600; }
+.player-type-summary { margin:14px 0; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }

@@ -1,5 +1,11 @@
 # LARP Craft — Complete Application Description (AI Handoff Document)
 
+## Master Act split editor (September 2026)
+
+Double-click a Master Story act to open `views/MasterAct.jsx`: Story above Game Mechanics, distinct background shades, independently nested navigation, library insertion, a keyboard/pointer resizable divider and temporary lane expansion. Adjustments remain mechanic subnodes in the mechanics lane. Libraries insert detached editable copies using the existing insertion helpers; this screen does not introduce live references or cross-lane edges.
+
+`lib/masterAct.js` adds two internal lane containers to an act's existing `.sub.nodes`, recording their IDs in `act.actLanes`. Existing contents are preserved. Standard scopes `{coll:'masterNodes', parentPath:[actId,laneId,...nestedIds]}` allow the existing reducer, inspector, undo and JSON persistence to handle both lanes without a second storage system. Reopening reuses those containers. Master timeline scheduling remains independent.
+
 > **Purpose of this file.** This is a self-contained briefing for an AI (or human)
 > code builder who has never seen this project. Read it fully before editing.
 > It describes what the app is, how it is architected, every data collection and
@@ -490,3 +496,45 @@ statement here, fix the statement in the same commit.*
 Action has a single Browse Mechanisms entry point, accepting every catalogue category. Applied nodes use `mechKind: actionMechanism`, `mechanismKind` for the catalogue, and `actionMechanismId` for the source record. Older nodes without `mechanismKind` resolve to the pattern catalogue. `src/data/mechanismCatalog.js` shares lookup routing between inspector and canvas. Selection copies images, crop transforms, and descriptive fields into the node; graph identity, geometry, and attachments survive.
 
 Action Sequence and Resolution are retired base-node choices. Library revision 38 removes their built-in primitive definitions on load, without deleting authored graph instances or resolution catalogue records. Existing Action Templates insert using Task Template containers.
+
+## Player Types (September 2026)
+
+Players now has Player Profiles and Player Types sections. The catalog in `src/data/playerTypes.js` summarises the supplied four Bartle motivations and ten play styles, with model-qualified stable IDs. Other named typologies are reference-only until descriptions are supplied. Multiple assignments are stored in `players[id].playerTypeIds`, supported by existing local/project saves and the player CSV schema. Missing arrays on older players read as empty; older CSV files preserve existing assignments. No fixed personality inference, automatic scoring or population percentages are applied.
+
+## Mechanic I/O children
+
+BG action is displayed as BG Mechanics. Sensor and Actuator primitives are retained but removed from mechanic insertion palettes. Existing mechanics expose Goal, Analog rule, Add input (Sensor), Add output (Actuator), and Add I/O fallback note in the inspector. These actions add editable children in the mechanic's nested graph. I/O canvas nodes use compact 180 × 48 icon/title cards. Sensor conditions use `firingCondition`; actuator performance uses `outputBehaviour` (How it plays), with Type separate. `migrateMechanicIO` preserves legacy fields and combines their text, moving legacy fallback/reset prose into separate attached facilitator-note nodes once. Pair notes store `ioNodeIds` and labelled edges; new child endpoints join existing pair notes. Existing sensors and authored graphs are not deleted.
+
+## BG Mechanics authoring and save destinations (October 2026)
+
+BG Mechanics represents a complete catalogue mechanism; its local Goal field is independent of the granular Goal node used to build custom mechanics. Only BG Mechanics nodes expose the additional playerActions (What do players do?), gameRules (What are the rules?), and successCondition (How do we know they succeeded?) prompts. These fields also appear in the mechanism browser and travel with detached snapshots. No uniform field layout is imposed on other node types.
+
+The mechanism browser offers Save to game (apply the edited draft to the current game node only) and Save to library (update the catalogue record and apply the same draft to the current node). Library editor contexts label the detached destination Save to this template. Opening an applied mechanism starts from its current local snapshot via mechanismDraftFromNode. Unsaved draft switching/closing asks before discard. Wording updates preserve custom titles and stable stored type keys; Progressive Feedback Mod remains unchanged.
+
+A future Read through panel above the canvas and nested-content category icons are proposals, not implemented controls.
+
+## Mechanics toolbox (October 2026)
+
+The game Mechanics Weaver, library mechanic drafts, saved mechanic structures, and Master Act mechanics lane share `useMechanicsToolbox`. Build / Adjust / Equip / Prepare filter category groups from the live library; category checkboxes persist independently of the active work area under `larpcraft:mechanics-toolbox:v1` and synchronize between editor views and same-origin browser tabs. These are browser UI preferences; game and library content still use the existing local-file save path.
+
+Complete BG Mechanics and saved mechanic trees now live in the separate full-screen Mechanics collection, outside the four work areas. Quick Add can search individual board game mechanisms and saved trees. `MechanicsCollection` embeds the existing `MechanismBrowser` for Board Games, preserving image framing, editing, category filters, and save destinations. My Saved and additional sources browse non-action `mechStructures` records, with real graph previews and insertion into the active graph scope.
+
+The Columns control requests four or five columns. A ResizeObserver measures the available grid width and reduces the count only when necessary to retain readable cards (approximately 172px minimum). Cards remain square; their image area retains the original 3:2 ratio and percentage transforms. The lazy image decoder and queue remain in place.
+
+Stars are stored as `favorite` on the original catalogue or saved-template record. Sorting prioritizes stars within the chosen source while still respecting search and category filters. Stars are not editable draft fields, so starring does not create an unsaved text/image change or get overwritten when applying a draft. Additional source/category definitions are stored in the master-only `mechanicsSources` collection; saved trees use `sourceId` and `collectionCategoryId`. These fields use normal local-file saves and complete-workspace backups. Existing records default to My Saved / Unsorted. Inserting a saved tree copies nested nodes, edges, frames, number markers, and title markers without changing the source template.
+
+Quick Add (Ctrl/Cmd+K) searches all available tools, including unpinned categories, and inserts into the currently open graph without changing category pins. Hardware references remain under Equip; Sensor/Actuator design nodes still use the existing child actions. Retired node types remain retired.
+
+Mechanics Wizard holds four optional answers locally (goal, actions, rules, success) and adds editable nodes only on Create starting nodes. Cancellation does not write to the graph. Existing graph contents are preserved, and the additions undo as one change. Fresh drafts and newly created Task Template containers start empty; saved templates retain their authored contents. Custom Rule is available at the top level as well as inside a mechanic.
+
+## Game Type node (October 2026)
+
+`Game Type` is an active mechanic primitive in Game Node Collections. Its own inspector asks who plays, how they cooperate/compete, how winning or losing works, role differences (with optional hidden roles/traitor), and what happens between tries. The last question has exactly three choices: Everything resets, Changes carry forward, Intended to be played once. Carry-forward covers scores, progress, resources, and lasting changes in one optional explanation. One-play means that player/team gets one try. Each node stores independent `gameType` settings, including an explicit game/activity scope; scope is descriptive, not automatic inheritance or enforcement. The shared canvas renders a short summary via GameTypePreview. Library default settings can also be edited. Existing save, nested graph, template and export paths carry these fields.
+
+## Narrative character and concept wizard (October 2026)
+
+`NarrativeWizard` is available from Narrative, nested narrative canvases, the Master Act story lane, Story & Narrative, framework details, concept previews, and the inspector for frameworks/concepts/characters. It uses a native modal dialog with optional questions, back/skip/jump navigation, a review, and separate Save to game / Save to library + game actions. Draft answers stay in component state; closing an edited draft asks before discarding. No graph or library changes occur before Save.
+
+`src/lib/narrativeWizard.js` provides framework-specific character prompts and reads live concept questions, custom question/choice rows, nested graph prompts, and character archetype facets/shadows. All current frameworks and new concepts are discoverable automatically. Concepts support editable role substitutions: the threat and protected thing in Dragon & the City can become debt and a home. Substitutions affect visible prose in a detached graph; node IDs, connections, layout, images, frames, and markers remain. Answers are attached to corresponding question nodes. Separate template framework/support collections are promoted into the nested game's node map.
+
+New character answers use the ordinary editable character `questions` array. Adding another framework to an existing character appends answers and notes; a concept adaptation is added as a child container without replacing its inner graph. `narrativeWizard` and optional `narrativeWizardHistory` retain provenance and answer keys. Game scopes are preserved, including nested canvases and Master Act lanes. Library saves create a new character template or concept; original sources remain unchanged. All saved data follows the existing local-file/browser persistence and complete-workspace export paths. No external AI service or assessment scoring is used.

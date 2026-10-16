@@ -1,0 +1,9 @@
+.game-type-preview { display:grid; gap:5px; line-height:1.4; }
+.game-type-preview small { color:var(--muted); font-size:11px; }
+.game-type-preview > div { padding-left:8px; border-left:2px solid #65d6d0; font-size:12px; overflow-wrap:anywhere; }
+.game-type-fields { display:grid; gap:12px; }
+.game-type-field { display:grid; gap:6px; min-width:0; }
+.game-type-field > span { font-size:12px; color:var(--muted); }
+.game-type-field textarea { width:100%; box-sizing:border-box; resize:vertical; }
+.game-type-checks { display:grid; gap:8px; }
+.game-type-checks label { display:flex; gap:8px; align-items:center; }

@@ -4,17 +4,20 @@ import { makeProjectSeed } from '../data/seed.js';
 import { BUNDLED_PROJECT_VERSION, mergeBundledProject } from './bundledProject.js';
 
 describe('mergeBundledProject', () => {
-  it('ships the complete captured Operation Chimera canvases', () => {
-    expect(Object.keys(deployedProject.nodes || {})).toHaveLength(14);
-    expect(Object.keys(deployedProject.taskNodes || {})).toHaveLength(11);
-    expect(Object.keys(deployedProject.frames || {})).toHaveLength(2);
+  it('ships the current captured workspace, including intentionally cleared narrative nodes', () => {
+    expect(Object.keys(deployedProject.nodes || {})).toHaveLength(0);
+    expect(Object.keys(deployedProject.taskNodes || {})).toHaveLength(3);
+    expect(Object.keys(deployedProject.masterNodes || {})).toHaveLength(5);
+    expect(Object.keys(deployedProject.frames || {})).toHaveLength(0);
+    expect(deployedProject.bundledProjectVersion).toBe(BUNDLED_PROJECT_VERSION);
   });
 
-  it('upgrades the deployed demo project to the captured canvas counts', () => {
-    const merged = mergeBundledProject(deployedProject, makeProjectSeed());
-    expect(Object.keys(merged.nodes || {})).toHaveLength(14);
-    expect(Object.keys(merged.taskNodes || {})).toHaveLength(11);
-    expect(merged.edges).toEqual(deployedProject.edges);
+  it('preserves an existing richer game when the captured workspace has fewer nodes', () => {
+    const saved = makeProjectSeed();
+    const merged = mergeBundledProject(deployedProject, saved);
+    expect(merged.nodes).toEqual(saved.nodes);
+    expect(merged.taskNodes).toMatchObject(saved.taskNodes);
+    expect(merged.edges).toEqual(saved.edges);
   });
 
   it('uses the captured project when no browser project exists', () => {

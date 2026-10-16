@@ -1,12 +1,16 @@
 import AnnotationTools from '../components/AnnotationTools.jsx';
 import { useAppearance } from '../components/AppearanceContext.jsx';
 import FrameworkDetail from '../components/FrameworkDetail.jsx';
+import { NarrativeWizardButton } from '../components/NarrativeWizard.jsx';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLibrary, useLibraryDispatch, useGame, useDispatch } from '../state/store.jsx';
 import { Thumb, ENTITY_COLORS, PrimIcon, SectionLabel } from '../components/bits.jsx';
 import FlowCanvas, { visibleCanvasPlacement } from '../components/FlowCanvas.jsx';
 import StructureThumb, { structNodeColor } from '../components/StructureThumb.jsx';
 import NodePalette from '../components/NodePalette.jsx';
+import { useMechanicsToolbox } from '../components/MechanicsToolbox.jsx';
+import { mechanicWizardGraph } from '../mechanics/toolbox.js';
+import { libraryWithMechanismDraft } from '../mechanics/collections.js';
 import NarrativeLibraryBrowser from '../components/NarrativeLibraryBrowser.jsx';
 import FrameworkPreview from '../components/FrameworkPreview.jsx';
 import { narrativeToStructNode, mechPrimitiveToStructNode } from '../state/bridge.js';
@@ -24,12 +28,10 @@ import { remapCanvasClipboard } from '../lib/canvasClipboard.js';
 import {
   buildMechanicsLibrarySections,
   buildMechanicsPaletteGroups,
-  filterMechanicsPaletteGroups,
   isProgressStateNode,
   isSupportingMechanicSubnode,
   mechanicSubnodeCategory,
   mechanicsPayloadToNode,
-  MECHANICS_PALETTE_FILTERS,
   progressPercent,
   progressValue,
   supportingMechanicSubnodePreview,
@@ -117,7 +119,7 @@ const STRUCT_KINDS = {
 
 const CATEGORY_COLORS = ['#F08CB4', '#5CA8F5', '#E0A23C', '#43BF87', '#A87BF0', '#E8D25C', '#3EC6D6', '#E86464'];
 const MECHANIC_SUBNODE_CATEGORY_SECTIONS = [
-  { id: 'gameplayModifiers', label: 'Gameplay Modifiers', hint: 'Core gameplay-related subnodes that affect how tasks and mechanics function.' },
+  { id: 'gameplayModifiers', label: 'Rule changes', hint: 'Core gameplay-related subnodes that affect how tasks and mechanics function.' },
   { id: 'supporting', label: 'Supporting', hint: 'Helper and organizational subnodes for comments, facilitator notes, player/team assignment, and readiness status.' },
 ];
 
@@ -227,7 +229,9 @@ function ConceptPreview({ concept, onClose, onEdit }) {
         title: concept.name, name: concept.name, x: 90, y: 90, body: concept.description, description: concept.description, color: null,
         status: concept.status ?? 'seed', onePromise: concept.onePromise ?? '',
         referenceFrameworkIds: JSON.parse(JSON.stringify(concept.referenceFrameworkIds || [])),
-        teamId: null, sets: [], collapsed: true, conceptAnswers: {}, history: [],
+        teamId: null, sets: [], collapsed: true, conceptAnswers: JSON.parse(JSON.stringify(concept.conceptAnswers || {})), history: [],
+        ...(concept.narrativeWizard ? { narrativeWizard: JSON.parse(JSON.stringify(concept.narrativeWizard)) } : {}),
+        ...(concept.conceptQuestions ? { conceptQuestions: JSON.parse(JSON.stringify(concept.conceptQuestions)) } : {}),
         sub: JSON.parse(JSON.stringify({
           nodes: {
             ...(concept.nodes || {}),
@@ -276,6 +280,7 @@ function ConceptPreview({ concept, onClose, onEdit }) {
         </div>
         <div className="modalfoot">
           <button className="btn primary" onClick={addToCanvas}>Add to Canvas (collapsed)</button>
+          <NarrativeWizardButton source={concept} sourceType="concept" label="Adapt with questions" />
           <button className="btn" onClick={() => onEdit?.(concept.id)}>Edit</button>
           <button className="btn" onClick={() => onClose(false)}>Close</button>
         </div>
@@ -654,8 +659,6 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack, onNavig
   const libDispatch = useLibraryDispatch();
   const cfg = STRUCT_KINDS[coll];
   const isMechanicStructure = coll === 'mechStructures';
-  const [mechQuery, setMechQuery] = useState('');
-  const [mechPaletteFilter, setMechPaletteFilter] = useState('all');
   const [openPath, setOpenPath] = useState([]);
   const patch = (p) => libDispatch({ type: 'UPDATE_ENTITY', coll, id: structure.id, patch: p });
   const activePath = openPath;
@@ -685,9 +688,9 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack, onNavig
       : n.kind === STORY_STRUCTURE_CONTAINER_KIND
         ? 'layers'
         : undefined;
-  const addMechanicPayload = (payload, x = null, y = null) => {
+  const addMechanicPayload = (payload, x = null, y = null, record = null) => {
     const nodePos = x == null || y == null ? visibleCanvasPlacement({ x: 90, y: 90 }) : { x, y };
-    const node = mechanicsPayloadToNode(payload, lib, currentGraph.nodes, nodePos.x, nodePos.y, nested ? 'D' : 'S');
+    const node = mechanicsPayloadToNode(payload, libraryWithMechanismDraft(lib, record), currentGraph.nodes, nodePos.x, nodePos.y, nested ? 'D' : 'S');
     if (!node) return;
     patchCurrentGraph({ nodes: { ...currentGraph.nodes, [node.id]: node } });
     onSelect({ kind: 'lib-structnode', id: node.id, storyId: structure.id, coll, graphPath: activePath });
@@ -696,15 +699,21 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack, onNavig
     const graph = structureGraphAtPath(structure, activePath.slice(0, idx));
     return graph.nodes?.[id]?.title || title;
   }, structure.name);
-  const mechanicPaletteGroups = filterMechanicsPaletteGroups(
-    buildMechanicsPaletteGroups(lib, {
+  const mechanicPaletteGroups = buildMechanicsPaletteGroups(lib, {
       onAdd: (payload) => addMechanicPayload(payload),
       includeTask: false,
       includeDetail: nested,
-      includeTemplates: false,
-    }),
-    mechPaletteFilter,
-  );
+      includeTemplates: true,
+    });
+  const mechanicToolbox = useMechanicsToolbox({ groups: mechanicPaletteGroups, lib, enabled: isMechanicStructure,
+    onAdd: (payload, record) => addMechanicPayload(payload, null, null, record),
+    onCreateWizard: answers => {
+      const additions = mechanicWizardGraph(answers, currentGraph.nodes, visibleCanvasPlacement({ x: 90, y: 90 }, { w: 600, h: 420 }));
+      patchCurrentGraph({ nodes: { ...currentGraph.nodes, ...additions.nodes }, edges: [...currentGraph.edges, ...additions.edges] });
+      const node = Object.values(additions.nodes)[0];
+      if (node) onSelect({ kind: 'lib-structnode', id: node.id, storyId: structure.id, coll, graphPath: activePath });
+    },
+  });
   const addVisualMarker = (markerType = 'number') => {
     const markers = currentGraph.numberMarkers || {};
     const id = genId(markers, markerType === 'letter' ? 'LTR-' : 'NUM-');
@@ -776,6 +785,7 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack, onNavig
           <h2>{nested ? graphTitle : structure.name} <span className="libbadge inline">master template</span></h2>
         </div>
         <div className="right">
+          {isMechanicStructure && mechanicToolbox.actions}
           {nested && <button className="btn" onClick={() => { setOpenPath(openPath.slice(0, -1)); onSelect(null); }}>Back one level</button>}
           <AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
             <button className="btn" onClick={addFrame}>Frame</button>
@@ -791,16 +801,7 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack, onNavig
       </div>
       <div className={isMechanicStructure ? 'nodebuilder-wrap' : 'structeditor'}>
         {isMechanicStructure ? (
-          <NodePalette
-            title="Mechanics Nodes"
-            subtitle="Build reusable task templates"
-            search={mechQuery}
-            onSearch={setMechQuery}
-            filters={MECHANICS_PALETTE_FILTERS.filter((f) => f.id !== 'templates')}
-            activeFilter={mechPaletteFilter}
-            onFilter={setMechPaletteFilter}
-            groups={mechanicPaletteGroups}
-          />
+          <>{mechanicToolbox.palette}{mechanicToolbox.dialogs}</>
         ) : (
           <div className="palette">
             <div className="lab">{cfg.paletteLabel}</div>
@@ -1019,13 +1020,11 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
   const [builderFrameSel, setBuilderFrameSel] = useState(null);
   const [builderNumberSel, setBuilderNumberSel] = useState(null);
   const [builderTitleSel, setBuilderTitleSel] = useState(null);
-  const [mechBuilderQuery, setMechBuilderQuery] = useState('');
-  const [mechBuilderFilter, setMechBuilderFilter] = useState('all');
   const [browsingNarrativeLibrary, setBrowsingNarrativeLibrary] = useState(false);
   const [browsingMechanicsLibrary, setBrowsingMechanicsLibrary] = useState(false);
 
   useEffect(() => {
-    if (tab !== 'narrative' && tab !== 'mechanics') return undefined;
+    if (tab !== 'narrative' && tab !== 'mechBuilder') return undefined;
     const onUndo = (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
       const tag = e.target?.tagName?.toLowerCase();
@@ -1619,23 +1618,37 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
       }),
     },
   ];
-  const addMechanicBuilderPayload = (payload, pos = null) => {
-    const node = mechanicsPayloadToNode(payload, lib, builder.nodes, pos?.x ?? 90, pos?.y ?? 90, 'B');
+  const addMechanicBuilderPayload = (payload, pos = null, record = null) => {
+    const point = pos || visibleCanvasPlacement({ x: 90, y: 90 });
+    const node = mechanicsPayloadToNode(payload, libraryWithMechanismDraft(lib, record), builder.nodes, point.x, point.y, 'B');
     if (!node) return;
     setBuilder((b) => ({ ...b, nodes: { ...b.nodes, [node.id]: node } }));
     selectBuilderNode(node.id, { ...builderMerged, [node.id]: node });
   };
-  const mechBuilderPaletteGroups = filterMechanicsPaletteGroups(
-    buildMechanicsPaletteGroups(lib, {
+  const mechBuilderPaletteGroups = buildMechanicsPaletteGroups(lib, {
       onAdd: (payload) => addMechanicBuilderPayload(payload),
       includeTask: false,
       includeDetail: false,
-      includeTemplates: false,
-      includePhysical: false,
-      includeLocations: false,
-    }),
-    mechBuilderFilter,
-  );
+      includeTemplates: true,
+    });
+  const mechBuilderToolbox = useMechanicsToolbox({ groups: mechBuilderPaletteGroups, lib, enabled: tab === 'mechBuilder' && !editing,
+    onAdd: (payload, record) => addMechanicBuilderPayload(payload, null, record),
+    onCreateWizard: answers => {
+      const additions = mechanicWizardGraph(answers, builder.nodes, visibleCanvasPlacement({ x: 90, y: 90 }, { w: 600, h: 420 }));
+      setBuilder(value => ({ ...value, nodes: { ...value.nodes, ...additions.nodes }, edges: [...value.edges, ...additions.edges] }));
+      const node = Object.values(additions.nodes)[0];
+      if (node) selectBuilderNode(node.id, { ...builderMerged, ...additions.nodes });
+    },
+    headerAction: <><AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
+      <button className="btn tiny" onClick={addBuilderFrame}>Frame</button>
+      <button className="btn tiny" onClick={addBuilderCircle}>Circle</button>
+      <button className="btn tiny" onClick={() => addBuilderVisualMarker('number')}>Number</button>
+      <button className="btn tiny" onClick={() => addBuilderVisualMarker('letter')}>Letter</button>
+      <button className="btn tiny" onClick={addBuilderTitle}>Title</button>
+      <button className="btn tiny" onClick={addBuilderArrow}>Arrow</button>
+      <button className="btn tiny" onClick={addBuilderSpline}>Spline</button>
+    </AnnotationTools><button className="btn tiny" onClick={() => setBrowsingMechanicsLibrary(true)}>Browse Library</button></>,
+  });
   const mechanicsBrowserSections = buildMechanicsLibrarySections(lib, (payload) => addMechanicBuilderPayload(payload));
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
   const tabCount = (tid) => {
@@ -1690,6 +1703,8 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
         </div>
         <div className="right">
           <span className="libbadge">Templates — reusable across games</span>
+          {group === 'story' && <NarrativeWizardButton onSaved={id => onSelect({ kind: 'node', id })} />}
+          {tab === 'mechBuilder' && mechBuilderToolbox.actions}
           {activeTab.addLabel && <button className="btn primary" onClick={addNew}>{activeTab.addLabel}</button>}
         </div>
       </div>
@@ -1739,27 +1754,8 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
 
       {tab === 'mechBuilder' && (
         <div className="nodebuilder-wrap">
-          <NodePalette
-            title="Mechanics NodeStructureBuilder"
-            subtitle="Create reusable task templates"
-            search={mechBuilderQuery}
-            onSearch={setMechBuilderQuery}
-            filters={MECHANICS_PALETTE_FILTERS.filter((f) => !['templates', 'physical', 'locations'].includes(f.id))}
-            activeFilter={mechBuilderFilter}
-            onFilter={setMechBuilderFilter}
-            groups={mechBuilderPaletteGroups}
-            headerAction={<><AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
-              <button className="btn tiny" onClick={() => addBuilderFrame()}>Frame</button>
-              <button className="btn tiny" onClick={() => addBuilderCircle()}>Circle</button>
-              <button className="btn tiny" onClick={() => addBuilderVisualMarker('number')}>Number</button>
-              <button className="btn tiny" onClick={() => addBuilderVisualMarker('letter')}>Letter</button>
-              <button className="btn tiny" onClick={() => addBuilderTitle()}>Title</button>
-              <button className="btn tiny" onClick={() => addBuilderArrow()}>Arrow</button>
-              <button className="btn tiny" onClick={() => addBuilderSpline()}>Spline</button>
-              </AnnotationTools>
-              <button className="btn tiny" onClick={() => setBrowsingMechanicsLibrary(true)}>Browse Library</button>
-            </>}
-          />
+          {mechBuilderToolbox.palette}
+          {mechBuilderToolbox.dialogs}
           <div className="nodebuilder-main">
             <FlowCanvas
               nodes={builder.nodes}

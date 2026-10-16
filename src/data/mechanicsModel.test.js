@@ -132,12 +132,15 @@ describe('mechanics model', () => {
     expect(Object.values(migrated.mechStructures).filter((template) => template.templateKind === 'action')).toHaveLength(23);
   });
 
-  it('exposes board game nodes and action templates as separate mechanics palette groups', () => {
+  it('offers Goal and BG Mechanics while hiding redundant template and physical groups', () => {
     const lib = makeLibrarySeed();
     const groups = buildMechanicsPaletteGroups(lib, { includeTemplates: true });
-    expect(groups.find((group) => group.id === 'boardGame').items.map((item) => item.label)).toEqual(['BG action']);
-    expect(groups.find((group) => group.id === 'supporting').items.map((item) => item.label)).toContain('Player-Facing Instruction');
-    expect(groups.find((group) => group.id === 'actionTemplates').items).toHaveLength(23);
+    expect(groups.find((group) => group.id === 'boardGame').items.map((item) => item.label)).toEqual(['Game Type', 'Goal', 'BG Mechanics']);
+    expect(groups.find((group) => group.id === 'supporting').items.map((item) => item.label)).toContain('Instructions for players');
+    expect(groups.find((group) => group.id === 'actionTemplates')).toBeUndefined();
+    for (const type of ['wearable', 'tool', 'status', 'clue', 'key']) expect(groups.find(group => group.id === `items:${type}`)).toBeUndefined();
+    const goal = mechanicsPayloadToNode('mech:LIB-MPRIM-GOAL', lib, {});
+    expect(goal).toMatchObject({ title: 'Goal', mechKind: 'goal', body: 'Describe what the player is going to achieve.' });
     expect(groups.find((group) => group.id === 'templates').items.every((item) => !item.kicker.startsWith('ACT-'))).toBe(true);
 
     const inserted = mechanicsPayloadToNode('template:LIB-MSTRUCT-ACT-01', lib, {});
@@ -194,11 +197,11 @@ describe('mechanics model', () => {
   it('keeps the mechanics restart set visible and archives the remaining node definitions', () => {
     const lib = makeLibrarySeed();
     expect(Object.values(lib.mechPrimitives).filter(isCurrentMechanicPrimitive).map((node) => node.mechKind)).toEqual([
-      'sensorNode', 'actuatorNode', 'action', 'playerFacingInstruction', 'progressState',
+      'gameType', 'goal', 'sensorNode', 'actuatorNode', 'action', 'playerFacingInstruction', 'progressState',
     ]);
     expect(Object.values(lib.mechSubnodes).filter(isCurrentMechanicSubnode).map((node) => node.kind)).toEqual([
       'progressiveFeedback', 'failSafeScaffolding', 'escalatingPressure', 'teamDiscussionPrompt', 'facilitatorNote',
-      'value', 'readinessStatus', 'team', 'comment', 'actionTypePattern',
+      'value', 'readinessStatus', 'team', 'comment',
     ]);
     expect(Object.values(lib.mechPrimitives).filter(isOldMechanicPrimitive).length).toBeGreaterThan(0);
     expect(Object.values(lib.mechSubnodes).filter(isOldMechanicSubnode).length).toBeGreaterThan(0);
@@ -285,13 +288,10 @@ describe('mechanics model', () => {
     });
   });
 
-  it('starts new Task Templates with a Cooperation node', () => {
+  it('starts new Task Templates with an empty canvas', () => {
     const lib = makeLibrarySeed();
     const task = mechanicsPayloadToNode('mech:LIB-MPRIM-TASK-TEMPLATE', lib, {});
-    expect(task.sub.nodes['COOP-1']).toMatchObject({
-      primitiveId: 'LIB-MPRIM-COOPERATION',
-      mechKind: 'cooperation',
-      cooperationStyle: 'Parallel',
-    });
+    expect(task.sub.nodes).toEqual({});
+    expect(task.sub.edges).toEqual([]);
   });
 });
