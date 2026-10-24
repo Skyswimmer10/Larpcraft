@@ -231,6 +231,8 @@ function ConceptPreview({ concept, onClose, onEdit }) {
         referenceFrameworkIds: JSON.parse(JSON.stringify(concept.referenceFrameworkIds || [])),
         teamId: null, sets: [], collapsed: true, conceptAnswers: JSON.parse(JSON.stringify(concept.conceptAnswers || {})), history: [],
         ...(concept.narrativeWizard ? { narrativeWizard: JSON.parse(JSON.stringify(concept.narrativeWizard)) } : {}),
+        ...(concept.narrativeWizardHistory ? { narrativeWizardHistory: JSON.parse(JSON.stringify(concept.narrativeWizardHistory)) } : {}),
+        ...(concept.narrativeFocus ? { narrativeFocus: concept.narrativeFocus } : {}),
         ...(concept.conceptQuestions ? { conceptQuestions: JSON.parse(JSON.stringify(concept.conceptQuestions)) } : {}),
         sub: JSON.parse(JSON.stringify({
           nodes: {

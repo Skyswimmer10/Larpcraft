@@ -1,0 +1,196 @@
+import { describe, expect, it } from 'vitest';
+import { FRAMEWORK_TYPES } from '../data/seed.js';
+import { NARRATIVE_FOCUSES } from '../data/narrativeGuidance.js';
+import { KOLB_MODES, KOLB_FIELDS } from '../data/kolbWizard.js';
+import { createKolbDraft, editKolb, kolbOrder, kolbEvidence, addKolbObservation, kolbSuggestions, acceptKolbSuggestion, keepKolb, addKolbTurn, kolbChange, kolbProgress, kolbChecks, resolveKolbTemplate, kolbBanner, fateImportValue, importKolbFate, refreshKolbImports, kolbQuestions, kolbAnswers, kolbOutput } from './kolbWizard.js';
+import { getPath, savedWizardModels, wizardSessionRecord } from './storyWizardCore.js';
+import { createWizardNode, frameworkQuestions, reviseWizardResult, wizardLibraryRecord, appendWizardResult } from './narrativeWizard.js';
+import { savedWizardSession, savedWizardSessions } from './narrativeMemory.js';
+import { createFateDraft } from './fateWizard.js';
+import { reducer } from '../state/reducer.js';
+const source = FRAMEWORK_TYPES.kolbLearningCycle;
+const make = extra => createKolbDraft({ id: 'K1', title: 'Mara learns', purpose: 'character', ...extra });
+const node = draft => createWizardNode({ source, type: 'framework', id: 'MARA', title: draft.title, context: draft.context, focus: draft.meta.purpose, kolbDraft: draft, questions: kolbQuestions(draft), answers: kolbAnswers(draft) });
+
+describe('Kolb Simple and Advanced shared draft', () => {
+  it.each(Object.keys(NARRATIVE_FOCUSES))('supports %s with unset preferences and distinct phase keys', purpose => {
+    const draft = make({ purpose });
+    for (const mode of KOLB_MODES) for (const field of KOLB_FIELDS[mode.key]) expect(getPath(draft.turns[0], field.path)).toBeDefined();
+    expect(draft.meta.purpose).toBe(purpose);
+    expect(draft.meta.habit).toBeNull();
+    expect(draft.turns[0].ce.outcome).toBeNull();
+    expect(draft.turns[0].ae.observed).toBeNull();
+    const questions = kolbQuestions(draft);
+    expect(new Set(questions.map(row => row.key)).size).toBe(questions.length);
+    expect(questions.filter(row => row.key.startsWith('phase:')).map(row => row.key)).toEqual(['phase:CE', 'phase:RO', 'phase:AC', 'phase:AE']);
+    expect(kolbOutput(draft)).toBe('');
+  });
+  it('rotates the four modes without skipping or inventing earlier answers', () => {
+    expect(kolbOrder('AC').map(mode => mode.key)).toEqual(['AC', 'AE', 'CE', 'RO']);
+    expect(kolbOrder('AE').map(mode => mode.key)).toEqual(['AE', 'CE', 'RO', 'AC']);
+    const draft = make();
+    expect(kolbProgress(draft, 0, 'CE')).toMatchObject({ filled: 0, total: 3 });
+    expect(editKolb(draft, 'meta.purpose', '')).toBe(draft);
+    expect(kolbProgress(addKolbObservation(draft, 0), 0, 'RO').filled).toBe(0);
+  });
+  it('offers suggestions without applying them and marks changed context for review', () => {
+    let draft = editKolb(make(), 'turns.0.ce.outcome', 'Failure');
+    const suggestion = kolbSuggestions(draft, 0, 'RO')[0];
+    expect(draft.turns[0].ro.notice).toEqual([]);
+    draft = acceptKolbSuggestion(draft, suggestion);
+    expect(draft.turns[0].ro.notice).toEqual(['Mistakes', 'What did not happen']);
+    draft = editKolb(draft, 'turns.0.ce.outcome', 'Success');
+    expect(draft.fieldMeta['turns.0.ro.notice'].stale).toBe(true);
+    const keep = keepKolb(draft, 'turns.0.ro.notice');
+    expect(keep.fieldMeta['turns.0.ro.notice'].stale).toBe(false);
+    expect(keep.turns[0].ro.notice).toEqual(draft.turns[0].ro.notice);
+    const updated = acceptKolbSuggestion(draft, kolbSuggestions(draft, 0, 'RO')[0]);
+    expect(updated.turns[0].ro.notice).toContain('Patterns');
+  });
+  it('protects locked steps, notes and earlier confirmed choices', () => {
+    let draft = editKolb(make(), 'turns.0.ce.outcome', 'Failure');
+    draft = editKolb(draft, 'locks.0:RO', true);
+    expect(editKolb(draft, 'turns.0.ro.anchor', 'Changed')).toBe(draft);
+    expect(editKolb(draft, 'notes.0:RO', 'Changed')).toBe(draft);
+    expect(kolbSuggestions(draft, 0, 'RO')).toEqual([]);
+    expect(draft.turns[0].ce.outcome).toBe('Failure');
+  });
+  it('tracks observations by stable IDs and preserves beliefs when evidence is removed', () => {
+    let draft = addKolbObservation(make(), 0);
+    const id = draft.turns[0].ro.observations[0].id;
+    draft = editKolb(draft, 'turns.0.ro.observations.0.text', 'The rival asked for nothing in return.');
+    draft = editKolb(draft, 'turns.0.ac.groundedIn', [id]);
+    draft = editKolb(draft, 'turns.0.ac.anchor', 'Help can be freely given.');
+    expect(kolbEvidence(draft, 0)[0]).toMatchObject({ id, text: 'The rival asked for nothing in return.' });
+    draft = editKolb(draft, 'turns.0.ro.observations', []);
+    expect(draft.turns[0].ac.anchor).toBe('Help can be freely given.');
+    expect(kolbChecks(draft).some(row => row.id === '0:removed-evidence')).toBe(true);
+    expect(draft.fieldMeta['turns.0.ac.anchor'].stale).toBe(true);
+  });
+  it('does not infer a fixed rule from one viewpoint or advanced understanding from three', () => {
+    let draft = editKolb(make(), 'turns.0.ro.perspectives', 3);
+    expect(kolbSuggestions(draft, 0, 'AC')).toEqual([]);
+    expect(draft.turns[0].ac.integration).toBeNull();
+    draft = editKolb(draft, 'turns.0.ro.perspectives', 1);
+    expect(draft.turns[0].ac.integration).toBeNull();
+  });
+  it('keeps test predictions distinct from recorded outcomes', () => {
+    let draft = editKolb(make(), 'turns.0.ac.prediction', 'The rival helps again.');
+    const suggestion = kolbSuggestions(draft, 0, 'AE').find(row => row.id === 'prediction-result');
+    draft = acceptKolbSuggestion(draft, suggestion);
+    expect(draft.turns[0].ae.branches.confirm.text).toBe('The rival helps again.');
+    expect(draft.turns[0].ae.observed).toBeNull();
+    expect(kolbOutput(draft)).not.toContain('recorded result');
+  });
+  it('seeds another cycle only from an explicit enabled result and marks planned continuations', () => {
+    let draft = editKolb(make(), 'turns.0.ae.branches.partial', { enabled: true, text: 'The rival helps, but keeps a secret.', consequence: 'Another question' });
+    draft = addKolbTurn(draft, 'partial');
+    expect(draft.turns).toHaveLength(2);
+    expect(draft.turns[1].ce.anchor).toBe('The rival helps, but keeps a secret.');
+    expect(kolbBanner(draft, 1, 'CE')).toMatch(/^Planned continuation:/);
+    expect(kolbOutput(draft)).toContain('If the rival helps');
+    draft = editKolb(draft, 'turns.0.ae.observed', 'partial');
+    expect(kolbBanner(draft, 1, 'CE')).toMatch(/^Recorded outcome:/);
+    expect(draft.fieldMeta['turns.1.ce.anchor'].stale).toBe(true);
+    expect(addKolbTurn(make(), 'confirm').turns[1].ce.anchor).toBe('');
+  });
+  it('reviews a later linked experience when its source result changes', () => {
+    let draft = editKolb(make(), 'turns.0.ae.branches.refute', { enabled: true, text: 'The rival refuses.', consequence: '' });
+    draft = addKolbTurn(draft, 'refute');
+    draft = editKolb(draft, 'turns.0.ae.branches.refute.text', 'The rival demands a favour.');
+    expect(draft.turns[1].ce.anchor).toBe('The rival refuses.');
+    const suggestion = kolbSuggestions(draft, 1, 'CE').find(row => row.path === 'turns.1.ce.anchor');
+    draft = acceptKolbSuggestion(draft, suggestion);
+    expect(draft.turns[1].ce.anchor).toBe('The rival demands a favour.');
+    expect(draft.fieldMeta['turns.1.ce.anchor'].source).toBe('linked');
+  });
+  it('limits drafts to four cycles and retains advanced details when hiding them', () => {
+    let draft = editKolb(make(), 'turns.0.ac.correctness', 'Mistaken');
+    draft = editKolb(draft, 'meta.depth', 'simple');
+    expect(draft.turns[0].ac.correctness).toBe('Mistaken');
+    for (let i = 0; i < 6; i++) draft = addKolbTurn(draft);
+    expect(draft.turns).toHaveLength(4);
+    expect(new Set(kolbQuestions(draft).map(row => row.key)).size).toBe(kolbQuestions(draft).length);
+  });
+  it('resolves current and previous turn tokens, names, lists and fallbacks without truncating source text', () => {
+    let draft = editKolb(make(), 'turns.0.ac.anchor', 'The river changes at night.');
+    draft = addKolbTurn(draft);
+    draft.meta.learners = ['M'];
+    draft.turns[1].ce.anchor = 'x'.repeat(200);
+    expect(resolveKolbTemplate('{prevTurn.ac.anchor} {meta.learnersLabel} {missing|a clue}', draft, [{ key: 'M', name: 'Mara' }])).toBe('The river changes at night. Mara a clue');
+    expect(resolveKolbTemplate('{turns[current].ce.anchor}', draft)).toHaveLength(73);
+    expect(draft.turns[1].ce.anchor).toHaveLength(200);
+  });
+  it('imports selected FATE details without guessing success, failure or a learning habit', () => {
+    const fate = createFateDraft({ id: 'F', title: 'A warning' });
+    fate.focus.anchor = 'The keeper warns them of the rising river.';
+    fate.focus.hooks = ['A possible threat']; fate.emotion.primary = 'Fear';
+    const model = { key: 'FATE-1', record: { fateDraft: fate } };
+    let draft = importKolbFate(make(), 0, model, 'experience');
+    draft = importKolbFate(draft, 0, model, 'emotion');
+    expect(draft.turns[0].ce.anchor).toBe(fate.focus.anchor);
+    expect(draft.turns[0].ce.emotion).toBe('Fear');
+    expect(draft.turns[0].ce.outcome).toBeNull();
+    expect(draft.meta.habit).toBeNull();
+    model.record.fateDraft.focus.anchor = 'The bridge has washed away.';
+    draft = refreshKolbImports(draft, [model]);
+    expect(draft.fieldMeta['turns.0.ce.anchor'].stale).toBe(true);
+    expect(draft.turns[0].ce.anchor).not.toBe(model.record.fateDraft.focus.anchor);
+    draft = acceptKolbSuggestion(draft, kolbSuggestions(draft, 0, 'CE', [model]).find(row => row.path === 'turns.0.ce.anchor'));
+    expect(draft.turns[0].ce.anchor).toBe('The bridge has washed away.');
+    expect(refreshKolbImports(draft, []).fieldMeta['turns.0.ce.anchor'].stale).toBe(true);
+    expect(fateImportValue({ record: { answers: { 'phase:F': 'A legacy clue', 'phase:E': 'A cold voice' } } }, 'emotion')).toBe('');
+  });
+  it('keeps prose editable, omits technical questions, and preserves before/after/behaviour', () => {
+    let draft = make({ context: 'Mara travels with the river guild.' });
+    draft.turns[0].change.before = 'All help comes with a debt.';
+    draft.turns[0].ce.anchor = 'A rival rescues her without asking for payment.';
+    draft.turns[0].ro.anchor = 'The rival wanted nothing in return.';
+    draft.turns[0].ac.anchor = 'Strangers can be generous.';
+    draft.turns[0].ae.anchor = 'She accepts assistance, cautiously.';
+    expect(kolbChange(draft, 0)).toMatchObject({ before: 'All help comes with a debt.', after: 'Strangers can be generous.', behaviour: 'She accepts assistance, cautiously.' });
+    expect(kolbOutput(draft)).not.toMatch(/Working on:|Concrete Experience|What do they/);
+    draft = editKolb(draft, 'output.text', 'Mara questions the belief that every kindness has a price.');
+    draft = editKolb(draft, 'turns.0.ac.anchor', 'Some help is freely given.');
+    expect(kolbOutput(draft)).toBe('Mara questions the belief that every kindness has a price.');
+    const result = node(draft), saved = wizardLibraryRecord(result, 'LIB-MARA');
+    expect(saved.entity.description).toBe(kolbOutput(draft));
+    expect(savedWizardSession(saved.entity.template, {}).record.kolbDraft.output.text).toBe(kolbOutput(draft));
+  });
+  it('migrates legacy keys in place while preserving long notes, custom questions and nested content', () => {
+    const answers = { 'phase:CE': 'A long experience. '.repeat(20).trim(), 'phase:RO': 'She looks back.', 'phase:AC': 'The river changes.', 'phase:AE': 'She tests a new route.' };
+    const old = createWizardNode({ source, type: 'framework', id: 'OLD', title: 'Older version', focus: 'character', questions: frameworkQuestions(source), answers });
+    old.questions.push({ id: 'custom', prompt: 'Other work', answer: 'Keep me.' });
+    old.sub = { nodes: { keep: { id: 'keep', title: 'Keep this too' } }, edges: [] };
+    const session = savedWizardSession(old, {}), draft = make({ record: session.record, answers: session.answers, targetId: old.id });
+    expect(draft.turns[0].ce.anchor).toBe(answers['phase:CE']);
+    expect(draft.notes['0:CE']).toBe(answers['phase:CE']);
+    const updated = reviseWizardResult(old, node(draft), source);
+    expect(updated.id).toBe(old.id);
+    expect(updated.questions.find(row => row.id === 'custom').answer).toBe('Keep me.');
+    expect(updated.sub).toEqual(old.sub);
+    expect(updated.body).not.toContain('Working on:');
+    expect(savedWizardSession(updated, {}).answers['phase:CE']).toBe(answers['phase:CE']);
+  });
+  it('uses independent editing slots and retains other framework sessions on a combined node', () => {
+    const kolb = node(make()), record = kolb.narrativeWizard;
+    const first = createKolbDraft({ record, targetId: 'FIRST' }), second = createKolbDraft({ record, targetId: 'SECOND' });
+    expect(first.id).not.toBe(second.id);
+    const fate = createWizardNode({ source: FRAMEWORK_TYPES.fate, type: 'framework', id: 'F', title: 'Another lens', focus: 'character', questions: frameworkQuestions(FRAMEWORK_TYPES.fate), answers: { 'phase:F': 'A bell.' } });
+    const combined = appendWizardResult(kolb, fate);
+    expect(savedWizardSessions(combined, {})).toHaveLength(2);
+    expect(savedWizardModels({ nodes: { MARA: combined } }, 'kolbLearningCycle')).toHaveLength(1);
+    expect(wizardSessionRecord(combined, { sessionId: record.sessionId }, 'kolbLearningCycle')).toEqual(record);
+  });
+  it('saves drafts separately, reports gaps as recorded details, and guards future schema versions', () => {
+    let draft = editKolb(make(), 'meta.mode', 'diagnose');
+    expect(kolbOutput(draft)).toContain('0/3 details recorded');
+    expect(kolbOutput(draft)).not.toContain('strength');
+    let game = reducer({ nodes: {} }, { type: 'SAVE_KOLB_DRAFT', draft });
+    game = reducer(game, { type: 'SET_KOLB_PREFERENCES', preferences: { lastDepth: 'advanced' } });
+    expect(JSON.parse(JSON.stringify(game)).kolbWizardDrafts.K1).toEqual(draft);
+    expect(Object.keys(game.nodes)).toHaveLength(0);
+    expect(reducer(game, { type: 'REMOVE_KOLB_DRAFT', id: 'K1' }).kolbWizardDrafts).toEqual({});
+    expect(() => make({ record: { kolbDraft: { schemaVersion: 99 } } })).toThrow(/newer/);
+  });
+});

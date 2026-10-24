@@ -1,3 +1,7 @@
+# Historical Larpcraft handoff — superseded
+
+**For the current continuation brief, read [CODEX_HANDOFF_2026-10-21.md](CODEX_HANDOFF_2026-10-21.md) in this same repository.** It includes current local-file storage, verified GitHub/Vercel identities, uncommitted wizard changes, and the latest checks. The September document below is retained as history and contains obsolete implementation/storage claims.
+
 # Larpcraft: Astra Conversation Handoff
 
 Prepared 2026-09-15. This is a continuation brief, not a request to implement every historical idea again. Read current code before acting. Earlier chat completion claims sometimes exceeded the actual verification.

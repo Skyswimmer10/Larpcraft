@@ -107,6 +107,9 @@ export function importStory(lib, proj, storyId) {
       x: n.x - minX + 60, y: n.y - minY + offsetY,
       body: n.body ?? '', color: n.color ?? null, w: n.w ?? undefined, h: n.h ?? undefined,
       conceptKind: n.conceptKind, conceptId: n.conceptId ?? (n.kind === 'concept' ? n.primitiveId ?? null : null),
+      ...(n.narrativeFocus ? { narrativeFocus: n.narrativeFocus } : {}),
+      ...(n.narrativeWizard ? { narrativeWizard: JSON.parse(JSON.stringify(n.narrativeWizard)) } : {}),
+      ...(n.narrativeWizardHistory ? { narrativeWizardHistory: JSON.parse(JSON.stringify(n.narrativeWizardHistory)) } : {}),
       ...(n.kind === 'concept' ? {
         name: n.name ?? n.title,
         description: n.description ?? n.body ?? '',

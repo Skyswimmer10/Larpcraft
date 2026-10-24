@@ -24,16 +24,18 @@ describe('narrative questions', () => {
     expect(new Set(rows.map(r => r.key)).size).toBe(rows.length);
     expect(rows.every(r => r.prompt.trim())).toBe(true);
   });
-  it('includes selected archetype roots and both adult and child shadows', () => {
+  it('includes the actual archetype forms and does not invent child forms for the feminine reference', () => {
     for (const id of ['jungianMasculineArchetypes', 'jungianFeminineArchetypes']) {
       const fw = FRAMEWORK_TYPES[id];
       for (const phase of fw.phases) {
         const rows = frameworkQuestions(fw, { archetype: phase.key });
-        expect(rows.find(r => r.key === 'root').hint).toContain(phase.name);
+        if (phase.descriptions.child) expect(rows.find(r => r.key === 'root').hint).toContain(phase.name);
+        else expect(rows.find(r => r.key === 'root')).toBeUndefined();
         expect(rows.find(r => r.key === 'activeShadow').hint).toContain(phase.adultActiveShadow);
-        expect(rows.find(r => r.key === 'activeShadow').hint).toContain(phase.childActiveShadow);
+        if (phase.childActiveShadow) expect(rows.find(r => r.key === 'activeShadow').hint).toContain(phase.childActiveShadow);
         expect(rows.find(r => r.key === 'passiveShadow').hint).toContain(phase.adultPassiveShadow);
-        expect(rows.find(r => r.key === 'passiveShadow').hint).toContain(phase.childPassiveShadow);
+        if (phase.childPassiveShadow) expect(rows.find(r => r.key === 'passiveShadow').hint).toContain(phase.childPassiveShadow);
+        expect(rows.every(row => !`${row.prompt} ${row.hint}`.includes('undefined'))).toBe(true);
       }
     }
   });
@@ -49,12 +51,13 @@ describe('narrative questions', () => {
       shadow: { id: 'shadow', kind: 'characterShadow', title: 'Withdrawal', body: 'Refuses responsibility.' },
       'facet-say': { id: 'facet-say', kind: 'characterArchetypeFacet', title: 'You say', body: 'Follow me.' },
     } });
-    expect(rows).toHaveLength(2);
-    expect(rows[0].hint).toBe('Refuses responsibility.');
-    expect(rows[1].prompt).toContain('say');
+    const graphQuestions = rows.filter(row => row.nodePath);
+    expect(graphQuestions).toHaveLength(2);
+    expect(graphQuestions[0].hint).toBe('Refuses responsibility.');
+    expect(graphQuestions[1].prompt).toContain('say');
   });
   it('supports empty and newly added concepts', () => {
-    expect(conceptQuestions({ name: 'New concept', nodes: {} })).toHaveLength(1);
+    expect(conceptQuestions({ name: 'New concept', nodes: {} }).some(row => row.key === 'application')).toBe(true);
     expect(narrativeSources({ concepts: { custom: { id: 'custom', name: 'My new concept' } } }).some(r => r.key === 'concept:custom')).toBe(true);
   });
 });

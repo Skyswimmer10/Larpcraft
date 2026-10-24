@@ -1950,7 +1950,12 @@ function ConceptPanel({ node }) {
         status: node.status ?? 'seed',
         onePromise: node.onePromise || '',
         referenceFrameworkIds: JSON.parse(JSON.stringify(node.referenceFrameworkIds || [])),
-        premade: false, questions: [], example: {}, nodes: node.sub?.nodes || {}, edges: node.sub?.edges || []
+        ...(node.narrativeFocus ? { narrativeFocus: node.narrativeFocus } : {}),
+        ...(node.narrativeWizard ? { narrativeWizard: JSON.parse(JSON.stringify(node.narrativeWizard)) } : {}),
+        ...(node.narrativeWizardHistory ? { narrativeWizardHistory: JSON.parse(JSON.stringify(node.narrativeWizardHistory)) } : {}),
+        ...(node.conceptAnswers ? { conceptAnswers: JSON.parse(JSON.stringify(node.conceptAnswers)) } : {}),
+        premade: false, questions: [], example: {},
+        ...JSON.parse(JSON.stringify(node.sub || { nodes: {}, edges: [] })),
       },
     });
     setSavedAs(id);
@@ -4993,18 +4998,26 @@ export default function Inspector({ selection, onSelect, onNavigate, collapsed =
     : wizardEntity?.kind === 'framework' ? FRAMEWORK_TYPES[wizardEntity.frameworkId] : null;
   const wizardConcept = kind === 'lib-concepts' || wizardEntity?.kind === 'concept' ? wizardEntity : null;
   const wizardCharacter = wizardEntity?.kind === 'character';
+  const wizardOtherNarrative = ['node', 'graphnode'].includes(kind) && ['event', 'quest', 'storyLocation', 'item', 'storyStructureContainer'].includes(wizardEntity?.kind) && !wizardEntity?.mechKind;
   return (
     <aside className="inspector">
       {resizeHandle}
       {toggle}
       <React.Fragment key={selectionKey}>
-        {(wizardFramework || wizardConcept || wizardCharacter) && <div className="isect">
+        {(wizardFramework || wizardConcept || wizardCharacter || wizardOtherNarrative) && <div className="isect">
+          {['node', 'graphnode'].includes(kind) && wizardEntity?.narrativeWizard?.sourceId && <NarrativeWizardButton
+            resumeNode={wizardEntity}
+            gameScope={kind === 'graphnode' ? selection.scope : undefined}
+            label="Continue saved wizard"
+            className="btn wide"
+            onSaved={createdId => onSelect?.(kind === 'graphnode' ? { kind: 'graphnode', scope: selection.scope, id: createdId } : { kind: 'node', id: createdId })}
+          />}
           <NarrativeWizardButton
             source={wizardFramework || wizardConcept || undefined}
             sourceType={wizardFramework ? 'framework' : wizardConcept ? 'concept' : undefined}
-            targetId={wizardCharacter && ['node', 'graphnode'].includes(kind) ? id : undefined}
+            targetId={(wizardCharacter || wizardOtherNarrative) && ['node', 'graphnode'].includes(kind) ? id : undefined}
             gameScope={kind === 'graphnode' ? selection.scope : undefined}
-            label={wizardFramework ? 'Create character with questions' : wizardConcept ? 'Adapt with questions' : 'Explore with a framework or concept'}
+            label={wizardFramework ? 'Use this framework' : wizardConcept ? 'Adapt with questions' : 'Explore with a framework or concept'}
             className="btn primary wide"
             onSaved={createdId => onSelect?.(kind === 'graphnode' ? { kind: 'graphnode', scope: selection.scope, id: createdId } : { kind: 'node', id: createdId })}
           />

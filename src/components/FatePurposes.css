@@ -1,0 +1,31 @@
+.fp-types { border: 0; margin: 20px 0; padding: 0; min-width: 0; }
+.fp-types legend { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+.fp-types > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fp-types label { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-content: start; gap: 10px; padding: 18px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.fp-types label.selected { border-color: #e8d25c; background: #e8d25c0a; }
+.fp-types label:focus-within { outline: 2px solid #c9b6ff; }
+.fp-types label span { grid-column: 2; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.fp-types input { margin: 3px 0; accent-color: #e8d25c; }
+.fp-types b { font-size: 13px; }
+.fp-types p, .fp-selection-details > small, .fp-patterns > p, .fp-spoken-part p { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.fp-selection-details { padding: 14px 16px; margin: 12px 0 22px; border-left: 2px solid #e8d25c66; background: #e8d25c05; border-radius: 0 8px 8px 0; }
+.fp-option-detail { margin: 18px 0 0; }
+.fp-option-detail > b { color: #e8d25c; font-size: 12px; }
+.fp-option-detail > span { line-height: 1.6; font-size: 12px; }
+.fp-option-detail textarea { margin-top: 7px; }
+.fp-selected { margin: 20px 0; padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.fp-selected > b { display: block; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+.fp-selected > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.fp-selected span { padding: 5px 8px; border: 1px solid #e8d25c44; color: #e8dba0; border-radius: 6px; font-size: 11px; }
+.fp-selected p { font-size: 11px; line-height: 1.6; }
+.fp-patterns { padding: 16px; border: 1px solid #ef91b744; border-radius: 10px; margin: 20px 0; }
+.fp-patterns h4 { margin-top: 0; }
+.fp-pattern { padding: 14px; border: 1px solid var(--line); border-radius: 8px; margin: 18px 0; min-width: 0; }
+.fp-pattern legend { padding: 0 6px; font-size: 12px; }
+.fp-spoken-part, .fp-profile-guidance, .fp-profile-status { padding: 18px; margin: 20px 0; border: 1px solid #72b7ef55; background: #72b7ef06; border-radius: 10px; font-size: 12px; line-height: 1.7; }
+.fp-spoken-part .nw-field { margin-bottom: 0; }
+.fp-profile-guidance > b { color: #8cc5f2; }
+.fp-profile-guidance p { white-space: pre-wrap; }
+.fp-conversation-setup { margin: 20px 0; padding: 20px; border: 1px solid var(--line); border-radius: 10px; }
+.fp-design-notes { white-space: pre-wrap; font-size: 12px; line-height: 1.8; }
+@media (max-width: 780px) { .fp-types > div { grid-template-columns: minmax(0, 1fr); } .fp-conversation-setup, .fp-selection-details, .fp-spoken-part { padding: 12px; } }

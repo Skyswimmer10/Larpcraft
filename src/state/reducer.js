@@ -214,6 +214,40 @@ export function reducer(state, action) {
       return { ...state, meta: { ...state.meta, ...action.patch } };
     }
 
+    // Unfinished FATE work belongs to the project, independently of canvas
+    // nodes. These writes use the normal disk/IndexedDB persistence pipeline.
+    case 'SAVE_FATE_DRAFT':
+      return { ...state, fateWizardDrafts: { ...state.fateWizardDrafts, [action.draft.id]: action.draft } };
+    case 'REMOVE_FATE_DRAFT': {
+      const drafts = { ...state.fateWizardDrafts };
+      delete drafts[action.id];
+      return { ...state, fateWizardDrafts: drafts };
+    }
+    case 'SET_FATE_PREFERENCES':
+      return { ...state, fateWizardPreferences: action.preferences };
+
+    case 'SAVE_KOLB_DRAFT':
+      return { ...state, kolbWizardDrafts: { ...state.kolbWizardDrafts, [action.draft.id]: action.draft } };
+    case 'REMOVE_KOLB_DRAFT': {
+      const drafts = { ...state.kolbWizardDrafts };
+      delete drafts[action.id];
+      return { ...state, kolbWizardDrafts: drafts };
+    }
+    case 'SET_KOLB_PREFERENCES':
+      return { ...state, kolbWizardPreferences: action.preferences };
+
+    case 'SAVE_VALUES_DRAFT':
+      return { ...state, valuesWizardDrafts: { ...state.valuesWizardDrafts, [action.draft.id]: action.draft } };
+    case 'REMOVE_VALUES_DRAFT': {
+      const drafts = { ...state.valuesWizardDrafts };
+      delete drafts[action.id];
+      return { ...state, valuesWizardDrafts: drafts };
+    }
+    case 'SET_VALUES_PREFERENCES':
+      return { ...state, valuesWizardPreferences: action.preferences };
+    case 'ADD_HUMAN_VALUE':
+      return { ...state, humanValuesLibrary: [...(state.humanValuesLibrary || []).filter(value => value.id !== action.definition.id), action.definition] };
+
     case 'SET_STORY_DYNAMICS_GRAPH': {
       return { ...state, storyDynamicsGraph: action.graph };
     }

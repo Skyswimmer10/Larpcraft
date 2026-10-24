@@ -314,6 +314,8 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
         color: null, teamId: null, sets: [],
         collapsed: true, conceptAnswers: JSON.parse(JSON.stringify(template?.conceptAnswers || {})), history: [],
         ...(template?.narrativeWizard ? { narrativeWizard: JSON.parse(JSON.stringify(template.narrativeWizard)) } : {}),
+        ...(template?.narrativeWizardHistory ? { narrativeWizardHistory: JSON.parse(JSON.stringify(template.narrativeWizardHistory)) } : {}),
+        ...(template?.narrativeFocus ? { narrativeFocus: template.narrativeFocus } : {}),
         ...(template?.conceptQuestions ? { conceptQuestions: JSON.parse(JSON.stringify(template.conceptQuestions)) } : {}),
         sub: JSON.parse(JSON.stringify({
           nodes: {

@@ -1,48 +1,23 @@
 import { FRAMEWORK_TYPES, ADDITIONAL_NODE_TYPES, cloneCharacterCardTemplate } from '../data/seed.js';
+import { NARRATIVE_FOCUSES, narrativeGuidance, defaultNarrativeFocus } from '../data/narrativeGuidance.js';
+import { focusStarters } from './frameworkQuestions.js';
+import { questionAnswer } from './narrativeMemory.js';
+import { metaProgramProfile } from '../data/metaProgramWizard.js';
+import { metaProgramNarrative } from './metaProgramNarrative.js';
+import { fateOutput } from './fateWizard.js';
+import { kolbOutput } from './kolbWizard.js';
+import { valuesOutput } from './humanValuesWizard.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const text = value => typeof value === 'string' ? value.trim() : '';
 const question = (key, prompt, hint = '', extra = {}) => ({ key, prompt, hint, ...extra });
 
-const FRAMEWORK_PROMPTS = {
-  fate: ['What captures this character’s attention?', 'Why do others trust or listen to this character?', 'Where do they belong, and whose approval matters?', 'What feeling drives their next decision?'],
-  kolbLearningCycle: ['What experience changes this character’s outlook?', 'What do they notice when they look back?', 'What lesson or belief do they take from it?', 'How do they test that belief in their next action?'],
-  descentAndRecovery: ['What is their normal life, and what is missing?', 'What knocks their life off course?', 'At their lowest point, what do they discover?', 'What do they do with what they learned?', 'How are they different after recovering?'],
-  homeVoyageReturn: ['What makes home familiar, and what is missing?', 'What do they want enough to leave home?', 'What unfamiliar situation do they enter?', 'What must they learn or change to cope?', 'What do they finally obtain?', 'What does getting it cost them?', 'What happens when they return?', 'What has changed in them, and how does it affect home?'],
-  storyBuildingSystem: ['What is the central idea behind this character?', 'What uncertainty or discovery draws them forward?', 'What part do they play in other people’s stories?', 'What should their presence make players think, feel, or do?', 'Which events reveal their story?', 'What voice, manner, or imagery makes them recognisable?', 'How and when do players learn about them?', 'How do these choices work together in one playable encounter?'],
-};
-
-export function frameworkQuestions(framework, answers = {}) {
-  if (!framework) return [];
-  const phases = framework.phases || [];
-  if (framework.layout === 'archetypes') {
-    const phase = phases.find(p => p.key === answers.archetype);
-    return [
-      question('archetype', 'Which archetype would you like to explore?', 'Use it as a writing lens. Any character can draw on any of these roles.', { choices: phases.map(p => p.key) }),
-      question('strength', 'How does this character show the healthy side of this archetype?', phase?.short),
-      question('root', 'What younger or less experienced side still shows through?', phase ? `Immature root: ${phase.name}. ${phase.descriptions?.child || ''}` : 'Choose an archetype to see its immature root.'),
-      question('activeShadow', 'Under pressure, how might they misuse their strength?', phase ? `Active shadow: ${phase.adultActiveShadow}. ${phase.descriptions?.adultActiveShadow || ''} Immature active shadow: ${phase.childActiveShadow}. ${phase.descriptions?.childActiveShadow || ''}` : ''),
-      question('passiveShadow', 'When they withdraw or give up, what does that look like?', phase ? `Passive shadow: ${phase.adultPassiveShadow}. ${phase.descriptions?.adultPassiveShadow || ''} Immature passive shadow: ${phase.childPassiveShadow}. ${phase.descriptions?.childPassiveShadow || ''}` : ''),
-      question('shadowScene', 'What situation brings out a shadow, and what could help them recover?', 'Describe an observable choice, not just a personality label.'),
-    ];
-  }
-  return phases.map((phase, index) => {
-    let prompt = FRAMEWORK_PROMPTS[framework.id]?.[index];
-    if (framework.layout === 'values') prompt = `What does “${phase.key} / ${phase.name}” mean to this character, and what choice puts it at risk?`;
-    if (framework.layout === 'preferenceSpectra') prompt = phase.question;
-    if (framework.layout === 'languageSpectrum') prompt = `How might this character use ${phase.name.toLowerCase()} in dialogue, and what would a clearer version reveal?`;
-    if (framework.layout === 'profileDomains') prompt = `${phase.short} Show this through a scene or behaviour.`;
-    const hint = framework.layout === 'languageSpectrum'
-      ? `Reference example: “${phase.example}” → “${phase.question}” → “${phase.clarified}”`
-      : [phase.short, phase.children?.join(' · ')].filter(Boolean).join(' ');
-    return question(`phase:${phase.key}`, prompt || `How does ${phase.name || phase.key} appear in this character’s story?`, hint);
-  });
-}
+export { frameworkQuestions } from './frameworkQuestions.js';
 
 export function narrativeSources(library) {
   return [
-    ...Object.values(FRAMEWORK_TYPES).map(source => ({ key: `framework:${source.id}`, type: 'framework', source, label: source.label })),
-    ...Object.values(library?.concepts || {}).map(source => ({ key: `concept:${source.id}`, type: 'concept', source, label: source.name || source.title || 'Untitled concept' })),
+    ...Object.values(FRAMEWORK_TYPES).map(source => ({ key: `framework:${source.id}`, type: 'framework', source, label: source.label, guidance: narrativeGuidance(source, 'framework') })),
+    ...Object.values(library?.concepts || {}).map(source => ({ key: `concept:${source.id}`, type: 'concept', source, label: source.name || source.title || 'Untitled concept', guidance: narrativeGuidance(source, 'concept') })),
   ];
 }
 
@@ -80,7 +55,8 @@ export function conceptRoles(source) {
   return roles;
 }
 
-export function conceptQuestions(source) {
+export function conceptQuestions(source, focus = defaultNarrativeFocus(source, 'concept')) {
+  if (source.savedQuestions) return clone(source.savedQuestions);
   const result = [];
   const seen = new Set();
   const add = row => { if (text(row.prompt) && !seen.has(row.prompt.toLowerCase())) { seen.add(row.prompt.toLowerCase()); result.push(row); } };
@@ -107,7 +83,7 @@ export function conceptQuestions(source) {
     } else if (node.kind === 'conceptTitle' || node.kind === 'conceptChoice') {
       add(question(`node:${path.join('/')}`, `How does “${label}” fit your version?`, node.body, { nodePath: path }));
     } else if (node.kind === 'characterShadow') {
-      add(question(`node:${path.join('/')}`, `How does “${label}” appear when your character is under pressure?`, node.body, { nodePath: path }));
+      add(question(`node:${path.join('/')}`, focus === 'character' ? `How does “${label}” appear when your character is under pressure?` : `How does “${label}” affect the people involved and the choices they make here?`, node.body, { nodePath: path }));
     } else if (node.kind === 'characterArchetypeFacet') {
       const prompts = {
         when: 'When does your character show this side of themselves?',
@@ -115,15 +91,16 @@ export function conceptQuestions(source) {
         gift: 'What does your character offer other people?',
       };
       const facet = path[path.length - 1].split('-').pop();
-      add(question(`node:${path.join('/')}`, prompts[facet] || `How does “${label}” show up in your character?`, node.body, { nodePath: path }));
+      const scopedPrompts = { when: 'When does this behaviour affect the situation or relationship?', say: 'What could someone say that reveals this behaviour to the other people involved?', gift: 'What does one person offer another, and how is it received?' };
+      add(question(`node:${path.join('/')}`, (focus === 'character' ? prompts[facet] : scopedPrompts[facet]) || `How does “${label}” affect this situation?`, node.body, { nodePath: path }));
     } else if (node.kind === 'characterArchetypeCombinations') {
-      add(question(`node:${path.join('/')}`, 'What other side of this character supports or clashes with their main archetype?', node.body, { nodePath: path }));
+      add(question(`node:${path.join('/')}`, focus === 'character' ? 'What other side of this character supports or clashes with their main archetype?' : 'Which roles support or clash with one another in this situation?', node.body, { nodePath: path }));
     } else if (['event', 'quest', 'storyLocation', 'item'].includes(node.kind)) {
       add(question(`node:${path.join('/')}`, `What happens around “${label}”, and why does it matter?`, node.body, { nodePath: path }));
     }
   }
-  if (!result.length) result.push(question('application', 'How does this concept work in your character or scene?', source.description || source.body || 'Describe what happens and why it matters.'));
-  return result;
+  if (!result.length) result.push(question('application', `How does this concept help you develop this ${NARRATIVE_FOCUSES[focus]?.result.toLowerCase() || 'situation'}?`, source.description || source.body || 'Describe what happens and why it matters.'));
+  return [...focusStarters(focus), ...result];
 }
 
 // One replacement pass avoids turning A → B → C into A → C. Only visible prose
@@ -172,34 +149,181 @@ export function adaptConceptGraph(source, roles, questions, answers) {
   return graph;
 }
 
-export function wizardSummary({ source, type, title, context, roles = [], questions, answers }) {
-  const lines = [title, context, `Based on: ${source.label || source.name || source.title}`].filter(Boolean);
+function questionnaireSummary({ source, type, title, context, roles = [], questions, answers, focus }) {
+  const lines = [title, focus && `Working on: ${NARRATIVE_FOCUSES[focus]?.result || focus}`, context, `Based on: ${source.label || source.name || source.title}`].filter(Boolean);
   for (const role of roles) if (text(role.replacement)) lines.push(`${role.label || role.original}: ${text(role.replacement)}`);
-  for (const row of questions) if (text(answers[row.key])) lines.push(`${type === 'concept' ? substituteRoles(row.prompt, roles) : row.prompt}\n${text(answers[row.key])}`);
+  for (const row of questions) if (questionAnswer(row, answers)) lines.push(`${type === 'concept' ? substituteRoles(row.prompt, roles) : row.prompt}\n${questionAnswer(row, answers)}`);
   return lines.join('\n\n');
 }
 
-export function createWizardNode({ source, type, title, context = '', roles = [], questions, answers, output = 'character', id, position = {}, characterTemplate }) {
-  const summary = wizardSummary({ source, type, title, context, roles, questions, answers });
-  const record = { version: 1, sourceType: type, sourceId: source.id, sourceLabel: source.label || source.name || source.title, title, context, roles: clone(roles), answers: clone(answers), questions: clone(questions) };
-  const common = { id, title: text(title), name: text(title), body: summary, x: position.x ?? 100, y: position.y ?? 100, w: 280, h: 150, history: [], narrativeWizard: record, teamId: null, sets: [], locationId: null, itemId: null, mechanicIds: [], sensorIds: [] };
-  const sub = type === 'concept' ? adaptConceptGraph(source, roles, questions, answers) : null;
-  const characterCard = output === 'character' ? cloneCharacterCardTemplate(characterTemplate) : null;
-  if (output === 'character') return {
+export function wizardSummary(options) {
+  if (options.type === 'framework' && options.source.id === 'humanValues' && options.valuesDraft) return valuesOutput(options.valuesDraft);
+  if (options.type === 'framework' && options.source.id === 'kolbLearningCycle' && options.kolbDraft) return kolbOutput(options.kolbDraft);
+  if (options.type === 'framework' && options.source.id === 'fate' && options.fateDraft) return fateOutput(options.fateDraft);
+  if (options.type === 'framework' && options.source.id === 'nlpMetaPrograms' && options.focus === 'character') {
+    return typeof options.narrativeText === 'string' ? options.narrativeText.trim() : metaProgramNarrative(options);
+  }
+  return questionnaireSummary(options);
+}
+
+export function createWizardNode({ source, type, title, context = '', roles = [], questions, answers, output, focus, id, position = {}, characterTemplate, narrativeText, fateDraft, kolbDraft, valuesDraft }) {
+  const actualFocus = focus || (output === 'character' ? 'character' : defaultNarrativeFocus(source, type));
+  const isCharacter = actualFocus === 'character';
+  const summary = wizardSummary({ source, type, title, context, roles, questions, answers, focus: actualFocus, narrativeText, fateDraft, kolbDraft, valuesDraft });
+  const record = { version: 2, resultId: id, sessionId: `${id}:wizard`, summary, focus: actualFocus, sourceType: type, sourceId: source.id, sourceLabel: source.label || source.name || source.title, title, context, roles: clone(roles), answers: clone(answers), questions: clone(questions) };
+  if (type === 'framework' && source.id === 'fate' && fateDraft) { record.fateDraft = clone(fateDraft); record.summaryFormat = 'fate-prose'; }
+  if (type === 'framework' && source.id === 'kolbLearningCycle' && kolbDraft) { record.kolbDraft = clone(kolbDraft); record.summaryFormat = 'kolb-prose'; }
+  if (type === 'framework' && source.id === 'humanValues' && valuesDraft) { record.valuesDraft = clone(valuesDraft); record.summaryFormat = 'values-prose'; }
+  if (type === 'framework' && source.id === 'nlpMetaPrograms') record.metaProgramProfile = metaProgramProfile(answers);
+  if (type === 'framework' && source.id === 'nlpMetaPrograms' && isCharacter) {
+    record.summaryFormat = 'character-prose';
+    if (typeof narrativeText === 'string') record.narrativeText = narrativeText;
+  }
+  const common = { id, title: text(title), name: text(title), body: summary, x: position.x ?? 100, y: position.y ?? 100, w: 280, h: 150, history: [], narrativeFocus: actualFocus, narrativeWizard: record, teamId: null, sets: [], locationId: null, itemId: null, mechanicIds: [], sensorIds: [] };
+  const sub = type === 'concept' ? adaptConceptGraph(source, roles, questions, answers) : isCharacter ? null : frameworkNotesGraph(source, questions, answers);
+  const characterCard = isCharacter ? cloneCharacterCardTemplate(characterTemplate) : null;
+  if (isCharacter) return {
     ...common, ...characterCard, description: summary, kind: 'character', color: '#F08CB4',
     questions: [
       ...characterCard.questions,
-      ...questions.filter(q => text(answers[q.key])).map((q, i) => ({ id: `${id}-wizard-${i}`, prompt: type === 'concept' ? substituteRoles(q.prompt, roles) : q.prompt, answer: text(answers[q.key]) })),
+      ...questions.filter(q => questionAnswer(q, answers)).map(q => {
+        const questionId = `${id}-wizard-${encodeURIComponent(q.key)}`;
+        (record.questionIds ||= {})[q.key] = questionId;
+        return { id: questionId, prompt: type === 'concept' ? substituteRoles(q.prompt, roles) : q.prompt, answer: questionAnswer(q, answers) };
+      }),
     ],
     ...(sub ? { sub, collapsed: true } : {}),
   };
-  const conceptKind = source.conceptKind || source.category || 'storyConcept';
+  const conceptKind = NARRATIVE_FOCUSES[actualFocus]?.category || source.conceptKind || source.category || 'storyConcept';
   const conceptAnswers = Object.fromEntries(questions.filter(q => q.answerKey && text(answers[q.key])).map(q => [q.answerKey, text(answers[q.key])]));
-  return { ...common, kind: 'concept', conceptId: source.kind === 'concept' ? source.conceptId || null : source.id, conceptKind, description: summary, conceptType: source.conceptType || 'unset', status: 'draft', onePromise: source.onePromise || '', color: ADDITIONAL_NODE_TYPES[conceptKind]?.color, collapsed: true, sub, conceptAnswers, conceptQuestions: clone(source.conceptQuestions || []), ...(source.conceptModules ? { conceptModules: clone(source.conceptModules) } : {}), referenceFrameworkIds: clone(source.referenceFrameworkIds || []) };
+  return { ...common, kind: 'concept', conceptId: type === 'framework' ? null : source.kind === 'concept' ? source.conceptId || null : source.id, conceptKind, description: summary, conceptType: source.conceptType || 'unset', status: 'draft', onePromise: source.onePromise || '', color: ADDITIONAL_NODE_TYPES[conceptKind]?.color, collapsed: true, sub, conceptAnswers, conceptQuestions: clone(source.conceptQuestions || []), ...(source.conceptModules ? { conceptModules: clone(source.conceptModules) } : {}), referenceFrameworkIds: type === 'framework' ? [source.id] : clone(source.referenceFrameworkIds || []) };
+}
+
+function frameworkNotesGraph(source, questions, answers) {
+  const nodes = { reference: { id: 'reference', kind: 'framework', frameworkId: source.id, title: source.title || source.label, body: source.summary || '', color: source.color, x: 80, y: 80, w: 280, h: 240 } };
+  questions.filter(q => questionAnswer(q, answers)).forEach((q, i) => {
+    const id = `answer-${i + 1}`;
+    nodes[id] = { id, kind: 'conceptQuestion', title: q.prompt, body: questionAnswer(q, answers), wizardQuestionKey: q.key, x: 440 + i % 2 * 340, y: 80 + Math.floor(i / 2) * 190, w: 300, h: 150 };
+  });
+  return { nodes, edges: [], frames: {}, numberMarkers: {}, titleMarkers: {} };
+}
+
+// Adding a lens must not convert or replace the selected character/scene/tree.
+export function appendWizardResult(target, addition) {
+  const next = { ...target,
+    body: [target.body, addition.body].filter(Boolean).join('\n\n'),
+    description: [target.description || target.body, addition.body].filter(Boolean).join('\n\n'),
+    narrativeWizard: clone(addition.narrativeWizard),
+    narrativeWizardHistory: [...(target.narrativeWizardHistory || (target.narrativeWizard ? [target.narrativeWizard] : [])), clone(addition.narrativeWizard)],
+  };
+  if (target.kind === 'character' && addition.kind === 'character') {
+    const rows = addition.questions.filter(q => q.id.startsWith(`${addition.id}-wizard-`));
+    next.questions = [...(target.questions || []), ...clone(rows)];
+  }
+  if (addition.sub || target.kind !== 'character' || addition.kind !== 'character') {
+    const sub = target.sub || {};
+    let index = 1;
+    while (sub.nodes?.[`WIZ-${index}`]) index++;
+    const id = `WIZ-${index}`;
+    const child = clone(addition);
+    if (target.kind === 'character' && addition.kind === 'character') {
+      child.kind = 'concept'; child.conceptKind = 'characterConcept';
+      delete child.questions; delete child.typeGroups;
+    }
+    next.sub = { ...sub, nodes: { ...(sub.nodes || {}), [id]: { ...child, id, x: 100 + (index - 1) % 3 * 340, y: 100 + Math.floor((index - 1) / 3) * 210 } }, edges: sub.edges || [] };
+    next.narrativeWizard = { ...next.narrativeWizard, attachedChildId: id };
+  }
+  return next;
+}
+
+const replaceSavedText = (value, before, after) => {
+  if (!value) return after;
+  return before && value.includes(before) ? value.replace(before, () => after) : `${value}\n\n${after}`;
+};
+
+// Update only wizard-owned content. Hand-edited fields, node positions, links,
+// and extra nodes stay in place; continuing never appends a duplicate plan.
+function reviseWizardGraph(current, before, after) {
+  if (!current) return clone(after);
+  const nodes = { ...current.nodes };
+  const resolveId = (graph, node) => node.wizardQuestionKey
+    ? Object.values(graph.nodes || {}).find(other => other.wizardQuestionKey === node.wizardQuestionKey)?.id
+    : node.id;
+  for (const generated of Object.values(after?.nodes || {})) {
+    const currentId = resolveId(current, generated);
+    const oldId = resolveId(before || {}, generated);
+    const previous = before?.nodes?.[oldId];
+    const existing = nodes[currentId];
+    if (!existing) {
+      let id = generated.id;
+      let suffix = 1;
+      while (nodes[id]) id = `${generated.id}-${suffix++}`;
+      nodes[id] = { ...clone(generated), id };
+      continue;
+    }
+    const next = { ...existing };
+    for (const field of ['title', 'name', 'body', 'wizardAnswer']) {
+      if (generated[field] !== previous?.[field] && existing[field] === previous?.[field]) next[field] = generated[field];
+    }
+    if (generated.sub) next.sub = reviseWizardGraph(existing.sub, previous?.sub, generated.sub);
+    nodes[currentId] = next;
+  }
+  for (const old of Object.values(before?.nodes || {})) {
+    if (!old.wizardQuestionKey || Object.values(after?.nodes || {}).some(node => node.wizardQuestionKey === old.wizardQuestionKey)) continue;
+    const currentId = resolveId(current, old);
+    if (nodes[currentId]?.body === old.body) nodes[currentId] = { ...nodes[currentId], body: '' };
+  }
+  return { ...current, nodes };
+}
+
+export function reviseWizardResult(target, addition, source) {
+  const record = target.narrativeWizard;
+  if (!record) return target;
+  const oldSummary = record.summary ?? questionnaireSummary({ source, type: record.sourceType, ...record });
+  const next = { ...target,
+    body: replaceSavedText(target.body, oldSummary, addition.body),
+    description: replaceSavedText(target.description || target.body, oldSummary, addition.body),
+    narrativeWizard: { ...addition.narrativeWizard, ...(record.attachedChildId ? { attachedChildId: record.attachedChildId } : {}) },
+  };
+  const attachedId = record.attachedChildId || Object.values(target.sub?.nodes || {}).find(node => node.narrativeWizard?.sourceId === record.sourceId && node.narrativeWizard?.title === record.title)?.id;
+  if (attachedId && target.sub.nodes[attachedId]) {
+    const child = target.sub.nodes[attachedId];
+    const revised = reviseWizardResult(child, addition, source);
+    next.sub = { ...target.sub, nodes: { ...target.sub.nodes, [attachedId]: revised } };
+    next.narrativeWizard.attachedChildId = attachedId;
+  } else if (target.sub) {
+    const before = createWizardNode({ source, type: record.sourceType, title: record.title, context: record.context, roles: record.roles, questions: record.questions || [], answers: record.answers || {}, focus: record.focus, id: record.resultId || target.id });
+    next.sub = reviseWizardGraph(target.sub, before.sub, addition.sub);
+  } else if (addition.sub) next.sub = clone(addition.sub);
+  if (target.kind === 'character' && addition.kind === 'character') {
+    const previousIds = new Map((record.questions || []).map(row => [row.key, record.questionIds?.[row.key] || target.questions?.find(q => q.prompt === row.prompt && q.answer === questionAnswer(row, record.answers))?.id]));
+    const byId = new Map([...previousIds].filter(([, id]) => id).map(([key, id]) => [id, key]));
+    const generated = new Map(Object.entries(addition.narrativeWizard.questionIds || {}).map(([key, id]) => [key, addition.questions.find(q => q.id === id)]));
+    const questionIds = {};
+    next.questions = (target.questions || []).flatMap(existing => {
+      const key = byId.get(existing.id);
+      if (!key) return [existing];
+      const updated = generated.get(key);
+      generated.delete(key);
+      if (!updated) return [];
+      questionIds[key] = existing.id;
+      const previousQuestion = record.questions?.find(row => row.key === key);
+      const previousPrompt = record.sourceType === 'concept' ? substituteRoles(previousQuestion?.prompt, record.roles) : previousQuestion?.prompt;
+      return [{ ...existing, prompt: existing.prompt === previousPrompt ? updated.prompt : existing.prompt, answer: updated.answer }];
+    });
+    for (const [key, row] of generated) { next.questions.push(row); questionIds[key] = row.id; }
+    next.narrativeWizard.questionIds = questionIds;
+  }
+  // Preserve the node's identity/type, including attached plans and user renames.
+  if (target.title === record.title) next.title = addition.title;
+  if (target.name === record.title) next.name = addition.name;
+  if (target.narrativeWizardHistory) next.narrativeWizardHistory = target.narrativeWizardHistory.map(entry =>
+    (entry.sessionId && entry.sessionId === record.sessionId) || entry === record || (!record.sessionId && entry.sourceType === record.sourceType && entry.sourceId === record.sourceId && entry.title === record.title) ? next.narrativeWizard : entry);
+  return next;
 }
 
 export function wizardLibraryRecord(node, id) {
-  if (node.kind === 'character') return { coll: 'narrative', entity: { id, name: node.title, nodeClass: 'base', nodeKind: 'character', category: 'character', description: node.body, body: node.body, icon: 'user', color: node.color, template: clone(node) } };
+  if (node.kind !== 'concept') return { coll: 'narrative', entity: { id, name: node.title, nodeClass: 'base', nodeKind: node.kind, category: node.kind, description: node.body, body: node.body, icon: node.kind === 'character' ? 'user' : 'book', color: node.color, narrativeFocus: node.narrativeFocus, template: clone(node) } };
   const graph = clone(node.sub || {});
-  return { coll: 'concepts', entity: { ...graph, id, name: node.title, description: node.body, category: node.conceptKind, premade: false, questions: [], conceptType: node.conceptType, status: node.status, onePromise: node.onePromise, conceptAnswers: clone(node.conceptAnswers || {}), conceptQuestions: clone(node.conceptQuestions || []), ...(node.conceptModules ? { conceptModules: clone(node.conceptModules) } : {}), referenceFrameworkIds: clone(node.referenceFrameworkIds || []), narrativeWizard: clone(node.narrativeWizard) } };
+  return { coll: 'concepts', entity: { ...graph, id, name: node.title, description: node.body, category: node.conceptKind, narrativeFocus: node.narrativeFocus, premade: false, questions: [], conceptType: node.conceptType, status: node.status, onePromise: node.onePromise, conceptAnswers: clone(node.conceptAnswers || {}), conceptQuestions: clone(node.conceptQuestions || []), ...(node.conceptModules ? { conceptModules: clone(node.conceptModules) } : {}), referenceFrameworkIds: clone(node.referenceFrameworkIds || []), narrativeWizard: clone(node.narrativeWizard), ...(node.narrativeWizardHistory ? { narrativeWizardHistory: clone(node.narrativeWizardHistory) } : {}) } };
 }
