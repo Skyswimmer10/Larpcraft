@@ -92,7 +92,9 @@ describe('four-step Meta Programs workshop', () => {
     const after = reviseWizardResult(before, addition, source);
     expect(after.id).toBe(before.id);
     expect(after.questions.find(row => row.id === 'custom').answer).toBe('Original custom answer');
-    expect(after.sub).toEqual(before.sub);
+    expect(after.sub.nodes.keep).toEqual(before.sub.nodes.keep);
+    expect(after.sub.edges).toEqual(before.sub.edges);
+    expect(Object.values(after.sub.nodes).some(child => child.characterInput)).toBe(true);
     expect(after.narrativeWizard.metaProgramProfile.motivation).toBe('Mostly toward');
     expect(after.body).not.toContain('Original note');
   });

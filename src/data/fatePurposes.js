@@ -58,10 +58,10 @@ const characterFields = {
   'focus.hooks': { label: 'What repeatedly catches their attention?' },
   'focus.channels': { label: 'How do they tend to notice things?', simple: false },
   'focus.overlooked': { label: 'What do they tend to overlook?', purposes: ['character', 'relationship'], simple: true },
-  'authority.source': { label: 'What kinds of authority do they trust?' },
+  'authority.source': { label: 'What kinds of authority do they trust?', options: [...FATE_FIELDS.A[0].options, 'Familiar people', 'Close relationships'] },
   'authority.challengeable': { label: 'Their trust can be questioned or shaken' },
   'authority.crack': { label: 'What makes them doubt someone they trusted?' },
-  'tribe.pull': { label: 'What matters to them about belonging?', options: ['Feeling accepted', 'Keeping close relationships', 'Protecting their group', 'Being independent', 'Belonging to several groups'] },
+  'tribe.pull': { label: 'What matters to them about belonging?', control: 'multi', options: ['Feeling accepted', 'Keeping close relationships', 'Protecting their group', 'Being independent', 'Belonging to several groups'] },
   'tribe.statusStakes': { label: 'What do these relationships give or risk?' },
   'tribe.position': { label: 'What place do they usually take in a group?', simple: true },
   'emotion.primary': { label: 'One especially common feeling (optional)', simple: false },
@@ -72,7 +72,7 @@ const characterFields = {
 export function fateFieldsFor(purpose, pillar) {
   const fields = FATE_FIELDS[pillar].filter(field => field.path !== 'authority.secondary').map(field => ({ ...field, ...(purpose === 'character' ? characterFields[field.path] : {}) }));
   if (purpose !== 'character') return fields;
-  const situational = ['focus.patternBreak', 'focus.routine', 'focus.breakType', 'focus.placement', 'authority.cost', 'authority.compliance', 'authority.legitimacy', 'tribe.enforcement', 'tribe.witnesses'];
+  const situational = ['focus.patternBreak', 'focus.routine', 'focus.breakType', 'focus.placement', 'focus.threatTypes', 'focus.valueTypes', 'focus.noise', 'focus.hold', 'authority.cost', 'authority.compliance', 'authority.legitimacy', 'tribe.enforcement', 'tribe.witnesses', 'tribe.symbol', 'tribe.board', 'emotion.pattern', 'emotion.origin', 'emotion.action', 'emotion.curve'];
   return fields.filter(field => !situational.includes(field.path)).concat(pillar === 'T' ? [
     { path: 'tribe.groups', label: FATE_PURPOSE_COPY.groupNames, control: 'multi', options: [], simple: true, details: true },
     { path: 'tribe.loyalties', label: FATE_PURPOSE_COPY.loyalties, control: 'text', simple: true },

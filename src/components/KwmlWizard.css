@@ -1,0 +1,91 @@
+.kw-wizard{width:min(1100px,97vw);max-width:97vw;height:92vh;max-height:92vh;display:flex;flex-direction:column;position:fixed;inset:0;margin:auto;padding:0;border:1px solid var(--line);border-radius:13px;background:var(--panel);color:var(--ink);overflow:hidden}
+.kw-wizard::backdrop{background:#0009;backdrop-filter:blur(4px)}
+.kw-wizard h2,.kw-wizard h3,.kw-wizard h4{margin:0;color:var(--ink)}
+.kw-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line)}
+.kw-header>div:last-child{display:flex;gap:7px;flex-wrap:wrap}
+.kw-header small{font-size:11px;color:var(--secondary)}
+.kw-header h2{font-size:20px;margin-top:4px}
+.kw-progress{display:flex;gap:5px;padding:11px 17px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.kw-progress button{display:flex;align-items:center;gap:7px;font:inherit;font-size:11px;border:1px solid transparent;border-radius:7px;padding:7px 9px;background:transparent;color:var(--muted);cursor:pointer}
+.kw-progress button>span{color:var(--muted)}
+.kw-progress button[aria-current=step]{color:var(--ink);background:var(--selected);border-color:var(--brand)}
+.kw-progress button:disabled{opacity:.5;cursor:default}
+.kw-body{padding:20px;flex:1;min-height:0;overflow:auto;background:var(--ground);scrollbar-gutter:stable}
+.kw-purpose{margin-bottom:18px}
+.kw-purpose>small{font-size:11px;color:var(--muted)}
+.kw-purpose h3{font-size:19px;margin-top:4px}
+.kw-purpose p{font-size:12px;color:var(--muted);margin:7px 0 0}
+.kw-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+.kw-field{display:grid;gap:7px;font-size:12px;color:var(--ink);margin-bottom:15px;min-width:0}
+.kw-field>small{font-size:11px;color:var(--muted);line-height:1.5}
+.kw-field textarea{resize:vertical;min-height:80px;line-height:1.5}
+.kw-primary,.kw-secondary,.kw-checklist{padding:0;border:0;margin:5px 0 17px;min-width:0}
+.kw-primary legend,.kw-secondary legend,.kw-checklist legend{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:10px}
+.kw-secondary legend>small,.kw-checklist legend>small{font-size:11px;font-weight:400;color:var(--muted);margin-left:8px}
+.kw-primary>div{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.kw-primary label{display:flex;align-items:start;gap:8px;padding:13px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;min-width:0}
+.kw-primary label.chosen{border-color:var(--brand);background:var(--selected)}
+.kw-primary label input{flex:none;margin:3px 0 0}
+.kw-primary label b{display:block;font-size:13px}
+.kw-primary label small{display:block;font-size:11px;line-height:1.5;color:var(--muted);margin-top:5px}
+.kw-secondary{display:flex;gap:8px;flex-wrap:wrap}
+.kw-secondary label{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:7px;padding:8px 12px;background:var(--panel);font-size:12px;cursor:pointer}
+.kw-wizard input[type=checkbox],.kw-wizard input[type=radio]{accent-color:var(--brand);width:14px;height:14px;flex:none}
+.kw-secondary label:has(input:checked){background:var(--selected);border-color:var(--brand)}
+.kw-secondary label:has(input:disabled){opacity:.55;cursor:default}
+.kw-energy-card{display:flex;gap:14px;align-items:center;padding:15px 18px;border:1px solid var(--line);border-radius:9px;background:var(--panel);margin-bottom:18px}
+.kw-energy-card>span{color:var(--secondary);flex:none}
+.kw-energy-card small{font-size:12px;color:var(--secondary)}
+.kw-energy-card p{font-size:13px;line-height:1.5;margin:6px 0 0}
+.kw-checklist label{display:flex;align-items:start;gap:9px;font-size:12px;line-height:1.5;padding:11px 12px;border:1px solid var(--line);border-radius:7px;background:var(--panel);margin-bottom:7px;cursor:pointer}
+.kw-checklist label input{margin:2px 0 0}
+.kw-checklist label.chosen{background:var(--selected);border-color:var(--brand)}
+.kw-checklist label:has(input:disabled){opacity:.55;cursor:default}
+.kw-shadow-card{padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:9px}
+.kw-shadow-card h4{font-size:13px;margin-bottom:10px}
+.kw-shadow-card p{font-size:12px;line-height:1.5;color:var(--muted);margin:9px 0 14px}
+.kw-shadow-card p b{color:var(--ink)}
+.kw-shadow-card .kw-field{margin-bottom:0}
+.kw-toggle{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--ink);margin:13px 0;cursor:pointer}
+.kw-toggle input{margin:0}
+.kw-history .kw-field{margin-top:12px;max-width:700px}
+.kw-note{font-size:12px;line-height:1.55;color:var(--muted);margin:12px 0}
+.kw-subprogress{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;margin-bottom:12px;color:var(--muted)}
+.kw-subprogress b{color:var(--ink)}
+.kw-section-switch,.kw-energy-switch{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.kw-section-switch button,.kw-energy-switch button{font:inherit;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 11px;cursor:pointer}
+.kw-section-switch button[aria-pressed=true],.kw-energy-switch button[aria-pressed=true]{background:var(--selected);border-color:var(--brand);color:var(--ink)}
+.kw-section-switch button:disabled{opacity:.5;cursor:default}
+.kw-pages{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin:8px 0 14px}
+.kw-pages small{font-size:11px;color:var(--muted)}
+.kw-limit-controls{margin-top:20px}
+.kw-synthesis-card{padding:17px 19px;border:1px solid var(--line);border-radius:10px;background:var(--panel);margin-bottom:18px}
+.kw-synthesis-card header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px}
+.kw-synthesis-card header small{font-size:11px;color:var(--secondary)}
+.kw-synthesis-card h3{font-size:17px;margin-top:4px}
+.kw-output{white-space:pre-wrap;font-size:13px;line-height:1.65;margin:0}
+.kw-summary{display:grid;gap:10px;margin:15px 0;font-size:12px;line-height:1.5}
+.kw-summary>div{display:grid;grid-template-columns:92px minmax(0,1fr);gap:12px}
+.kw-summary dt{color:var(--muted)}
+.kw-summary dd{margin:0;color:var(--ink)}
+.kw-synthesis-card textarea{min-height:280px}
+.kw-output-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kw-optional{font-size:12px;color:var(--muted);margin-top:16px}
+.kw-optional summary{cursor:pointer;margin-bottom:12px}
+.kw-optional .kw-field{margin-top:12px}
+.kw-footer{padding:13px 20px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.kw-footer>small{font-size:11px;color:var(--muted);flex:1}
+.kw-footer>div{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.kw-saved{padding:40px;text-align:center;overflow:auto}
+.kw-saved h3{margin-bottom:15px}
+.kw-reference-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.kw-reference-grid>section{padding:15px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.kw-reference-grid h4{font-size:15px;margin:0 0 9px;color:var(--ink)}
+.kw-reference-grid p,.kw-reference-grid li{font-size:12px;line-height:1.55;color:var(--muted)}
+.kw-reference-grid ul{padding-left:18px}
+.kw-reference-effects{margin-top:18px}
+.kw-reference-effects h4{color:var(--ink)}
+.kw-reference-effects p{font-size:12px;line-height:1.55}
+@media(max-width:850px){.kw-primary>div{grid-template-columns:repeat(3,minmax(0,1fr))}.kw-progress{gap:2px;padding:9px 12px}.kw-progress button{padding:6px;font-size:11px}}
+@media(max-width:600px){.kw-two,.kw-reference-grid{grid-template-columns:1fr}.kw-header{padding:12px}.kw-header h2{font-size:17px}.kw-header>div:last-child{justify-content:flex-end}.kw-body{padding:14px}.kw-primary>div{grid-template-columns:repeat(2,minmax(0,1fr))}.kw-footer{padding:12px;flex-wrap:wrap}.kw-footer>small{min-width:130px}.kw-header .btn{padding:7px}.kw-primary label{padding:11px 8px}.kw-energy-card{padding:13px;gap:10px}}
+@media(pointer:coarse){.kw-wizard :is(input:not([type=checkbox]):not([type=radio]),textarea,select){font-size:16px}.kw-progress button,.kw-section-switch button,.kw-energy-switch button{min-height:44px}}

@@ -1,10 +1,10 @@
-import AnnotationTools from '../components/AnnotationTools.jsx';
+import AnnotationTools, { AnnotationButtons } from '../components/AnnotationTools.jsx';
 import { useAppearance } from '../components/AppearanceContext.jsx';
 import FrameworkDetail from '../components/FrameworkDetail.jsx';
 import { NarrativeWizardButton } from '../components/NarrativeWizard.jsx';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLibrary, useLibraryDispatch, useGame, useDispatch } from '../state/store.jsx';
-import { Thumb, ENTITY_COLORS, PrimIcon, SectionLabel } from '../components/bits.jsx';
+import { ENTITY_COLORS, PrimIcon, SectionLabel } from '../components/bits.jsx';
 import FlowCanvas, { visibleCanvasPlacement } from '../components/FlowCanvas.jsx';
 import StructureThumb, { structNodeColor } from '../components/StructureThumb.jsx';
 import NodePalette from '../components/NodePalette.jsx';
@@ -12,6 +12,9 @@ import { useMechanicsToolbox } from '../components/MechanicsToolbox.jsx';
 import { mechanicWizardGraph } from '../mechanics/toolbox.js';
 import { libraryWithMechanismDraft } from '../mechanics/collections.js';
 import NarrativeLibraryBrowser from '../components/NarrativeLibraryBrowser.jsx';
+import StoryLibraryBrowser from '../components/StoryLibraryBrowser.jsx';
+import { ConversationBrowserDialog } from '../components/Conversations.jsx';
+import NarrativeSourceSymbol from '../components/NarrativeSourceSymbol.jsx';
 import FrameworkPreview from '../components/FrameworkPreview.jsx';
 import { narrativeToStructNode, mechPrimitiveToStructNode } from '../state/bridge.js';
 import { LIB_BLANK, LIB_PREFIX, BASE_NODE_TYPES, CONCEPT_INTERNAL_NODE_TYPES, MASTER_ACT_TYPE, ADDITIONAL_NODE_TYPES, SUBNODE_TYPES, SUBNODE_BLANK, FRAMEWORK_TYPES, MECHANIC_SUBNODE_TYPES, cloneCharacterCardTemplate, LINKING_NODE_TYPE } from '../data/seed.js';
@@ -20,7 +23,7 @@ import { applyFrameScale } from '../lib/frameScale.js';
 import { moveFrameContents } from '../lib/frameContents.js';
 import { nextVisualMarkerValue } from '../lib/visualMarkers.js';
 import { includeGeneratedCharacterNodes, syncCharacterArchetypeGraph } from '../lib/characterArchetype.js';
-import TypeChips from '../components/TypeChips.jsx';
+import PhysicalLibraryBrowser from '../components/PhysicalLibraryBrowser.jsx';
 import LinkingNodePreview from '../components/LinkingNodePreview.jsx';
 import MechanismNodePreview, { isMechanismPreviewNode } from '../components/MechanismNodePreview.jsx';
 import { buildNarrativeLinkInsertion, createLinkingNode, LINKING_NODE_KIND, STORY_STRUCTURE_CONTAINER_KIND } from '../lib/narrativeLinks.js';
@@ -429,29 +432,7 @@ function ConceptEditor({ concept, selection, onSelect, onBack, onNavigate }) {
         <button className="addnode" title={LINKING_NODE_TYPE.blurb} onClick={addLinkingNode}>
           <span className="sq" style={{ background: LINKING_NODE_TYPE.color }}><PrimIcon icon={LINKING_NODE_TYPE.icon} color="#fff" size={11} /></span>{LINKING_NODE_TYPE.label}
         </button></div>
-        <AnnotationTools className="canvas-tool-group support-tool-group"><span className="tool-kind-label">Support</span>
-        <button className="addnode frameadd" title="Add a visual grouping frame" onClick={addFrame}>
-          <span className="sq" style={{ background: '#8B92A6' }}><PrimIcon icon="layers" color="#fff" size={11} /></span>Frame
-        </button>
-        <button className="addnode frameadd" title="Add a resizable circle" onClick={addCircle}>
-          <span className="sq shapecircle" style={{ borderColor: '#5CA8F5' }} />Circle
-        </button>
-        <button className="addnode frameadd" title="Add a visual number marker" onClick={() => addVisualMarker('number')}>
-          <span className="sq" style={{ background: '#E8D25C', color: '#111' }}>1</span>Number
-        </button>
-        <button className="addnode frameadd" title="Add a visual letter marker (A-Z)" onClick={() => addVisualMarker('letter')}>
-          <span className="sq" style={{ background: '#E8D25C', color: '#111' }}>A</span>Letter
-        </button>
-        <button className="addnode frameadd" title="Add a draggable title label" onClick={addTitleMarker}>
-          <span className="sq" style={{ background: '#E9EBF3', color: '#111' }}>T</span>Title
-        </button>
-        <button className="addnode frameadd" title="Add a directional support arrow" onClick={addArrow}>
-          <span className="sq arrowglyph" style={{ color: '#5CA8F5' }}>→</span>Arrow
-        </button>
-        <button className="addnode frameadd" title="Add an editable curved support line" onClick={addSpline}>
-          <span className="sq splineglyph" style={{ color: '#5CA8F5' }}>∿</span>Spline
-        </button>
-        </AnnotationTools>
+        <AnnotationTools className="canvas-tool-group support-tool-group"><AnnotationButtons onFrame={addFrame} onCircle={addCircle} onVisualMarker={addVisualMarker} onTitle={addTitleMarker} onArrow={addArrow} onSpline={addSpline} /></AnnotationTools>
       </div>
       <FlowCanvas
         nodes={conceptCanvasNodes} edges={currentGraph.edges} selId={selId} colorOf={canvasColorOf}
@@ -789,15 +770,7 @@ function StructureEditor({ coll, structure, selection, onSelect, onBack, onNavig
         <div className="right">
           {isMechanicStructure && mechanicToolbox.actions}
           {nested && <button className="btn" onClick={() => { setOpenPath(openPath.slice(0, -1)); onSelect(null); }}>Back one level</button>}
-          <AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
-            <button className="btn" onClick={addFrame}>Frame</button>
-            <button className="btn" onClick={addCircle}>Circle</button>
-            <button className="btn" onClick={() => addVisualMarker('number')}>Number</button>
-            <button className="btn" onClick={() => addVisualMarker('letter')}>Letter</button>
-            <button className="btn" onClick={addTitleMarker}>Title</button>
-            <button className="btn" onClick={addArrow}>Arrow</button>
-            <button className="btn" onClick={addSpline}>Spline</button>
-          </AnnotationTools>
+          <AnnotationTools className="canvas-tool-cluster support-tool-group"><AnnotationButtons onFrame={addFrame} onCircle={addCircle} onVisualMarker={addVisualMarker} onTitle={addTitleMarker} onArrow={addArrow} onSpline={addSpline} /></AnnotationTools>
           <span className="mono dim">~{structure.estMinutes} min · {Object.keys(currentGraph.nodes).length} nodes · {currentGraph.edges.length} links</span>
         </div>
       </div>
@@ -1016,13 +989,13 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
   const [editing, setEditing] = useState(null); // { coll, id } for a structure being edited
   const [preview, setPreview] = useState(null); // concept id being previewed
   const [narrFilter, setNarrFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
   const [builder, setBuilder, undoBuilder] = useUndoableLocalState({ target: 'stories', conceptKind: 'storyConcept', name: 'New story structure', description: '', usesBaseConcept: false, baseConceptId: null, nodes: {}, edges: [], subnodes: {}, frameworks: {}, frames: {}, numberMarkers: {}, titleMarkers: {} });
   const [builderSel, setBuilderSel] = useState(null);
   const [builderFrameSel, setBuilderFrameSel] = useState(null);
   const [builderNumberSel, setBuilderNumberSel] = useState(null);
   const [builderTitleSel, setBuilderTitleSel] = useState(null);
-  const [browsingNarrativeLibrary, setBrowsingNarrativeLibrary] = useState(false);
+  const [browsingNarrativeLibrary, setBrowsingNarrativeLibrary] = useState(null);
+  const [conversationBrowser, setConversationBrowser] = useState(null);
   const [browsingMechanicsLibrary, setBrowsingMechanicsLibrary] = useState(false);
 
   useEffect(() => {
@@ -1073,7 +1046,14 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
     }
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const addNew = () => {
+  const addNew = (target = tab) => {
+    // The Physical sidebar can show several collections at once.
+    if (['items', 'locations', 'sensors'].includes(target)) {
+      const id = genId(lib[target], LIB_PREFIX[target]);
+      libDispatch({ type: 'ADD_ENTITY', coll: target, entity: LIB_BLANK[target](id) });
+      pick(target, id);
+      return;
+    }
     if (tab === 'narrative' || tab === 'mechBuilder') {
       setBuilder({
         target: tab === 'mechBuilder' ? 'mechStructures' : 'stories',
@@ -1094,7 +1074,7 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
       return;
     }
     if (tab === 'baseNodes') {
-      addNodeTemplate('event');
+      addNodeTemplate('storyBeat');
       setTab('baseNodes');
       return;
     }
@@ -1552,74 +1532,11 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
     pick(coll, id);
     if (edit) setEditing({ coll, id });
   };
-  const narrativeBrowserSections = [
-    {
-      id: 'libraryTemplates',
-      label: 'Library Templates',
-      hint: 'Saved base node and subnode cards.',
-      items: Object.values(lib.narrative || {}).filter((n) => n.nodeClass).map((n) => {
-        const isSub = n.nodeClass === 'subnode';
-        const meta = isSub ? SUBNODE_TYPES[n.subKind] : baseTemplateMeta(n.nodeKind);
-        return {
-          id: `narrative:${n.id}`,
-          label: n.name,
-          blurb: n.body || meta?.blurb || 'Saved narrative node template',
-          color: n.color || meta?.color,
-          icon: n.icon || meta?.icon,
-          kicker: isSub ? 'Subnode template' : 'Base node template',
-          onPick: () => openLibraryRecord('baseNodes', 'narrative', n.id),
-        };
-      }),
-    },
-    {
-      id: 'referenceFrameworks',
-      label: 'Reference Frameworks',
-      hint: 'Static thinking aids and design frameworks.',
-      items: Object.values(FRAMEWORK_TYPES).map((fw) => ({
-        id: `framework:${fw.id}`,
-        label: fw.label,
-        blurb: fw.blurb,
-        color: fw.color,
-        icon: fw.icon,
-        kicker: 'Reference only',
-        onPick: () => {
-          setTab('frameworks');
-          pick('frameworkType', fw.id);
-        },
-      })),
-    },
-    {
-      id: 'storyStructures',
-      label: 'Story Structures',
-      hint: 'Reusable connected narrative structures.',
-      items: Object.values(lib.stories || {}).map((st) => ({
-        id: `story:${st.id}`,
-        label: st.name,
-        blurb: st.description || 'Reusable connected node structure.',
-        color: '#5CA8F5',
-        icon: 'layers',
-        kicker: `${Object.keys(st.nodes || {}).length} nodes`,
-        onPick: () => openLibraryRecord('stories', 'stories', st.id, true),
-      })),
-    },
-    {
-      id: 'concepts',
-      label: 'Concepts',
-      hint: 'Reusable concept containers with internal node maps.',
-      items: Object.values(lib.concepts || {}).map((c) => {
-        const meta = ADDITIONAL_NODE_TYPES[c.category] || ADDITIONAL_NODE_TYPES.storyConcept;
-        return {
-          id: `concept:${c.id}`,
-          label: c.name,
-          blurb: c.description || `${meta.label} template`,
-          color: meta.color,
-          icon: meta.icon,
-          kicker: `${Object.keys(c.nodes || {}).length} inside`,
-          onPick: () => openLibraryRecord('concepts', 'concepts', c.id, true),
-        };
-      }),
-    },
-  ];
+  const openStoryLibraryRecord = ({ coll, id, record }) => {
+    if (coll === 'conversationTemplates') { setBrowsingNarrativeLibrary(null); setConversationBrowser({ id }); }
+    else if (coll === 'frameworks') { setTab('frameworks'); pick('frameworkType', id); if (refreshed) setDetailFramework(record); }
+    else openLibraryRecord(coll === 'narrative' ? 'baseNodes' : coll, coll, id, coll !== 'narrative');
+  };
   const addMechanicBuilderPayload = (payload, pos = null, record = null) => {
     const point = pos || visibleCanvasPlacement({ x: 90, y: 90 });
     const node = mechanicsPayloadToNode(payload, libraryWithMechanismDraft(lib, record), builder.nodes, point.x, point.y, 'B');
@@ -1641,15 +1558,7 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
       const node = Object.values(additions.nodes)[0];
       if (node) selectBuilderNode(node.id, { ...builderMerged, ...additions.nodes });
     },
-    headerAction: <><AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
-      <button className="btn tiny" onClick={addBuilderFrame}>Frame</button>
-      <button className="btn tiny" onClick={addBuilderCircle}>Circle</button>
-      <button className="btn tiny" onClick={() => addBuilderVisualMarker('number')}>Number</button>
-      <button className="btn tiny" onClick={() => addBuilderVisualMarker('letter')}>Letter</button>
-      <button className="btn tiny" onClick={addBuilderTitle}>Title</button>
-      <button className="btn tiny" onClick={addBuilderArrow}>Arrow</button>
-      <button className="btn tiny" onClick={addBuilderSpline}>Spline</button>
-    </AnnotationTools><button className="btn tiny" onClick={() => setBrowsingMechanicsLibrary(true)}>Browse Library</button></>,
+    headerAction: <button className="btn tiny" onClick={() => setBrowsingMechanicsLibrary(true)}>Browse Library</button>,
   });
   const mechanicsBrowserSections = buildMechanicsLibrarySections(lib, (payload) => addMechanicBuilderPayload(payload));
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
@@ -1687,6 +1596,10 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
     if (narrFilter === key) setNarrFilter('all');
   };
 
+  if (group === 'physical') {
+    return <div className="main physical-library-page"><PhysicalLibraryBrowser library={lib} onPick={pick} onCreate={addNew} selectedId={selId} /></div>;
+  }
+
   if (editing && lib[editing.coll]?.[editing.id]) {
     if (editing.coll === 'concepts') {
       return <ConceptEditor concept={lib.concepts[editing.id]} selection={selection} onSelect={onSelect} onNavigate={onNavigate}
@@ -1705,9 +1618,11 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
         </div>
         <div className="right">
           <span className="libbadge">Templates — reusable across games</span>
-          {group === 'story' && <NarrativeWizardButton onSaved={id => onSelect({ kind: 'node', id })} />}
+          {group === 'story' && <NarrativeWizardButton onSaved={id => onSelect({ kind: 'node', id })} onInserted={onSelect} />}
+          {group === 'story' && <button className="btn" onClick={() => setBrowsingNarrativeLibrary('content')}>Created Content</button>}
+          {group === 'story' && <button type="button" className="btn" onClick={() => setConversationBrowser({})}>Conversations</button>}
           {tab === 'mechBuilder' && mechBuilderToolbox.actions}
-          {activeTab.addLabel && <button className="btn primary" onClick={addNew}>{activeTab.addLabel}</button>}
+          {activeTab.addLabel && <button className="btn primary" onClick={() => addNew()}>{activeTab.addLabel}</button>}
         </div>
       </div>
       <div className="toolrow">
@@ -1722,25 +1637,6 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
           );
         })}
       </div>
-
-      {tab === 'items' && (
-        <div className="toolrow" style={{ paddingBottom: 12 }}>
-          <TypeChips value={typeFilter} onChange={setTypeFilter} totalLabel={`All types · ${Object.keys(lib.items).length}`} />
-        </div>
-      )}
-      {(tab === 'items' || tab === 'locations') && (
-        <div className={`gallery${tab === 'locations' ? ' loc' : ''}`}>
-          {Object.values(lib[tab]).filter((t) => tab !== 'items' || typeFilter === 'all' || t.type === typeFilter).map((t) => (
-            <figure key={t.id} className={`card lib${selId === t.id ? ' sel' : ''}`} onClick={() => pick(tab, t.id)}>
-              <div className="thumb"><Thumb image={t.image} type={t.type || 'location'} /></div>
-              <figcaption>
-                <b>{t.name}</b>
-                <span className="tag libtag">Template · <span className="mono">{t.id}</span></span>
-              </figcaption>
-            </figure>
-          ))}
-        </div>
-      )}
 
       {tab === 'mechanics' && (
         <div className="librows">
@@ -1759,6 +1655,9 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
           {mechBuilderToolbox.palette}
           {mechBuilderToolbox.dialogs}
           <div className="nodebuilder-main">
+            <div className="toolrow framebar">
+              <AnnotationTools className="canvas-tool-group support-tool-group"><AnnotationButtons onFrame={addBuilderFrame} onCircle={addBuilderCircle} onVisualMarker={addBuilderVisualMarker} onTitle={addBuilderTitle} onArrow={addBuilderArrow} onSpline={addBuilderSpline} /></AnnotationTools>
+            </div>
             <FlowCanvas
               nodes={builder.nodes}
               edges={builder.edges}
@@ -1973,37 +1872,15 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
         </div>
       )}
 
-      {tab === 'sensors' && (
-        <div className="librows">
-          {Object.values(lib.sensors).map((x) => (
-            <button key={x.id} className={`librow${selId === x.id ? ' sel' : ''}`} onClick={() => pick('sensors', x.id)}>
-              <span className="sq" style={{ background: ENTITY_COLORS.sensor }} />
-              <div><b>{x.kind}</b><small>{x.label}</small></div>
-              <span className="mono dim">{x.id}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
       {tab === 'narrative' && (
         <div className="nodebuilder-wrap">
           <NodePalette
             title="NodeStructureBuilder"
             subtitle="Create reusable templates"
             groups={libraryPaletteGroups}
-            headerAction={<><AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
-              <button className="btn tiny" onClick={() => addBuilderFrame()}>Frame</button>
-              <button className="btn tiny" onClick={() => addBuilderCircle()}>Circle</button>
-              <button className="btn tiny" onClick={() => addBuilderVisualMarker('number')}>Number</button>
-              <button className="btn tiny" onClick={() => addBuilderVisualMarker('letter')}>Letter</button>
-              <button className="btn tiny" onClick={() => addBuilderTitle()}>Title</button>
-              <button className="btn tiny" onClick={() => addBuilderArrow()}>Arrow</button>
-              <button className="btn tiny" onClick={() => addBuilderSpline()}>Spline</button>
-              </AnnotationTools>
-              <button className="btn tiny" onClick={() => setBrowsingNarrativeLibrary(true)}>Browse Library</button>
-            </>}
           />
           <div className="nodebuilder-main">
+            <div className="toolrow framebar"><AnnotationTools className="canvas-tool-cluster support-tool-group"><AnnotationButtons onFrame={() => addBuilderFrame()} onCircle={() => addBuilderCircle()} onVisualMarker={addBuilderVisualMarker} onTitle={() => addBuilderTitle()} onArrow={() => addBuilderArrow()} onSpline={() => addBuilderSpline()} /></AnnotationTools></div>
             <FlowCanvas
               nodes={builderMerged}
               edges={builder.edges}
@@ -2368,7 +2245,7 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
                     <button key={c.id} className={`cptcard${selId === c.id ? ' sel' : ''}`} style={{ borderTopColor: meta.color }}
                       onClick={() => { pick('concepts', c.id); setPreview(c.id); }}>
                       <div className="primhead">
-                        <span className="primic" style={{ background: meta.color }}><PrimIcon icon={meta.icon} color="#fff" /></span>
+                        <span className="library-reference-symbol"><NarrativeSourceSymbol source={c} type="concept" /></span>
                         <b>{c.name}</b>
                         {c.premade && <span className="cptbadge premade">pre-made</span>}
                       </div>
@@ -2397,7 +2274,7 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
                 <button key={fw.id} className={`cptcard${selId === fw.id ? ' sel' : ''}`} style={{ borderTopColor: fw.color }}
                   onClick={() => { pick('frameworkType', fw.id); if (refreshed) setDetailFramework(fw); }}>
                   <div className="primhead">
-                    <span className="primic" style={{ background: fw.color }}><PrimIcon icon={fw.icon} color="#fff" /></span>
+                    <span className="library-reference-symbol framework"><NarrativeSourceSymbol source={fw} type="framework" /></span>
                     <b>{fw.label}</b>
                   </div>
 
@@ -2422,8 +2299,9 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
           }}
         />
       )}
+      {conversationBrowser && <ConversationBrowserDialog mode="library" initialConversationId={conversationBrowser.id} onClose={() => setConversationBrowser(null)} />}
       {browsingNarrativeLibrary && (
-        <NarrativeLibraryBrowser sections={narrativeBrowserSections} onClose={() => setBrowsingNarrativeLibrary(false)} />
+        <StoryLibraryBrowser library={lib} mode={browsingNarrativeLibrary} onPick={openStoryLibraryRecord} onClose={() => setBrowsingNarrativeLibrary(null)} />
       )}
       {browsingMechanicsLibrary && (
         <NarrativeLibraryBrowser
@@ -2440,6 +2318,7 @@ export default function Library({ group = 'physical', selection, onSelect, onNav
             <button key={st.id} className={`structcard${selId === st.id ? ' sel' : ''}`}
               onClick={() => { pick(tab, st.id); setEditing({ coll: tab, id: st.id }); }}>
               <StructureThumb structure={st} lib={lib} />
+              {tab === 'stories' && <span className="library-reference-symbol"><NarrativeSourceSymbol source={{ ...st, category: 'structureConcept' }} type="structure" /></span>}
               <b>{st.name}</b>
               <small>{st.description}</small>
               <div className="structmeta">

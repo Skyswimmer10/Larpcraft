@@ -1,3 +1,17 @@
+import CharacterProfile from './CharacterProfile.jsx';
+import GroupPanel from './GroupPanel.jsx';
+import GroupRoster from './GroupRoster.jsx';
+import StoryItemPhysicalLink from './StoryItemPhysicalLink.jsx';
+import StoryBeatFields, { StoryBeatIdentityFields } from './StoryBeatFields.jsx';
+import StoryBeatDialog from './StoryBeatDialog.jsx';
+import { StoryDirectionFields } from './StoryPlanningFields.jsx';
+import BoundWizardFields from './BoundWizardFields.jsx';
+import { detachStoryBeatLinks, isStoryBeat } from '../lib/storyBeat.js';
+import CharacterInputNode, { characterInputAncestor } from './CharacterInputNode.jsx';
+import CharacterFacts from './CharacterFacts.jsx';
+import CharacterMediaGallery from './CharacterMediaGallery.jsx';
+import { remapCharacterRelationships } from '../lib/characterFacts.js';
+import { characterUsesMasculineArchetypes } from '../lib/characterProfile.js';
 import { addMechanicChild, normalizeIO } from '../lib/mechanicIO.js';
 import { GameTypeFields } from './GameType.jsx';
 import PreferenceSpectra from './PreferenceSpectra.jsx';
@@ -166,14 +180,16 @@ const CONCEPT_MODULES = {
 };
 
 function TextField({ label, value, onCommit, textarea, placeholder }) {
+  const fieldId = React.useId();
   const [draft, setDraft] = React.useState(value ?? '');
   React.useEffect(() => setDraft(value ?? ''), [value]);
   const commit = () => { if (draft !== (value ?? '')) onCommit(draft); };
   const Tag = textarea ? 'textarea' : 'input';
   return (
     <div className="isect">
-      <SectionLabel>{label}</SectionLabel>
+      <label className="lab" htmlFor={fieldId}>{label}</label>
       <Tag
+        id={fieldId}
         className="field-input" value={draft} placeholder={placeholder}
         rows={textarea ? 3 : undefined}
         onChange={(e) => setDraft(e.target.value)}
@@ -1392,6 +1408,13 @@ function ConceptFieldsEditor({ entity, onPatch, mode = 'node', onInsertReference
 }
 
 function ConceptInternalNodeFields({ node, onPatch }) {
+  if (node.wizardQuestionKey) return <ISection label="Saved answer">
+    <p>{node.title}</p>
+    {node.wizardReferenceBody && <details><summary>Original context</summary><p>{node.wizardReferenceBody}</p></details>}
+    <TextField label="Answer" textarea value={node.wizardAnswer ?? node.body} onCommit={wizardAnswer => onPatch({
+      wizardAnswer, body: node.wizardReferenceBody ? [node.wizardReferenceBody, wizardAnswer && `Your version: ${wizardAnswer}`].filter(Boolean).join('\n\n') : wizardAnswer,
+    })} />
+  </ISection>;
   if (node.kind === 'conceptTitle') {
     return (
       <>
@@ -1426,7 +1449,7 @@ function ConceptInternalNodeFields({ node, onPatch }) {
   return null;
 }
 
-function StoryItemInspectorFields({ node, onPatch, game = null, lib = null, graph = null }) {
+function StoryItemInspectorFields({ node, onPatch, game = null, lib = null, graph = null, onSelect }) {
   const graphNodes = graph?.nodes || game?.nodes || {};
   const storyLocations = Object.values(graphNodes).filter((n) => n.kind === 'storyLocation');
   const graphMechanics = Object.values(graphNodes).filter((n) => n.mechKind || n.kind === 'mechanic' || n.kind === 'task');
@@ -1442,6 +1465,7 @@ function StoryItemInspectorFields({ node, onPatch, game = null, lib = null, grap
         <TextField label="Title" value={node.title} onCommit={(v) => onPatch({ title: v })} />
         <TextField label="Short Title (canvas)" value={node.shortTitle} onCommit={(v) => onPatch({ shortTitle: v })} placeholder="Short label shown on the canvas" />
         <NodeImageField image={node.image} onChange={(image) => onPatch({ image })} />
+        <StoryItemPhysicalLink node={node} game={game} onPatch={onPatch} onSelect={onSelect} />
         <TextField
           label="Player Lore"
           textarea
@@ -1614,12 +1638,12 @@ function CompositionSection({ node }) {
   const attach = (id) => dispatch({ type: 'UPDATE_ENTITY', coll: 'subnodes', id, patch: { parentRef: { nodeId: node.id } } });
   const createAttached = (kind) => {
     const id = genId(s.subnodes || {}, `${s.meta.prefix}-SB-`);
-    dispatch({ type: 'ADD_ENTITY', coll: 'subnodes', entity: { ...SUBNODE_BLANK(id, kind), x: node.x + 40, y: node.y + 180, parentRef: { nodeId: node.id } } });
+    dispatch({ type: 'ADD_ENTITY', coll: 'subnodes', entity: { ...SUBNODE_BLANK(id, kind), ...(kind === 'teamLane' ? { teamId: node.teamId || null } : {}), x: node.x + 40, y: node.y + 180, parentRef: { nodeId: node.id } } });
   };
   return (
-    <ISection label={`Composition · ${attached.length} attached subnode${attached.length === 1 ? '' : 's'}`}>
+    <ISection label={isStoryBeat(node) ? 'Add subnode' : `Composition · ${attached.length} attached subnode${attached.length === 1 ? '' : 's'}`} collapsed={isStoryBeat(node)}>
       <div className="senslist">
-        {attached.map((sn) => {
+        {(!isStoryBeat(node) ? attached : []).map((sn) => {
           const t = SUBNODE_TYPES[sn.kind] || { color: '#F08CB4', label: sn.kind };
           return (
             <div className="sensrow" key={sn.id}>
@@ -1650,6 +1674,7 @@ function RelationshipsSection({ node, extra }) {
   const s = useGame();
   const lib = useLibrary();
   const dispatch = useDispatch();
+  const [openMechanicId, setOpenMechanicId] = useState(null);
   const upd = (patch) => dispatch({ type: 'UPDATE_ENTITY', coll: 'nodes', id: node.id, patch });
   const updEdge = (e, patch) => dispatch({ type: 'UPDATE_EDGE', from: e.from, to: e.to, patch });
   const facts = s.facts || {};
@@ -1692,6 +1717,7 @@ function RelationshipsSection({ node, extra }) {
           <div className="chips">{incoming.map((e, i) => <Chip key={i} color="#8B92A6">← {endName(e.from)}</Chip>)}</div>
         </>
       )}
+      {!isStoryBeat(node) && <>
       <SectionLabel>Records facts</SectionLabel>
       <div className="senslist">
         {sets.map((x) => {
@@ -1714,10 +1740,11 @@ function RelationshipsSection({ node, extra }) {
           {Object.values(facts).filter((f) => !sets.some((x) => x.factId === f.id)).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
       </div>
+      </>}
       <SectionLabel>Link to Mechanic Node</SectionLabel>
       <div className="chips">
         {mechanicIds.map((id) => lib.mechanics[id] && (
-          <Chip key={id} color={ENTITY_COLORS.mechanic} onRemove={() => upd({ mechanicIds: mechanicIds.filter((m) => m !== id) })}>
+          <Chip key={id} color={ENTITY_COLORS.mechanic} onClick={isStoryBeat(node) ? () => setOpenMechanicId(id) : undefined} onRemove={() => upd({ mechanicIds: mechanicIds.filter((m) => m !== id) })}>
             {lib.mechanics[id].name}
           </Chip>
         ))}
@@ -1728,12 +1755,13 @@ function RelationshipsSection({ node, extra }) {
       </div>
       {extra}
       <div className="hint">The narrative layer stays mechanic-free — this is only a reference into the mechanic layer.</div>
+      {openMechanicId && lib.mechanics[openMechanicId] && <StoryBeatDialog title={lib.mechanics[openMechanicId].name} subtitle="Library mechanic" onClose={() => setOpenMechanicId(null)}><LibMechanicPanel template={lib.mechanics[openMechanicId]} /></StoryBeatDialog>}
     </ISection>
   );
 }
 
 // ---- Base Node (Event / Character / Story Location / Item / Quest) ----
-function BaseNodePanel({ node, onSelect, onNavigate }) {
+function BaseNodePanel({ node, onSelect, onNavigate, nativeDetails = false }) {
   const s = useGame();
   const lib = useLibrary();
   const dispatch = useDispatch();
@@ -1742,6 +1770,7 @@ function BaseNodePanel({ node, onSelect, onNavigate }) {
   const t = baseTemplateMeta(node.kind);
   const color = node.color || t?.color || '#8B92A6';
   const [savedAs, setSavedAs] = useState(null);
+  if (node.wizardFields && !nativeDetails) return <BoundWizardFields node={node} onPatch={upd} Field={TextField}><BaseNodePanel node={node} onSelect={onSelect} onNavigate={onNavigate} nativeDetails /></BoundWizardFields>;
   if (node.kind === LINKING_NODE_KIND) {
     return <LinkingNodeInspector node={node} onPatch={upd} onNavigate={onNavigate} onInsert={(ref) => {
       const inserted = buildNarrativeLinkInsertion(lib, ref, s.nodes, { x: node.x + (node.w || 280) + 50, y: node.y }, `${s.meta.prefix}-INS-`);
@@ -1760,12 +1789,13 @@ function BaseNodePanel({ node, onSelect, onNavigate }) {
         name: node.title, category: node.kind, color, icon: t?.icon || 'flag',
         body: node.body || t?.blurb || '', tags: [], inputs: ['in'], outputs: ['out'],
         image: node.image ?? null,
-        template: { ...JSON.parse(JSON.stringify(node)), id: undefined, x: undefined, y: undefined, history: [] },
+        template: { ...remapCharacterRelationships(JSON.parse(JSON.stringify(node))), id: undefined, x: undefined, y: undefined, history: [] },
       },
     });
     setSavedAs(id);
     setTimeout(() => setSavedAs(null), 5000);
   };
+  if (node.kind === 'group') return <GroupPanel node={node} onPatch={upd} />;
   if (node.kind === 'character') {
     return (
       <>
@@ -1773,13 +1803,9 @@ function BaseNodePanel({ node, onSelect, onNavigate }) {
           <div className="ihrow"><span className="sq big" style={{ background: color }}>{t && <PrimIcon icon={t.icon} color="#fff" size={13} />}</span><h3>{node.title}</h3></div>
           <div className="sub">{t?.label ?? node.kind} · <span className="mono">{node.id}</span></div>
         </div>
-        <CharacterCardInspector
-          node={node}
-          onPatch={upd}
-          onArchetypeChange={(patch) => dispatch({ type: 'SYNC_CHARACTER_ARCHETYPE', id: node.id, patch })}
-          template={s.meta.characterCardTemplate}
-          onTemplatePatch={(characterCardTemplate) => dispatch({ type: 'SET_META', patch: { characterCardTemplate } })}
-        />
+        <CharacterFacts key={`facts:${node.id}`} node={node} onPatch={upd} showMedia={false} />
+        <CharacterProfile key={node.id} node={node} onPatch={upd} />
+        {characterUsesMasculineArchetypes(node, { nodes: { ...s.nodes, ...s.frameworks } }) && <CharacterArchetypeFields node={node} onChange={(patch) => dispatch({ type: 'SYNC_CHARACTER_ARCHETYPE', id: node.id, patch })} />}
       </>
     );
   }
@@ -1793,16 +1819,15 @@ function BaseNodePanel({ node, onSelect, onNavigate }) {
         <div className="sub">{t?.label ?? node.kind} · <span className="mono">{node.id}</span></div>
       </div>
 
-      {node.kind !== 'item' && <ISection label="Core Identity">
+      {isStoryBeat(node) && <StoryBeatIdentityFields node={node} onPatch={upd} Field={TextField}><ImageUploader coll="nodes" entity={node} label="Beat image · optional" /></StoryBeatIdentityFields>}
+      {node.kind !== 'item' && !isStoryBeat(node) && <ISection label="Core Identity">
         <TextField label={node.kind === 'item' ? 'Name' : 'Title'} value={node.title} onCommit={(v) => upd({ title: v })} />
-        <SectionLabel>Base type</SectionLabel>
-        {node.kind === 'item' ? (
-          <div className="field-input readonlyfield">Story Item</div>
-        ) : (
+        {!isStoryBeat(node) && <>
+          <SectionLabel>Base type</SectionLabel>
           <select className="field-input" value={node.kind} onChange={(e) => upd({ kind: e.target.value })}>
             {Object.values(BASE_NODE_TYPES).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
           </select>
-        )}
+        </>}
         <SectionLabel>Team lane</SectionLabel>
         <select className="field-input" value={node.teamId ?? ''} onChange={(e) => upd({ teamId: e.target.value || null })}>
           <option value="">Shared · all teams</option>
@@ -1810,7 +1835,7 @@ function BaseNodePanel({ node, onSelect, onNavigate }) {
         </select>
       </ISection>}
 
-      {node.kind !== 'item' ? <ISection label="Main Content">
+      {node.kind !== 'item' && !isStoryBeat(node) ? <ISection label="Main Content">
         <TextField label="Description" textarea value={node.body} onCommit={(v) => upd({ body: v })} />
         <SectionLabel>Image · optional</SectionLabel>
         <ImageUploader coll="nodes" entity={node} label="Node image" />
@@ -1818,12 +1843,13 @@ function BaseNodePanel({ node, onSelect, onNavigate }) {
 
       : null}
 
-      {node.kind === 'item' && <StoryItemInspectorFields node={node} onPatch={upd} game={s} lib={lib} graph={{ nodes: s.nodes }} />}
+      {node.kind === 'item' && <StoryItemInspectorFields node={node} onPatch={upd} game={s} lib={lib} graph={{ nodes: s.nodes }} onSelect={onSelect} />}
+      {isStoryBeat(node) && <StoryBeatFields key={node.id} node={node} onPatch={upd} Field={TextField} game={s} MechanicWindow={StoryBeatMechanicWindow} />}
 
       {node.kind !== 'item' && <CompositionSection node={node} />}
 
-      {node.kind === 'event' && (
-        <ISection label="Type-specific · Event">
+      {isStoryBeat(node) && (node.conceptId || Object.keys(node.conceptAnswers || {}).length > 0) && (
+        <ISection label="Saved concept answers">
           <SectionLabel>Apply Story Concept</SectionLabel>
           <select className="field-input" value={node.conceptId ?? ''} onChange={(e) => upd({ conceptId: e.target.value || null })}>
             <option value="">— none —</option>
@@ -2247,6 +2273,15 @@ function SubnodePanel({ sn, onSelect }) {
         </ISection>
       )}
 
+      {sn.kind === 'teamLane' && <div className="isect">
+        <label className="lab">Team<select className="field-input" value={sn.teamId || ''} onChange={event => upd({ teamId: event.target.value || null })}>
+          <option value="">Shared · all teams</option>
+          {sn.teamId && !s.teams[sn.teamId] && <option value={sn.teamId}>Unavailable team</option>}
+          {Object.values(s.teams).map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+        </select></label>
+        <p className="hint">Attach this card to a Story Beat to assign its team. Detach it to stop applying this assignment.</p>
+      </div>}
+
       {sn.kind === 'characterState' && (
         <ISection label="Main Content">
           <TextField label="Emotional State" value={sn.emotionalState} onCommit={(v) => upd({ emotionalState: v })} placeholder="Neutral, Sad, Angry, Hostile, Allied..." />
@@ -2628,7 +2663,23 @@ function GraphTitleMarkerPanel({ scope, id, onSelect }) {
 
 // ---- A node inside a located graph: a surface Task, or a nested detail node
 // (of a task or a narrative beat). Edits flow through the generic GRAPH_* path.
-function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
+function StoryBeatMechanicWindow({ mechanicRef, onClose }) {
+  const game = useGame();
+  const [current, setCurrent] = useState(mechanicRef);
+  const scope = { coll: current.coll, parentPath: current.parentPath || [] };
+  const node = locateGraph(game, scope).nodes[current.nodeId];
+  const select = selection => {
+    if (selection?.kind === 'graphnode') setCurrent({ coll: selection.scope.coll, parentPath: selection.scope.parentPath || (selection.scope.parentId ? [selection.scope.parentId] : []), nodeId: selection.id });
+  };
+  const atOriginal = current.coll === mechanicRef.coll && current.nodeId === mechanicRef.nodeId && JSON.stringify(current.parentPath || []) === JSON.stringify(mechanicRef.parentPath || []);
+  return <StoryBeatDialog title={node?.title || 'Linked mechanic'} subtitle="Linked game mechanic · edits save to the original" onClose={onClose} className="story-beat-mechanic-window">
+    {!atOriginal && <button type="button" className="btn small story-beat-mechanic-back" onClick={() => setCurrent(mechanicRef)}>← Back to linked mechanic</button>}
+    <GraphNodePanel key={JSON.stringify(current)} scope={scope} id={current.nodeId} onSelect={select} />
+    {!!Object.keys(node?.sub?.nodes || {}).length && <div className="isect"><details><summary>Inside this mechanic</summary><div className="chips">{Object.values(node.sub.nodes).map(child => <button type="button" className="btn small" key={child.id} onClick={() => setCurrent({ coll: current.coll, parentPath: [...(current.parentPath || []), node.id], nodeId: child.id })}>{child.title || child.id} ↗</button>)}</div></details></div>}
+  </StoryBeatDialog>;
+}
+
+function GraphNodePanel({ scope, id, onSelect, onNavigate, nativeDetails = false }) {
   const s = useGame();
   const lib = useLibrary();
   const dispatch = useDispatch();
@@ -2638,6 +2689,18 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
   const [savedAs, setSavedAs] = useState(null);
   if (!n) return <div className="empty">Node not found.</div>;
   const upd = (patch) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch });
+  if (n.wizardFields && !nativeDetails) return <BoundWizardFields node={n} onPatch={upd} Field={TextField}><GraphNodePanel scope={scope} id={id} onSelect={onSelect} onNavigate={onNavigate} nativeDetails /></BoundWizardFields>;
+  if (n.kind === 'group') return <GroupPanel node={n} scope={scope} onPatch={upd} />;
+  if (n.groupRoster) return <GroupRoster scope={scope} onSelect={onSelect} detailed />;
+  if (n.characterInput) return <CharacterInputNode node={n} scope={scope} detailed />;
+  if (n.wizardQuestionKey) {
+    const ancestor = characterInputAncestor(s, scope);
+    if (ancestor?.node.characterInput.linkedNodeId) return <>
+      <ISection label="Linked character answer"><h4>{n.title}</h4><p style={{ whiteSpace: 'pre-wrap' }}>{n.wizardAnswer ?? n.body}</p><p className="hint">Edit the linked source's wizard below to update this answer.</p></ISection>
+      <CharacterInputNode node={ancestor.node} scope={ancestor.scope} detailed />
+    </>;
+    return <ConceptInternalNodeFields node={n} onPatch={upd} />;
+  }
   if (n.kind === LINKING_NODE_KIND) {
     return <LinkingNodeInspector node={n} onPatch={upd} onNavigate={onNavigate} onInsert={(ref) => {
       const inserted = buildNarrativeLinkInsertion(lib, ref, g.nodes, { x: n.x + (n.w || 280) + 50, y: n.y }, 'INS-');
@@ -2679,7 +2742,7 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
         id, nodeClass: 'base', nodeKind: 'masterAct',
         name: n.title, category: 'masterAct', color, icon: MASTER_ACT_TYPE.icon,
         body: n.body || MASTER_ACT_TYPE.blurb, tags: [], inputs: ['in'], outputs: ['out'],
-        template: { ...JSON.parse(JSON.stringify(n)), id: undefined, x: undefined, y: undefined },
+        template: { ...remapCharacterRelationships(JSON.parse(JSON.stringify(n))), id: undefined, x: undefined, y: undefined },
       },
     });
     setSavedAs(id);
@@ -2692,12 +2755,9 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
           <div className="ihrow"><span className="sq big" style={{ background: color }}>{t && <PrimIcon icon={t.icon} color="#fff" size={13} />}</span><h3>{n.title}</h3></div>
           <div className="sub">{t?.label ?? n.kind}{scope.parentId || scope.parentPath ? ' · internal node' : ''} · {n.id}</div>
         </div>
-        <CharacterCardInspector
-          node={n}
-          onPatch={upd}
-          onArchetypeChange={(patch) => dispatch({ type: 'SYNC_CHARACTER_ARCHETYPE', scope, id, patch })}
-          template={s.meta.characterCardTemplate}
-        />
+        <CharacterFacts key={`facts:${n.id}`} node={n} scope={scope} onPatch={upd} showMedia={false} />
+        <CharacterProfile key={n.id} node={n} scope={scope} onPatch={upd} />
+        {characterUsesMasculineArchetypes(n, { nodes: g.nodes }) && <CharacterArchetypeFields node={n} onChange={(patch) => dispatch({ type: 'SYNC_CHARACTER_ARCHETYPE', scope, id, patch })} />}
       </>
     );
   }
@@ -2781,7 +2841,7 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
           </div>
         </div>
       )}
-      {!isTimelineItem && !isMasterAct && !isMechanicSchemaNode && n.kind !== 'item' && (
+      {!isTimelineItem && !isMasterAct && !isMechanicSchemaNode && n.kind !== 'item' && !isStoryBeat(n) && (
         <div className="isect">
           <SectionLabel>{isBase ? 'Base type' : 'Detail type'}</SectionLabel>
           <select className="field-input" value={n.kind} onChange={(e) => upd({ kind: e.target.value })}>
@@ -2797,9 +2857,11 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
           <div className="field-input readonlyfield">Story Item</div>
         </div>
       )}
-      {n.kind !== 'item' && <TextField label={isTravel ? 'Travel label' : isTask ? 'Site time name' : isMasterAct ? 'Act name' : isTaskTemplate ? 'Title' : 'Title'} value={n.title} onCommit={(v) => upd({ title: v })} />}
-      {n.kind !== 'item' && n.mechKind !== 'playerFacingInstruction' && <TextField label={isTravel ? 'Travel notes / route' : isTask ? 'Site time description / notes' : isMasterAct ? 'Story description' : (isTaskTemplate || isMechanicSchemaNode) ? 'Description' : 'Detail'} textarea value={n.body} onCommit={(v) => upd({ body: v })} />}
-      {n.kind === 'item' && <StoryItemInspectorFields node={n} onPatch={upd} game={s} lib={lib} graph={g} />}
+      {isStoryBeat(n) && <StoryBeatIdentityFields node={n} onPatch={upd} Field={TextField}><ImageUploader entity={n} label="Beat image · optional" onImage={image => upd({ image })} /></StoryBeatIdentityFields>}
+      {n.kind !== 'item' && !isStoryBeat(n) && <TextField label={isTravel ? 'Travel label' : isTask ? 'Site time name' : isMasterAct ? 'Act name' : isTaskTemplate ? 'Title' : 'Title'} value={n.title} onCommit={(v) => upd({ title: v })} />}
+      {n.kind !== 'item' && !isStoryBeat(n) && n.mechKind !== 'playerFacingInstruction' && <TextField label={isTravel ? 'Travel notes / route' : isTask ? 'Site time description / notes' : isMasterAct ? 'Story description' : (isTaskTemplate || isMechanicSchemaNode) ? 'Description' : 'Detail'} textarea value={n.body} onCommit={(v) => upd({ body: v })} />}
+      {n.kind === 'item' && <StoryItemInspectorFields node={n} onPatch={upd} game={s} lib={lib} graph={g} onSelect={onSelect} />}
+      {isStoryBeat(n) && <StoryBeatFields key={n.id} node={n} onPatch={upd} Field={TextField} game={s} scope={scope} MechanicWindow={StoryBeatMechanicWindow} />}
       {false && n.kind === 'item' && (
         <div className="isect">
           <SectionLabel>Type</SectionLabel>
@@ -2810,6 +2872,7 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
         </div>
       )}
       {isMechanicSchemaNode && <MechanicsNodeFields node={n} onPatch={upd} lib={lib} graph={g} />}
+      {isMasterAct && <StoryDirectionFields value={n.storyDirection} inherited={s.meta.storyPlanning?.direction || {}} onPatch={patch => upd({ storyDirection: { ...n.storyDirection, ...patch } })} />}
       {isMasterAct && (
         <TextField
           label="Team phase / player dynamics (private)"
@@ -2856,7 +2919,7 @@ function GraphNodePanel({ scope, id, onSelect, onNavigate }) {
           <div className="hint">Travel uses one right-side margin: baseline travel time plus possible delay from walking speed, transport, wrong turns, waiting, or getting lost.</div>
         </div>
       )}
-      {n.kind !== 'item' && !['action', ACTION_MECHANISM_NODE_KIND].includes(n.mechKind) && <div className="isect">
+      {n.kind !== 'item' && !isStoryBeat(n) && !['action', ACTION_MECHANISM_NODE_KIND].includes(n.mechKind) && <div className="isect">
         <SectionLabel>Image · optional</SectionLabel>
         <ImageUploader entity={n} label="Node image" onImage={(img) => upd({ image: img })} />
       </div>}
@@ -4170,6 +4233,14 @@ function LibNodeTemplatePanel({ template, onDeleted }) {
     onDeleted?.();
   };
   const isSub = template.nodeClass === 'subnode';
+  const isBeatTemplate = !isSub && isStoryBeat({ kind: template.nodeKind });
+  const beatTemplate = { ...template.template, id: template.id, kind: template.nodeKind, title: template.name, body: template.template?.body ?? template.body ?? '', image: template.image ?? template.template?.image };
+  const patchBeatTemplate = patch => upd({
+    ...('title' in patch ? { name: patch.title } : {}),
+    ...('body' in patch ? { body: patch.body } : {}),
+    ...('image' in patch ? { image: patch.image } : {}),
+    template: { ...template.template, ...patch },
+  });
   const meta = isSub
     ? (SUBNODE_TYPES[template.subKind] || { label: 'Subnode', color: '#F08CB4', icon: 'swap' })
     : (baseTemplateMeta(template.nodeKind) || { label: 'Base Node', color: '#8B92A6', icon: 'flag' });
@@ -4187,7 +4258,7 @@ function LibNodeTemplatePanel({ template, onDeleted }) {
     const kind = template.nodeKind || 'event';
     if (kind === 'masterAct') {
       const id = genId(proj.masterNodes || {}, 'ACT-');
-      const saved = template.template ? JSON.parse(JSON.stringify(template.template)) : {};
+      const saved = template.template ? detachStoryBeatLinks(JSON.parse(JSON.stringify(template.template))) : {};
       dispatch({
         type: 'GRAPH_ADD_NODE',
         scope: { coll: 'masterNodes' },
@@ -4196,7 +4267,7 @@ function LibNodeTemplatePanel({ template, onDeleted }) {
       return;
     }
     const id = genId(proj.nodes, `${proj.meta.prefix}-N-`);
-    const saved = template.template ? JSON.parse(JSON.stringify(template.template)) : {};
+    const saved = template.template ? detachStoryBeatLinks({ ...JSON.parse(JSON.stringify(template.template)), kind }) : {};
     dispatch({
       type: 'ADD_NODE',
       node: {
@@ -4220,8 +4291,8 @@ function LibNodeTemplatePanel({ template, onDeleted }) {
         <button className="btn primary wide" onClick={importTemplate}>Import template into game</button>
         <div className="hint">Duplicates this Library template into <b>{proj.meta.name}</b>. The template stays unchanged.</div>
       </div>
-      <TextField label="Name" value={template.name} onCommit={(v) => upd({ name: v })} />
-      <div className="isect">
+      {isBeatTemplate ? <StoryBeatIdentityFields node={beatTemplate} onPatch={patchBeatTemplate} Field={TextField}><ImageUploader entity={beatTemplate} label="Beat image · optional" onImage={image => patchBeatTemplate({ image })} /></StoryBeatIdentityFields> : <TextField label="Name" value={template.name} onCommit={(v) => upd({ name: v })} />}
+      {(isSub || !isStoryBeat({ kind: template.nodeKind })) && <div className="isect">
         <SectionLabel>{isSub ? 'Subnode type' : 'Base node type'}</SectionLabel>
         {isSub ? (
           <select className="field-input" value={template.subKind} onChange={(e) => {
@@ -4241,8 +4312,9 @@ function LibNodeTemplatePanel({ template, onDeleted }) {
             <option value={MASTER_ACT_TYPE.id}>{MASTER_ACT_TYPE.label}</option>
           </select>
         )}
-      </div>
-      <TextField label="Template note" textarea value={template.body} onCommit={(v) => upd({ body: v })} />
+      </div>}
+      {!isBeatTemplate && <TextField label="Template note" textarea value={template.body} onCommit={(v) => upd({ body: v })} />}
+      {!isSub && isStoryBeat({ kind: template.nodeKind }) && <StoryBeatFields key={template.id} node={beatTemplate} onPatch={patchBeatTemplate} Field={TextField} />}
       {!isSub && template.nodeKind === 'item' && (
         <>
           <div className="isect">
@@ -4305,10 +4377,11 @@ function LibFrameworkTypePanel({ frameworkId }) {
   );
 }
 
-function LibBuilderNodePanel({ selection }) {
+function LibBuilderNodePanel({ selection, nativeDetails = false }) {
   const n = selection.node;
   const lib = useLibrary();
   const patch = selection.onPatch || (() => {});
+  if (n.wizardFields && !nativeDetails) return <BoundWizardFields node={n} onPatch={patch} Field={TextField}><LibBuilderNodePanel selection={selection} nativeDetails /></BoundWizardFields>;
   const isSub = n._sub;
   const isFramework = n.kind === 'framework';
   const isMechanicSchemaNode = !!n.mechKind || n.kind === 'mechanicSubnode' || !!n.physicalKind;
@@ -4366,9 +4439,11 @@ function LibBuilderNodePanel({ selection }) {
         </div>
         <div className="sub mono">{n.id} · {isSub ? 'subnode' : isFramework ? 'reference framework' : n.kind}</div>
       </div>
-      {n.kind !== 'item' && <TextField label={isFramework ? 'Framework title' : 'Node title'} value={n.title} onCommit={(v) => patch({ title: v })} />}
-      {n.kind !== 'item' && !isFramework && n.mechKind !== 'playerFacingInstruction' && <TextField label="Description" textarea value={n.body} onCommit={(v) => patch({ body: v })} />}
+      {isStoryBeat(n) && <StoryBeatIdentityFields node={n} onPatch={patch} Field={TextField}><ImageUploader entity={n} label="Beat image · optional" onImage={image => patch({ image })} /></StoryBeatIdentityFields>}
+      {n.kind !== 'item' && !isStoryBeat(n) && <TextField label={isFramework ? 'Framework title' : 'Node title'} value={n.title} onCommit={(v) => patch({ title: v })} />}
+      {n.kind !== 'item' && !isStoryBeat(n) && !isFramework && n.mechKind !== 'playerFacingInstruction' && <TextField label="Description" textarea value={n.body} onCommit={(v) => patch({ body: v })} />}
       {n.kind === 'item' && <StoryItemInspectorFields node={n} onPatch={patch} lib={lib} graph={{ nodes: { [n.id]: n } }} />}
+      {isStoryBeat(n) && <StoryBeatFields key={n.id} node={n} onPatch={patch} Field={TextField} />}
       {false && n.kind === 'item' && (
         <>
           <div className="isect">
@@ -4670,7 +4745,7 @@ function LibStructTitleMarkerPanel({ storyId, markerId, coll = 'stories', graphP
 
 // A node inside a structure's master graph (library editor selection). Works
 // for both story and mechanic structures via the `coll` on the selection.
-function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [], onSelect, onNavigate }) {
+function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [], onSelect, onNavigate, nativeDetails = false }) {
   const lib = useLibrary();
   const libDispatch = useLibraryDispatch();
   const st = lib[coll]?.[storyId];
@@ -4690,6 +4765,7 @@ function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [],
       patch: { nodes: libPatchSubgraphAtPath(st.nodes || {}, graphPath, nextGraph) },
     });
   };
+  if (n.wizardFields && !nativeDetails) return <BoundWizardFields node={n} onPatch={upd} Field={TextField}><LibStructNodePanel storyId={storyId} nodeId={nodeId} coll={coll} graphPath={graphPath} onSelect={onSelect} onNavigate={onNavigate} nativeDetails /></BoundWizardFields>;
   const prim = n.primitiveId ? (lib.narrative[n.primitiveId] || lib.mechPrimitives[n.primitiveId] || lib.mechSubnodes?.[n.primitiveId]) : null;
   const conceptInternal = CONCEPT_INTERNAL_NODE_TYPES[n.kind];
   const isMechanicSchemaNode = coll === 'mechStructures' && (!!n.mechKind || n.kind === 'mechanicSubnode' || !!n.physicalKind);
@@ -4763,9 +4839,11 @@ function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [],
         <div className="ihrow"><span className="sq big" style={{ background: n.color || prim?.color || ENTITY_COLORS[n.kind] }} /><h3>{n.title}</h3></div>
         <div className="sub">node in <b>{st.name}</b> · {n.kind}</div>
       </div>
-      {n.kind !== 'item' && <TextField label="Node title" value={n.title} onCommit={(v) => upd({ title: v })} />}
-      {n.kind !== 'item' && n.mechKind !== 'playerFacingInstruction' && <TextField label="Description" textarea value={n.body} onCommit={(v) => upd({ body: v })} />}
+      {isStoryBeat(n) && <StoryBeatIdentityFields node={n} onPatch={upd} Field={TextField}><ImageUploader entity={n} label="Beat image · optional" onImage={image => upd({ image })} /></StoryBeatIdentityFields>}
+      {n.kind !== 'item' && !isStoryBeat(n) && <TextField label="Node title" value={n.title} onCommit={(v) => upd({ title: v })} />}
+      {n.kind !== 'item' && !isStoryBeat(n) && n.mechKind !== 'playerFacingInstruction' && <TextField label="Description" textarea value={n.body} onCommit={(v) => upd({ body: v })} />}
       {n.kind === 'item' && <StoryItemInspectorFields node={n} onPatch={upd} lib={lib} graph={graph} />}
+      {isStoryBeat(n) && <StoryBeatFields key={n.id} node={n} onPatch={upd} Field={TextField} />}
       {false && n.kind === 'item' && (
         <>
           <div className="isect">
@@ -4788,7 +4866,7 @@ function LibStructNodePanel({ storyId, nodeId, coll = 'stories', graphPath = [],
         </>
       )}
       {isMechanicSchemaNode && <MechanicsNodeFields node={n} onPatch={upd} lib={lib} graph={graph} saveTarget="library" />}
-      {n.kind !== 'item' && !['action', ACTION_MECHANISM_NODE_KIND].includes(n.mechKind) && <div className="isect">
+      {n.kind !== 'item' && !isStoryBeat(n) && !['action', ACTION_MECHANISM_NODE_KIND].includes(n.mechKind) && <div className="isect">
         <SectionLabel>Node image · optional</SectionLabel>
         <ImageUploader entity={n} label="Node image" onImage={(img) => upd({ image: img })} />
       </div>}
@@ -4998,13 +5076,8 @@ export default function Inspector({ selection, onSelect, onNavigate, collapsed =
     : wizardEntity?.kind === 'framework' ? FRAMEWORK_TYPES[wizardEntity.frameworkId] : null;
   const wizardConcept = kind === 'lib-concepts' || wizardEntity?.kind === 'concept' ? wizardEntity : null;
   const wizardCharacter = wizardEntity?.kind === 'character';
-  const wizardOtherNarrative = ['node', 'graphnode'].includes(kind) && ['event', 'quest', 'storyLocation', 'item', 'storyStructureContainer'].includes(wizardEntity?.kind) && !wizardEntity?.mechKind;
-  return (
-    <aside className="inspector">
-      {resizeHandle}
-      {toggle}
-      <React.Fragment key={selectionKey}>
-        {(wizardFramework || wizardConcept || wizardCharacter || wizardOtherNarrative) && <div className="isect">
+  const wizardOtherNarrative = ['node', 'graphnode'].includes(kind) && ['storyBeat', 'event', 'quest', 'storyLocation', 'item', 'storyStructureContainer'].includes(wizardEntity?.kind) && !wizardEntity?.mechKind;
+  const wizardTools = !isStoryBeat(wizardEntity) && !wizardEntity?.characterInput && !wizardEntity?.wizardQuestionKey && (wizardFramework || wizardConcept || wizardOtherNarrative) && <div className="isect">
           {['node', 'graphnode'].includes(kind) && wizardEntity?.narrativeWizard?.sourceId && <NarrativeWizardButton
             resumeNode={wizardEntity}
             gameScope={kind === 'graphnode' ? selection.scope : undefined}
@@ -5021,8 +5094,16 @@ export default function Inspector({ selection, onSelect, onNavigate, collapsed =
             className="btn primary wide"
             onSaved={createdId => onSelect?.(kind === 'graphnode' ? { kind: 'graphnode', scope: selection.scope, id: createdId } : { kind: 'node', id: createdId })}
           />
-        </div>}
+        </div>;
+  return (
+    <aside className="inspector">
+      {resizeHandle}
+      {toggle}
+      <React.Fragment key={selectionKey}>
+        {!isStoryBeat(wizardEntity) && wizardTools}
         {body ?? <div className="empty">Record not found in this game.</div>}
+        {isStoryBeat(wizardEntity) && wizardTools}
+        {body && boxSize?.entity.kind === 'character' && <div className="character-media-footer"><CharacterMediaGallery key={boxSize.entity.id} node={boxSize.entity} onPatch={boxSize.onPatch} /></div>}
         {body && boxSize && <NodeBoxSizeFields entity={boxSize.entity} role={boxSize.role} onPatch={boxSize.onPatch} />}
       </React.Fragment>
     </aside>

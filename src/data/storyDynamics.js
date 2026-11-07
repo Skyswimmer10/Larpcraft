@@ -45,7 +45,7 @@ export const STORY_DYNAMICS_DEFAULT_GRAPH = {
   ],
 };
 
-export function normalizeStoryDynamicsGraph(graph) {
+export function normalizeStoryDynamicsChart(graph) {
   const src = graph && typeof graph === 'object' ? graph : STORY_DYNAMICS_DEFAULT_GRAPH;
   return {
     xLabel: src.xLabel || STORY_DYNAMICS_DEFAULT_GRAPH.xLabel,
@@ -68,6 +68,70 @@ export function normalizeStoryDynamicsGraph(graph) {
       color: tag.color || STORY_DYNAMICS_TAG_TYPES.find((type) => type.id === tag.type)?.color || '#8B92A6',
     })) : [],
   };
+}
+
+const percent = value => Math.max(0, Math.min(100, Number(value) || 0));
+export const emptyActivityChart = () => ({ xLabel: 'Journey within this activity', yLabel: STORY_DYNAMICS_DEFAULT_GRAPH.yLabel, curves: [], tags: [] });
+
+export function normalizeStoryDynamicsGraph(graph) {
+  const used = new Set();
+  return {
+    ...normalizeStoryDynamicsChart(graph),
+    durationMinutes: Number.isFinite(Number(graph?.durationMinutes)) && Number(graph?.durationMinutes) > 0 ? Number(graph.durationMinutes) : null,
+    activities: (Array.isArray(graph?.activities) ? graph.activities : []).filter(a => a && typeof a === 'object').map((activity, index) => {
+      let id = String(activity.id || `activity-${index + 1}`);
+      while (used.has(id)) id += '-copy';
+      used.add(id);
+      const a = percent(activity.start ?? 0), b = percent(activity.end ?? 20);
+      const start = Math.min(Math.min(a, b), 99.9);
+      const end = Math.max(Math.max(a, b), start + 0.1);
+      return {
+        id, title: activity.title || `Activity ${index + 1}`, start, end,
+        color: activity.color || STORY_DYNAMICS_COLORS[index % STORY_DYNAMICS_COLORS.length],
+        notes: activity.notes || '',
+        sources: Array.isArray(activity.sources) ? activity.sources.filter(source => ['nodes', 'masterNodes', 'taskNodes'].includes(source?.coll) && typeof source.nodeId === 'string').map(source => ({
+          coll: source.coll, parentPath: Array.isArray(source.parentPath) ? source.parentPath.filter(id => typeof id === 'string') : [], nodeId: source.nodeId, title: source.title || source.nodeId,
+        })) : [],
+        graph: normalizeStoryDynamicsChart(activity.graph || emptyActivityChart()),
+      };
+    }),
+  };
+}
+
+export function createStoryActivity(graph, title = 'New activity') {
+  const activities = graph?.activities || [];
+  let counter = 1;
+  while (activities.some(activity => activity.id === `activity-${counter}`)) counter++;
+  return { id: `activity-${counter}`, title, start: 0, end: 20, color: STORY_DYNAMICS_COLORS[activities.length % STORY_DYNAMICS_COLORS.length], notes: '', sources: [], graph: emptyActivityChart() };
+}
+
+export function updateStoryDynamicsChart(root, activityId, chart) {
+  const nextChart = normalizeStoryDynamicsChart(chart);
+  if (!activityId) return { ...root, ...nextChart };
+  return { ...root, activities: root.activities.map(activity => activity.id === activityId ? { ...activity, graph: nextChart } : activity) };
+}
+
+export function storyDynamicsDuration(graph, timeline) {
+  if (Number(graph?.durationMinutes) > 0) return Number(graph.durationMinutes);
+  const minutes = Number(timeline?.endMin) - Number(timeline?.startMin);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 240;
+}
+
+export function storyDynamicsSourceKey(source) {
+  return JSON.stringify([source.coll, source.parentPath || [], source.nodeId]);
+}
+
+export function storyDynamicsSources(project) {
+  const result = [];
+  const walk = (nodes, coll, path = [], names = []) => {
+    Object.values(nodes || {}).forEach(node => {
+      const title = node.title || node.name || node.id;
+      result.push({ coll, parentPath: path, nodeId: node.id, title, label: [...names, title].join(' / ') });
+      if (node.sub?.nodes) walk(node.sub.nodes, coll, [...path, node.id], [...names, title]);
+    });
+  };
+  for (const coll of ['masterNodes', 'nodes', 'taskNodes']) walk(project?.[coll], coll);
+  return result;
 }
 
 export const cloneDefaultStoryDynamicsGraph = () => JSON.parse(JSON.stringify(STORY_DYNAMICS_DEFAULT_GRAPH));

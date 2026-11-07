@@ -6,11 +6,16 @@ import LanguageSpectrum from './LanguageSpectrum.jsx';
 import PreferenceSpectra from './PreferenceSpectra.jsx';
 import { NarrativeWizardButton, NarrativeFitDetails } from './NarrativeWizard.jsx';
 
-export default function FrameworkDetail({ framework: fw, onClose }) {
+export default function FrameworkDetail({ framework: fw, onClose, showUseButton = true }) {
   const ref = useRef(null);
-  useEffect(() => { ref.current.showModal(); }, []);
-  return <dialog ref={ref} className="framework-detail-dialog" aria-label={fw.label} onCancel={onClose}>
-    <header><div><small>Reference framework</small><h2>{fw.label}</h2></div><NarrativeWizardButton source={fw} sourceType="framework" label="Use this framework" /><button className="btn" onClick={onClose} autoFocus>Close</button></header>
+  useEffect(() => {
+    const element = ref.current;
+    const previousFocus = document.activeElement;
+    element.showModal();
+    return () => { element.close(); previousFocus?.focus?.(); };
+  }, []);
+  return <dialog ref={ref} className="framework-detail-dialog" aria-label={fw.label} onCancel={event => { event.preventDefault(); event.stopPropagation(); onClose(); }}>
+    <header><div><small>Reference framework</small><h2>{fw.label}</h2></div>{showUseButton && <NarrativeWizardButton source={fw} sourceType="framework" label="Use this framework" />}<button type="button" className="btn" onClick={onClose} autoFocus>Close</button></header>
     <div className="framework-detail-body"><section><NarrativeFitDetails source={fw} /><p>{fw.summary || fw.blurb}</p><FrameworkPreview frameworkId={fw.id} /></section>
       <section aria-label="Framework explanations"><h3>Explanations</h3>
         {fw.layout === 'archetypes' ? <ArchetypeDetails framework={fw} /> : fw.layout === 'profileDomains' ? <ProfileDomainDetails framework={fw} /> : fw.layout === 'languageSpectrum' ? <LanguageSpectrum framework={fw} detailed /> : fw.layout === 'preferenceSpectra' ? <PreferenceSpectra framework={fw} detailed /> : fw.phases.map(phase => <details key={phase.key} className="framework-explanation"><summary>{phase.key} · {phase.name}</summary><p>{phase.detail || phase.short}</p></details>)}

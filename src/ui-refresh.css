@@ -1,5 +1,4 @@
-/* Optional first-pass appearance. Every visual override is scoped to ui-refresh.
-   Turn off Refreshed UI in the title bar to restore the original presentation. */
+/* The refreshed appearance is permanent. ui-refresh scopes the shared styles. */
 .appearance-controls{margin-left:auto;display:flex;gap:8px;align-items:center}
 .appearance-controls button{padding:6px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--panel);white-space:nowrap}
 .appearance-controls button[aria-pressed=true]{border-color:var(--brand);color:#c8c0ff}
@@ -120,12 +119,6 @@
 .ui-refresh .inspector .btn{min-height:initial;font-size:inherit}
 .ui-refresh .inspector .field-input{font-size:12.5px;line-height:1.45}
 .ui-refresh .inspector .scopebadge{font-size:11px;line-height:1.45}
-.ui-refresh .annotation-trigger{padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--raised);font-size:13px}
-.ui-refresh .annotation-tray-host{flex:none;grid-column:1/-1}
-.ui-refresh .annotation-tray{padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.ui-refresh .annotation-tray>div{display:flex;gap:7px;flex-wrap:wrap;border:0;padding:0;box-shadow:none;background:none}
-.ui-refresh .annotation-tray .tool-kind-label{display:none}
-.ui-refresh .annotation-tray>button{margin-left:auto;font-size:12px;padding:6px}
 .palette-description-popup{position:fixed;z-index:6000;width:360px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;padding:18px;background:#252b39;color:#eef0f7;border:1px solid #727a91;border-radius:10px;box-shadow:0 12px 32px #0008;font:14px/1.65 var(--sans)}
 .palette-description-popup strong{display:block;font-size:16px;margin-bottom:8px}
 .palette-description-popup p{margin:0;color:#c9d0df}

@@ -1,9 +1,12 @@
 import { migrateMechanicIO } from '../lib/mechanicIO.js';
+import { GROUP_FOUNDATIONS, GROUP_FOUNDATIONS_ID } from '../lib/groupFoundations.js';
 import { nlpMetaPrograms } from './nlpMetaPrograms.js';
 import { nlpMetaModel } from './nlpMetaModel.js';
 import { mmpi2Framework } from './mmpi2Framework.js';
 import { cloneDefaultStoryDynamicsGraph } from './storyDynamics.js';
+import { STORY_BEAT_TYPE } from '../lib/storyBeat.js';
 import { masculineDetails, feminineArchetypes } from './archetypeDetails.js';
+import { KWML_ENERGIES } from './kwml.js';
 import { actionPatternMechanismId, actionPatternSystemForCode, ACTION_MECHANISMS, makeActionMechanicTemplates, makeActionPatternMechanisms } from './actionMechanics.js';
 import { ACTION_PROBABILITY_RESOLUTIONS, ACTION_PROBABILITY_RESOLUTION_TYPES, actionProbabilityResolution } from './actionProbability.js';
 import { VICTORY_CONDITIONS } from './victoryConditions.js';
@@ -51,7 +54,7 @@ export const DEFAULT_ITEM_TYPES = {
 export const STAGE_W = 160;
 export const STAGE_H = 90;
 export const DEFAULT_OSM = { lat: 56.9496, lon: 24.1052, zoom: 16 };
-export const locationMapDefaults = () => ({ mapKind: 'schematic', osm: { ...DEFAULT_OSM }, markers: [], arrows: [] });
+export const locationMapDefaults = () => ({ mapKind: 'schematic', osm: { ...DEFAULT_OSM }, markers: [], arrows: [], mapLabels: [], mapZones: [] });
 
 // Editable categories for the unified Narrative library (merged primitives +
 // elements). Users can add and delete categories. Each carries a color + icon
@@ -96,8 +99,8 @@ export const NARR_NODE_TYPES = {
 // Which node kinds belong to the STORY side (vs. the mechanical task side used
 // by the Weaver timeline). Includes legacy typed kinds (story/beat/…) so older
 // saves keep working, plus the Narrative Weaver base kinds and concept nodes.
-export const NARRATIVE_KINDS = ['story', ...Object.keys(NARR_NODE_TYPES),
-  'event', 'character', 'storyLocation', 'item', 'quest', 'concept'];
+export const NARRATIVE_KINDS = ['story', 'storyBeat', ...Object.keys(NARR_NODE_TYPES),
+  'event', 'character', 'group', 'storyLocation', 'item', 'quest', 'concept'];
 
 // FACTS registry: the live-game replacement for a variable system. A fact is a
 // real-world state the game tracks and a GM/sensor can check at a branch.
@@ -124,13 +127,18 @@ export const FACT_BLANK = (id) => ({ id, name: 'New fact', kind: 'knowledge', de
 // ---------------------------------------------------------------------------
 
 export const BASE_NODE_TYPES = {
-  event: { id: 'event', label: 'Event', color: '#5CA8F5', icon: 'zap', blurb: 'Something that happens — a scene, an encounter, a moment.' },
+  storyBeat: STORY_BEAT_TYPE,
   character: { id: 'character', label: 'Character', color: '#E0A23C', icon: 'user', blurb: 'A person in the story — NPC, actor role, or figure.' },
+  group: { id: 'group', label: 'Group / Institution', color: '#73CCB2', icon: 'users', blurb: 'A family, band, guild, faction or institution with its own purpose and linked members.' },
   storyLocation: { id: 'storyLocation', label: 'Story Location', color: '#43BF87', icon: 'pin', blurb: 'A place as the story sees it (link it to a real venue record).' },
   item: { id: 'item', label: 'Story Item', color: '#3EC6D6', icon: 'box', blurb: 'An object that matters to the story; optionally link it to a physical prop.' },
-  quest: { id: 'quest', label: 'Quest', color: '#A87BF0', icon: 'target', blurb: 'A goal players pursue across one or more events.' },
 };
-export const BASE_KINDS = Object.keys(BASE_NODE_TYPES);
+// Keep old saves addressable without presenting Event and Quest as new choices.
+Object.defineProperties(BASE_NODE_TYPES, {
+  event: { value: STORY_BEAT_TYPE, enumerable: false },
+  quest: { value: STORY_BEAT_TYPE, enumerable: false },
+});
+export const BASE_KINDS = [...Object.keys(BASE_NODE_TYPES), 'event', 'quest'];
 
 export const LINKING_NODE_TYPE = {
   id: 'linkingNode',
@@ -214,6 +222,7 @@ const characterCardReserved = new Set([
   'id', 'kind', 'title', 'name', 'body', 'description', 'questions', 'typeGroups', 'x', 'y', 'color', 'teamId',
   'sets', 'locationId', 'itemId', 'mechanicIds', 'sensorIds', 'history', 'primitiveId', 'image', 'sub', 'collapsed',
   'archetypeEnabled', 'archetypeDarkSideUp', 'archetypeDarkSideBack',
+  'characterFacts', 'characterProfile', 'gender', 'race', 'age', 'storyRole',
 ]);
 const characterFieldLabel = (key) => key
   .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -264,6 +273,7 @@ export const MASTER_ACT_TYPE = {
 };
 
 export const FRAMEWORK_TYPES = {
+  [GROUP_FOUNDATIONS_ID]: GROUP_FOUNDATIONS,
   fate: {
     id: 'fate',
     label: 'FATE',
@@ -638,13 +648,13 @@ export const FRAMEWORK_TYPES = {
   jungianMasculineArchetypes: {
     id: 'jungianMasculineArchetypes',
     label: 'Jungian Masculine Archetypes',
-    title: 'Jungian Masculine Archetypes',
+    title: 'King, Warrior, Magician & Lover',
     color: '#CFA56A',
     icon: 'layers',
     layout: 'archetypes',
-    blurb: 'A reference framework for King, Warrior, Magician, and Lover archetypes with immature roots and shadow distortions.',
-    summary: 'Four mature masculine archetypes mapped between fullness and immature/shadow expressions: King, Warrior, Magician, and Lover.',
-    attribution: 'Robert Moore and Douglas Gillette’s King, Warrior, Magician, Lover model. Descriptions and story examples are Larpcraft interpretations of its named forms.',
+    blurb: 'Build a character from complementary King, Warrior, Magician and Lover energies, their strengths, shadows and directional interactions.',
+    summary: 'A centre that stewards, disciplined action that maintains, knowledge that transforms, and feeling that connects. Mix the four energies and explore how they support or distort one another.',
+    attribution: 'Robert Moore and Douglas Gillette’s King, Warrior, Magician, Lover model, adapted for fictional character creation using the supplied character-wizard prompts. Earlier developing forms remain available as reference.',
     phases: [
       {
         key: 'King',
@@ -654,8 +664,8 @@ export const FRAMEWORK_TYPES = {
         adultPassiveShadow: 'Weakling',
         childActiveShadow: 'High Chair Tyrant',
         childPassiveShadow: 'Weakling Prince',
-        short: 'Fullness: generative order, blessing, steadiness, and rightful responsibility.',
-        detail: 'The King in fullness creates order and gives life to the group. Its mature active shadow is the Tyrant; its mature passive shadow is the Weakling. Its immature root is the Divine Child, split between the High Chair Tyrant and the Weakling Prince.',
+        short: KWML_ENERGIES.King.core,
+        detail: `${KWML_ENERGIES.King.core} ${KWML_ENERGIES.King.interaction}`,
       },
       {
         key: 'Warrior',
@@ -665,30 +675,30 @@ export const FRAMEWORK_TYPES = {
         adultPassiveShadow: 'Masochist',
         childActiveShadow: 'Grandstander Bully',
         childPassiveShadow: 'Coward',
-        short: 'Fullness: discipline, courage, endurance, boundaries, and clean decisive action.',
-        detail: 'The Warrior in fullness acts with purpose and restraint. Its mature active shadow is the Sadist; its mature passive shadow is the Masochist. Its immature root is the Hero, split between the Grandstander Bully and the Coward.',
+        short: KWML_ENERGIES.Warrior.core,
+        detail: `${KWML_ENERGIES.Warrior.core} ${KWML_ENERGIES.Warrior.interaction}`,
       },
       {
         key: 'Magician',
         descriptions: masculineDetails.Magician,
         name: 'Precocious Child',
-        adultActiveShadow: 'Detached Manipulator',
-        adultPassiveShadow: 'Denying Innocent One',
+        adultActiveShadow: 'Trickster',
+        adultPassiveShadow: 'Innocent One',
         childActiveShadow: 'Know-it-all Trickster',
         childPassiveShadow: 'Dummy',
-        short: 'Fullness: insight, craft, hidden knowledge, initiation, and careful transformation.',
-        detail: 'The Magician in fullness understands systems and reveals what others cannot yet see. Its mature active shadow is the Detached Manipulator; its mature passive shadow is the Denying Innocent One. Its immature root is the Precocious Child, split between the Know-it-all Trickster and the Dummy.',
+        short: KWML_ENERGIES.Magician.core,
+        detail: `${KWML_ENERGIES.Magician.core} ${KWML_ENERGIES.Magician.interaction}`,
       },
       {
         key: 'Lover',
         descriptions: masculineDetails.Lover,
         name: 'Oedipal Child',
-        adultActiveShadow: 'Addicted Lover',
-        adultPassiveShadow: 'Impotent Lover',
+        adultActiveShadow: 'Addict',
+        adultPassiveShadow: 'Impotent',
         childActiveShadow: "Momma's Boy",
         childPassiveShadow: 'Dreamer',
-        short: 'Fullness: aliveness, empathy, sensuality, connection, beauty, and deep attachment.',
-        detail: 'The Lover in fullness feels, bonds, values, and responds to the world with vivid presence. Its mature active shadow is the Addicted Lover; its mature passive shadow is the Impotent Lover. Its immature root is the Oedipal Child, split between Momma\'s Boy and the Dreamer.',
+        short: KWML_ENERGIES.Lover.core,
+        detail: `${KWML_ENERGIES.Lover.core} ${KWML_ENERGIES.Lover.interaction}`,
       },
     ],
   },
@@ -723,6 +733,7 @@ export const LOCATION_ARCHETYPES = [
 //   attachesTo — node kinds a subnode may parent to ('*' = any node)
 //   childOf    — subnode kinds (or 'branch') this child-only subnode attaches to
 export const SUBNODE_TYPES = {
+  teamLane: { id: 'teamLane', label: 'Team Lane', color: '#68D7C0', icon: 'users', attachesTo: ['storyBeat', 'event', 'quest'], category: 'supporting', blurb: 'Optional team assignment for a Story Beat. Shared by all teams unless a team is selected.' },
   outcomeBranches: { id: 'outcomeBranches', label: 'Outcome Branches', color: '#F08CB4', icon: 'swap', attachesTo: ['event', 'quest'], blurb: 'The branching engine: 2–5 pre-authored outcome paths.' },
   relChange: { id: 'relChange', label: 'Relationship / Status Change', color: '#E86AA0', icon: 'heart', attachesTo: ['*'], blurb: 'Loyalty, rivalry, reputation, faction standing — and what it triggers.' },
   internalState: { id: 'internalState', label: 'Internal State', color: '#C77BE8', icon: 'alert', attachesTo: ['*'], blurb: 'A character’s emotional or physical condition, as a path trigger.' },
@@ -742,6 +753,8 @@ SUBNODE_TYPES.outcomeBranches.blurb = 'Defines meaningfully different narrative 
 export const SUBNODE_BLANK = (id, kind) => {
   const common = { id, kind, title: SUBNODE_TYPES[kind]?.label ?? kind, x: 80, y: 80, parentRef: null, notes: '', keywords: [], history: [] };
   switch (kind) {
+    case 'teamLane':
+      return { ...common, teamId: null };
     case 'outcomeBranches':
       return { ...common, mode: 'choice', selectionType: 'single', branches: [
         { label: 'Branch A', outcome: '', mechanicId: null },
@@ -2170,6 +2183,7 @@ function makeTurtleCostumeMechanicsStructure() {
 export function makeLibrarySeed() {
   return {
     rev: LIB_REV,
+    research: {},
     mechanicsSources: {},
 
     // Mechanic templates carry default PARAMETERS (switch/sensor counts,
@@ -2222,6 +2236,7 @@ export function makeLibrarySeed() {
     // Each is a narrative node you can drop onto a story-structure canvas or
     // import into a game as a story node. No mechanic/sensor logic lives here.
     narrative: {},
+    conversationTemplates: {},
 
     // MECHANIC PRIMITIVES (Game Mechanics node tree): the physical / sensor /
     // task node types — sensor triggers, puzzles, challenges, timers, waypoints,
@@ -2743,7 +2758,7 @@ export function makeEmptyProject(name = 'Untitled game') {
     storyDynamicsGraph: cloneDefaultStoryDynamicsGraph(),
     taskNodes: {}, taskEdges: [], taskFrames: {}, taskNumberMarkers: {}, taskTitleMarkers: {},
     storyboardNodes: {}, storyboardEdges: [], storyboardFrames: {}, storyboardNumberMarkers: {}, storyboardTitleMarkers: {},
-    alignments: [], storyTrack: {}, teams: {}, players: {},
+    alignments: [], storyTrack: {}, teams: {}, players: {}, conversations: {}, relationships: {},
   };
 }
 
@@ -2909,6 +2924,7 @@ export function makeProjectSeed() {
       characterCardTemplate: cloneCharacterCardTemplateForSettings(),
     },
 
+    conversations: {}, relationships: {},
     // Sensor hardware INSTANCES: template + game state (status, placement,
     // assignment, battery).
     sensors: {

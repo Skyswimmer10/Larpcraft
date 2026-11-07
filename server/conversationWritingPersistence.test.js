@@ -1,0 +1,78 @@
+import { describe, expect, it } from 'vitest';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createServer } from 'node:http';
+import { localDataPlugin } from './localData.js';
+import { makeEmptyProject, migrateProject, makeLibrarySeed, migrateLibrary } from '../src/data/seed.js';
+import { createWizardNode } from '../src/lib/narrativeWizard.js';
+import { editCharacterDescription, characterDescriptionReviews, reviewCharacterDescription } from '../src/lib/characterProfile.js';
+import { savedWizardSessions } from '../src/lib/narrativeMemory.js';
+import { characterReference, createConversation, conversationsForCharacter, conversationLibraryRecord, conversationFromLibrary } from '../src/lib/conversations.js';
+import { reducer } from '../src/state/reducer.js';
+
+describe('shared conversations and protected writing on disk', () => {
+  it('reloads canonical participant links, script status, answers, custom prose and pending paragraph revisions', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'larpcraft-conversation-test-'));
+    await fs.writeFile(path.join(directory, 'project.json'), JSON.stringify(makeEmptyProject('Writing persistence test')));
+    await fs.writeFile(path.join(directory, 'library.json'), JSON.stringify(makeLibrarySeed()));
+    let middleware;
+    localDataPlugin(directory).configureServer({ middlewares: { use: handler => { middleware = handler; } } });
+    const server = createServer((request, response) => middleware(request, response, () => { response.statusCode = 404; response.end(); }));
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${server.address().port}/api/local-data/project`;
+    try {
+      const before = await (await fetch(url)).json();
+      let node = createWizardNode({ id: 'C', title: 'Moro', source: { id: 'trust', name: 'Trust', category: 'characterConcept', nodes: {}, edges: [] }, type: 'concept', focus: 'character', questions: [{ key: 'trust', prompt: 'Whom do they trust?' }], answers: { trust: 'They distrust strangers.' } });
+      node = editCharacterDescription(node, {}, node.body + '\n\nThey own a bakery.');
+      node = editCharacterDescription(node, {}, 'They welcome travellers.\n\nThey own a bakery.');
+      const questionId = node.narrativeWizard.questionIds.trust;
+      let project = reducer({ ...makeEmptyProject('Writing persistence test'), nodes: { C: node } }, { type: 'GRAPH_UPDATE_NODE', scope: { coll: 'nodes' }, id: 'C', patch: { questions: node.questions.map(row => row.id === questionId ? { ...row, answer: 'They distrust soldiers.' } : row) } });
+      const ref = characterReference({}, 'C');
+      const conversation = { ...createConversation('talk', { id: 'moro', name: 'Moro', characterRef: ref }), title: 'The warning', status: 'happened', participants: [{ id: 'moro', name: 'Moro', characterRef: ref }, { id: 'captain', name: 'The captain' }], passages: [{ id: 'line', speakerId: 'captain', text: 'Keep the gate closed.' }] };
+      project = reducer(project, { type: 'ADD_ENTITY', coll: 'conversations', entity: conversation });
+      Object.assign(conversation, { authorGoals: 'Reveal the danger.', summary: 'The captain warns Moro.', location: { name: 'North gate' } });
+      conversation.participants[0].goals = { survival: 'Keep the town safe.', trust: 'Believe the captain.', mission: 'Close the gate.' };
+      conversation.icon = { symbol: 'book' };
+      conversation.participants[0].icon = null;
+      conversation.participants[0].sceneName = 'The baker';
+      conversation.participants[0].goalIcons = { trust: { symbol: 'star' }, survival: null };
+      conversation.passages[0].position = 'center';
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: before.revision, state: project }) });
+      expect(response.status).toBe(200);
+      const reopened = migrateProject((await (await fetch(url)).json()).state);
+      expect(conversationsForCharacter(reopened, ref)[0]).toEqual(conversation);
+      expect(reopened.nodes.C.body).toBe('They welcome travellers.\n\nThey own a bakery.');
+      expect(savedWizardSessions(reopened.nodes.C, {})[0].answers.trust).toBe('They distrust soldiers.');
+      const [review] = characterDescriptionReviews(reopened.nodes.C);
+      expect(review.pending).toBe('They distrust soldiers.');
+      expect(reviewCharacterDescription(reopened.nodes.C, reopened, review.id, true).body).toBe('They distrust soldiers.\n\nThey own a bakery.');
+      const stored = JSON.parse(await fs.readFile(path.join(directory, 'project.json'), 'utf8'));
+      expect(stored.conversations.talk).toEqual(conversation);
+      const libraryUrl = url.replace('/project', '/library');
+      const libraryBefore = await (await fetch(libraryUrl)).json();
+      const template = conversationLibraryRecord(conversation, reopened, 'LIB-TALK');
+      const saveLibrary = await fetch(libraryUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: libraryBefore.revision, state: { ...libraryBefore.state, conversationTemplates: { [template.id]: template } } }) });
+      expect(saveLibrary.status).toBe(200);
+      const library = migrateLibrary((await (await fetch(libraryUrl)).json()).state);
+      expect(library.conversationTemplates[template.id].template.participants[0].characterRef).toBeUndefined();
+      const copy = conversationFromLibrary(library.conversationTemplates[template.id], 'talk-copy');
+      const projectBeforeCopy = await (await fetch(url)).json();
+      const withCopy = reducer(projectBeforeCopy.state, { type: 'ADD_ENTITY', coll: 'conversations', entity: copy });
+      const saveCopy = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: projectBeforeCopy.revision, state: withCopy }) });
+      expect(saveCopy.status).toBe(200);
+      const afterCopy = migrateProject((await (await fetch(url)).json()).state);
+      expect(afterCopy.conversations['talk-copy'].status).toBe('planned');
+      expect(afterCopy.conversations['talk-copy'].participants[0]).toMatchObject({ name: 'Moro', sceneName: 'The baker' });
+      expect(afterCopy.conversations.talk.participants[0].name).toBe('Moro');
+      expect(conversationsForCharacter(afterCopy, ref)).toHaveLength(1);
+      expect(afterCopy.conversations['talk-copy'].passages).toEqual(conversation.passages);
+      expect(JSON.parse(await fs.readFile(path.join(directory, 'library.json'), 'utf8')).conversationTemplates[template.id]).toEqual(template);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+      const resolved = path.resolve(directory);
+      if (!resolved.startsWith(path.resolve(os.tmpdir()) + path.sep) || !path.basename(resolved).startsWith('larpcraft-conversation-test-')) throw Error('Unexpected test cleanup path');
+      await fs.rm(resolved, { recursive: true, force: true });
+    }
+  });
+});

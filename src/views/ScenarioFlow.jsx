@@ -1,4 +1,4 @@
-import AnnotationTools from '../components/AnnotationTools.jsx';
+import AnnotationTools, { AnnotationButtons } from '../components/AnnotationTools.jsx';
 import React, { useState } from 'react';
 import { useGame, useDispatch, useLibrary, useLibraryDispatch } from '../state/store.jsx';
 import { ENTITY_COLORS, Pill, PrimIcon } from '../components/bits.jsx';
@@ -6,8 +6,19 @@ import FlowCanvas, { visibleCanvasPlacement } from '../components/FlowCanvas.jsx
 import StructureThumb from '../components/StructureThumb.jsx';
 import CsvButtons from '../components/CsvButtons.jsx';
 import NodePalette from '../components/NodePalette.jsx';
-import NarrativeLibraryBrowser from '../components/NarrativeLibraryBrowser.jsx';
+import '../components/MechanicsToolbox.css';
+import StoryLibraryBrowser from '../components/StoryLibraryBrowser.jsx';
+import { ConversationBrowserDialog } from '../components/Conversations.jsx';
+import { conversationFromLibrary } from '../lib/conversations.js';
+import { detachStoryBeatLinks, isStoryBeat } from '../lib/storyBeat.js';
+import { useStoryConnectionMode } from '../components/StoryConnections.jsx';
+import { narrativeTeamLabel } from '../lib/teamLane.js';
+import { narrativeSubnodeSummary } from '../lib/narrativeSubnodes.js';
+import {gameContentDeleteAction} from '../lib/narrativeLibrary.js';
 import { NarrativeWizardButton } from '../components/NarrativeWizard.jsx';
+import { relationshipCanvasEdges } from '../lib/relationships.js';
+import { RelationshipDetails, RelationshipsCanvas } from '../components/Relationships.jsx';
+import { CharacterCanvasWizard } from '../components/CharacterInputNode.jsx';
 import FrameworkPreview from '../components/FrameworkPreview.jsx';
 import { genId } from '../data/csvSchemas.js';
 import {
@@ -47,18 +58,7 @@ const nodeIcon = (n) => {
 };
 
 // A one-line canvas summary per subnode kind (details live in the inspector).
-const subBody = (sn) => {
-  switch (sn.kind) {
-    case 'outcomeBranches': return `${sn.branches?.length ?? 0} branches · ${sn.mode}`;
-    case 'relChange': return `${sn.relType || 'relationship'} · ${sn.direction}`;
-    case 'internalState': return `${sn.stateType || 'state'}${sn.level ? ` · ${sn.level}` : ''}`;
-    case 'locationArchetype': return sn.archetype;
-    case 'narrativeResponse': return sn.text ? `${sn.text.slice(0, 60)}…` : 'empty';
-    case 'emotionalTone': return (sn.tags || []).join(' · ') || 'no tags';
-    case 'comment': return sn.notes ? `${sn.notes.slice(0, 80)}${sn.notes.length > 80 ? '...' : ''}` : 'empty comment';
-    default: return '';
-  }
-};
+const subBody = narrativeSubnodeSummary;
 
 // Retired story-structure import modal kept disabled for reference.
 // Story structures are edited in the Library instead of imported here.
@@ -105,8 +105,12 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
   const lib = useLibrary();
   const dispatch = useDispatch();
   const libDispatch = useLibraryDispatch();
-  const [browsingLibrary, setBrowsingLibrary] = useState(false);
-  const [paletteFilter, setPaletteFilter] = useState('all');
+  const storyConnect = useStoryConnectionMode(s, dispatch);
+  const [browsingLibrary, setBrowsingLibrary] = useState(null);
+  const [conversationBrowser, setConversationBrowser] = useState(null);
+  const [relationshipBrowser, setRelationshipBrowser] = useState(false), [openRelationship, setOpenRelationship] = useState(null);
+  const conversationMenu = conversationBrowser && <ConversationBrowserDialog initialConversationId={conversationBrowser.id} onClose={() => setConversationBrowser(null)} />;
+  const [paletteCategory, setPaletteCategory] = useState('base');
   const [query, setQuery] = useState('');
   const [openPath, setOpenPath] = useState([]); // drill-in path, ≤ 3 levels
   const facts = s.facts || {};
@@ -139,7 +143,10 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
             <h2>{openTitles[openTitles.length - 1]} · internal structure</h2>
           </div>
           <div className="right">
-            <NarrativeWizardButton gameScope={{ coll: 'nodes', parentPath: openPath }} onSaved={id => onSelect({ kind: 'graphnode', scope: { coll: 'nodes', parentPath: openPath }, id })} />
+            <CharacterCanvasWizard scope={{ coll: 'nodes', parentPath: openPath }} />
+            <button type="button" className="btn" onClick={() => setConversationBrowser({})}>Conversations</button>
+            {storyConnect.button}
+            <button type="button" className="btn" onClick={() => setRelationshipBrowser(true)}>Relationships</button>
             <button className="btn" onClick={() => { setOpenPath(openPath.slice(0, -1)); onSelect(null); }}>← Up one level</button>
           </div>
         </div>
@@ -147,8 +154,12 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
         <GraphEditor scope={{ coll: 'nodes', parentPath: openPath }} palette={CONCEPT_GRAPH_PALETTE}
           idPrefix={`${s.meta.prefix}-S`} selection={selection} onSelect={onSelect}
           enableFrames
+          onStoryConnect={storyConnect.connect} onOpenStoryConnection={storyConnect.open}
           allowOpen={depth < 3} onOpen={(id) => { setOpenPath([...openPath, id]); onSelect(null); }} />
         <div className="statusbar"><span>Editing an internal structure · saves live · <b>← Up one level</b> returns{depth < 3 ? ' · double-click nests one level deeper' : ' · max nesting depth reached'}.</span></div>
+        {conversationMenu}
+        {storyConnect.dialog}
+        {relationshipBrowser && <RelationshipsCanvas onClose={() => setRelationshipBrowser(false)} />}
       </div>
     );
   }
@@ -156,7 +167,7 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
   // ---- merged canvas model: nodes + subnodes in one map ----
   const merged = { ...s.nodes };
   for (const sn of Object.values(subnodesColl)) {
-    merged[sn.id] = { ...sn, _sub: true, body: subBody(sn) };
+    merged[sn.id] = { ...sn, _sub: true, body: subBody(sn, s.teams) };
   }
   for (const fw of Object.values(s.frameworks || {})) {
     const type = FRAMEWORK_TYPES[fw.frameworkId] || FRAMEWORK_TYPES.fate;
@@ -346,7 +357,7 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
       dispatch({
         type: 'GRAPH_ADD_NODE',
         scope: { coll: 'masterNodes' },
-        node: { ...(template.template || {}), id, kind: 'masterAct', title: template.name, ...nodePos, body: template.body || '', color: template.color ?? null },
+        node: { ...detachStoryBeatLinks(template.template || {}), id, kind: 'masterAct', title: template.name, ...nodePos, body: template.body || '', color: template.color ?? null },
       });
       onSelect({ kind: 'graphnode', scope: { coll: 'masterNodes' }, id });
       return;
@@ -356,7 +367,7 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
     dispatch({
       type: 'ADD_NODE',
       node: {
-        ...(template.template || {}),
+        ...detachStoryBeatLinks({ ...(template.template || {}), kind }),
         id, primitiveId: template.id, kind, title: template.name || `New ${BASE_NODE_TYPES[kind]?.label?.toLowerCase() || 'node'}`,
         x: nodePos.x, y: nodePos.y, body: template.template?.body ?? template.body ?? '', color: template.color ?? template.template?.color ?? null,
         itemType: template.template?.itemType ?? template.itemType ?? (kind === 'item' ? 'Artifact' : undefined),
@@ -410,7 +421,7 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
   const q = query.trim().toLowerCase();
   const matches = (n) => !q || `${n.title} ${n.body || ''}`.toLowerCase().includes(q);
   const dimNode = (n) => !matches(n);
-  const teamOf = (n) => (n.teamId && s.teams[n.teamId] ? { name: s.teams[n.teamId].name, color: s.teams[n.teamId].color } : null);
+  const teamOf = (n) => narrativeTeamLabel(n, s.teams, subnodesColl);
   const edgeFact = (e) => {
     const f = e.factId && facts[e.factId];
     if (!f) return null;
@@ -419,13 +430,10 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
   };
   const selId = (selection?.kind === 'node' || selection?.kind === 'subnode' || selection?.kind === 'framework') ? selection.id : null;
   const empty = Object.keys(merged).length === 0 && Object.keys(s.frames || {}).length === 0 && Object.keys(s.numberMarkers || {}).length === 0 && Object.keys(s.titleMarkers || {}).length === 0;
-  const libNodeTemplates = Object.values(lib.narrative || {}).filter((n) => n.nodeClass);
   const paletteFilters = [
-    { id: 'all', label: 'All', color: '#8B7BF5' },
-    { id: 'base', label: 'Base Nodes', color: '#5CA8F5' },
-    { id: 'sub', label: 'Subnodes', color: '#F08CB4' },
-    { id: 'supporting', label: 'Supporting', color: '#68D7C0' },
-    { id: 'templates', label: 'Templates', color: '#B58CFF' },
+    { id: 'base', label: 'Base Nodes', icon: 'layers' },
+    { id: 'sub', label: 'Subnodes', icon: 'branches' },
+    { id: 'supporting', label: 'Supporting', icon: 'book' },
   ];
   const paletteGroups = [
     {
@@ -439,7 +447,7 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
     {
       id: 'sub',
       label: 'Subnodes',
-      items: SUB_PALETTE.map((t) => ({
+      items: SUB_PALETTE.filter(t => t.category !== 'supporting').map((t) => ({
         id: `sub:${t.id}`, label: t.label, blurb: t.blurb, color: t.color, icon: t.icon,
         dragPayload: `sub:${t.id}`, onClick: () => addSub(t.id),
       })),
@@ -461,77 +469,21 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
         })),
       ],
     },
-    {
-      id: 'templates',
-      label: 'Library Templates',
-      hint: 'Saved base node and subnode cards stay reusable.',
-      items: [
-        ...libNodeTemplates.map((n) => {
-          const isSub = n.nodeClass === 'subnode';
-          const meta = isSub ? SUBNODE_TYPES[n.subKind] : BASE_NODE_TYPES[n.nodeKind];
-          return {
-            id: `nodeTemplate:${n.id}`, label: n.name, blurb: n.body || meta?.blurb || 'Saved node template', color: n.color || meta?.color, icon: n.icon || meta?.icon,
-            kicker: isSub ? 'Subnode template' : 'Base node template', dragPayload: `nodeTemplate:${n.id}`, onClick: () => addNodeTemplate(n),
-          };
-        }),
-      ],
-    },
   ];
-  const visiblePaletteGroups = (() => {
-    if (paletteFilter === 'all') return paletteGroups;
-    return paletteGroups.filter((group) => (group.filterId || group.id) === paletteFilter);
-  })();
-  const libraryBrowserSections = [
-    {
-      id: 'libraryTemplates',
-      label: 'Library Templates',
-      hint: 'Saved base node and subnode cards.',
-      items: libNodeTemplates.map((n) => {
-        const isSub = n.nodeClass === 'subnode';
-        const meta = isSub ? SUBNODE_TYPES[n.subKind] : BASE_NODE_TYPES[n.nodeKind];
-        return {
-          id: `nodeTemplate:${n.id}`,
-          label: n.name,
-          blurb: n.body || meta?.blurb || 'Saved narrative node template',
-          color: n.color || meta?.color,
-          icon: n.icon || meta?.icon,
-          kicker: isSub ? 'Subnode template' : 'Base node template',
-          onPick: () => addNodeTemplate(n),
-        };
-      }),
-    },
-    {
-      id: 'referenceFrameworks',
-      label: 'Reference Frameworks',
-      hint: 'Static thinking aids that can be placed on the canvas.',
-      items: Object.values(FRAMEWORK_TYPES).map((fw) => ({
-        id: `framework:${fw.id}`,
-        label: fw.label,
-        blurb: fw.blurb,
-        color: fw.color,
-        icon: fw.icon,
-        kicker: 'Reference only',
-        onPick: () => addFramework(fw.id),
-      })),
-    },
-    {
-      id: 'concepts',
-      label: 'Concepts',
-      hint: 'Reusable concept containers with internal node maps.',
-      items: Object.values(lib.concepts || {}).map((c) => {
-        const meta = ADDITIONAL_NODE_TYPES[c.category] || ADDITIONAL_NODE_TYPES.storyConcept;
-        return {
-          id: `concept:${c.id}`,
-          label: c.name,
-          blurb: c.description || `${meta.label} template`,
-          color: meta.color,
-          icon: meta.icon,
-          kicker: `${Object.keys(c.nodes || {}).length} inside`,
-          onPick: () => addConceptKind(c.category, null, c),
-        };
-      }),
-    },
-  ];
+  const visiblePaletteGroups = paletteGroups.filter(group => (group.filterId || group.id) === paletteCategory);
+  const insertStoryLibraryRecord = ({ coll, id, record }) => {
+    if (coll === 'conversationTemplates') {
+      const conversation = conversationFromLibrary(record, 'conversation-' + crypto.randomUUID());
+      dispatch({ type: 'ADD_ENTITY', coll: 'conversations', entity: conversation });
+      setBrowsingLibrary(null); setConversationBrowser({ id: conversation.id });
+    } else if (coll === 'frameworks') addFramework(id);
+    else if (coll === 'narrative') addNodeTemplate(record);
+    else if (coll === 'concepts') addConceptKind(record.category, null, record);
+    else {
+      const node = buildNarrativeLinkInsertion(lib, { type: coll, id }, s.nodes, visibleCanvasPlacement({ x: 100, y: 100 }), `${s.meta.prefix}-STORY-`);
+      if (node) { dispatch({ type: 'ADD_NODE', node }); onSelect({ kind: 'node', id: node.id }); }
+    }
+  };
   const handleDropPalette = (payload, x, y) => {
     const [type, id] = payload.split(':');
     const pos = { x: Math.round(x), y: Math.round(y) };
@@ -559,11 +511,9 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
         subtitle="Click or drag onto the canvas"
         search={query}
         onSearch={setQuery}
-        filters={paletteFilters}
-        activeFilter={paletteFilter}
-        onFilter={setPaletteFilter}
+        controls={<div className="mechanics-toolbox-controls"><div className="mechanics-work-areas" aria-label="Narrative node categories">{paletteFilters.map(category => <button type="button" key={category.id} className={'btn small' + (paletteCategory===category.id ? ' primary' : '')} aria-pressed={paletteCategory===category.id} onClick={() => setPaletteCategory(category.id)}><PrimIcon icon={category.icon} size={14}/>{category.label}</button>)}</div></div>}
         groups={visiblePaletteGroups}
-        headerAction={<button className="btn tiny" onClick={() => setBrowsingLibrary(true)}>Browse Library</button>}
+        headerAction={<button className="btn tiny" onClick={() => setBrowsingLibrary('content')}>Created Content</button>}
       />
       <div className="mainpane">
       <div className="mhead">
@@ -572,18 +522,16 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
           <h2>Narrative</h2>
         </div>
         <div className="right">
-          <NarrativeWizardButton onSaved={id => onSelect({ kind: 'node', id })} />
-          <AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
-            <button className="btn" onClick={() => addFrame()}>Frame</button>
-            <button className="btn" onClick={() => addCircle()}>Circle</button>
-            <button className="btn" onClick={() => addVisualMarker('number')}>Number</button>
-            <button className="btn" onClick={() => addVisualMarker('letter')}>Letter</button>
-            <button className="btn" onClick={() => addTitleMarker()}>Title</button>
-            <button className="btn" onClick={() => addArrow()}>Arrow</button>
-            <button className="btn" onClick={() => addSpline()}>Spline</button>
-          </AnnotationTools>
+          <NarrativeWizardButton onSaved={id => onSelect({ kind: 'node', id })} onInsert={insertStoryLibraryRecord} />
+          <button type="button" className="btn" onClick={() => setConversationBrowser({})}>Conversations</button>
+          {storyConnect.button}
+          <button type="button" className="btn" onClick={() => setRelationshipBrowser(true)}>Relationships</button>
           <CsvButtons coll="nodes" />
         </div>
+      </div>
+
+      <div className="toolrow framebar" role="toolbar" aria-label="Canvas annotations">
+        <AnnotationTools className="canvas-tool-cluster support-tool-group"><AnnotationButtons onFrame={() => addFrame()} onCircle={() => addCircle()} onVisualMarker={addVisualMarker} onTitle={() => addTitleMarker()} onArrow={() => addArrow()} onSpline={() => addSpline()} /></AnnotationTools>
       </div>
 
       <div className="toolrow node-tool-group">
@@ -610,7 +558,9 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
         </div>
       ) : (
         <FlowCanvas
-          nodes={merged} edges={s.edges} selId={selId} colorOf={nodeColor}
+          graphScope={{ coll: 'nodes' }}
+          nodes={merged} edges={[...s.edges, ...relationshipCanvasEdges(s, { coll: 'nodes' }, merged)]} selId={selId} colorOf={nodeColor}
+          onOpenRelationship={edge => setOpenRelationship(edge.relationshipId)}
           iconOf={nodeIcon} teamOf={teamOf} dimNode={dimNode} edgeFact={edgeFact}
           nodeClass={(n) => (n._sub ? 'subnode' : n.kind === 'framework' ? 'framework' : n.kind === 'concept' || n.kind === STORY_STRUCTURE_CONTAINER_KIND ? `concept${n.collapsed === false ? ' expanded' : ''}` : n.kind === LINKING_NODE_KIND ? 'linking-node' : '')}
           attachments={attachments}
@@ -668,8 +618,9 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
             ],
           })}
           onResizeNode={(id, patch) => dispatch({ type: 'UPDATE_ENTITY', coll: merged[id]?._sub ? 'subnodes' : merged[id]?.kind === 'framework' ? 'frameworks' : 'nodes', id, patch })}
-          onConnect={(from, to, edgePatch = {}) => dispatch({ type: 'ADD_EDGE', from, to, color: nodeColor(merged[from]), ...edgePatch })}
-          onRemoveEdge={(e) => dispatch({ type: 'REMOVE_EDGE', from: e.from, to: e.to })}
+          onConnect={(from, to, edgePatch = {}) => storyConnect.connect({ coll: 'nodes' }, from, to, { color: nodeColor(merged[from]), ...edgePatch }, () => dispatch({ type: 'ADD_EDGE', from, to, color: nodeColor(merged[from]), ...edgePatch }))}
+          onOpenStoryConnection={edge => storyConnect.open({ coll: 'nodes' }, edge)}
+          onRemoveEdge={(e) => dispatch(e.relationshipId ? { type: 'DELETE_ENTITY', coll: 'relationships', id: e.relationshipId } : { type: 'REMOVE_EDGE', from: e.from, to: e.to })}
           onDropPalette={handleDropPalette}
           onSetColor={(id, color) => dispatch({ type: 'UPDATE_ENTITY', coll: merged[id]?._sub ? 'subnodes' : merged[id]?.kind === 'framework' ? 'frameworks' : 'nodes', id, patch: { color } })}
           onDeleteNode={(id) => {
@@ -708,7 +659,10 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
             onSelect(null);
           }}
           onEditEdge={(e, patch) => dispatch({ type: 'UPDATE_EDGE', from: e.from, to: e.to, patch })}
-          onOpenNode={(id) => { if (!merged[id]?._sub) { setOpenPath([id]); onSelect(null); } }}
+          onOpenNode={(id) => { if (!merged[id]?._sub) {
+            if (['character', 'group'].includes(merged[id]?.kind)) dispatch({ type: 'MATERIALIZE_CHARACTER_INPUTS', scope: { coll: 'nodes' }, id });
+            setOpenPath([id]); onSelect(null);
+          } }}
           onPasteNode={(p) => {
             const id = genId(s.nodes, `${s.meta.prefix}-N-`);
             dispatch({ type: 'ADD_NODE', node: { id, ...p, teamId: p.teamId ?? null, sets: [], locationId: null, itemId: null, mechanicIds: [], sensorIds: [], history: [] } });
@@ -770,8 +724,8 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
               );
             }
             const item = n.itemId ? s.items[n.itemId] : null;
-            const sets = (n.sets || []).map((x) => facts[x.factId]).filter(Boolean);
-            const attached = Object.values(subnodesColl).filter((sn) => sn.parentRef?.nodeId === n.id).length;
+            const sets = isStoryBeat(n) ? [] : (n.sets || []).map((x) => facts[x.factId]).filter(Boolean);
+            const attached = isStoryBeat(n) ? 0 : Object.values(subnodesColl).filter((sn) => sn.parentRef?.nodeId === n.id).length;
             return (
               <>
                 {item && (
@@ -797,7 +751,13 @@ export default function ScenarioFlow({ selection, onSelect, onNavigate }) {
       <div className="statusbar">
         <span><b>Base</b> nodes carry the story · <b>Subnodes</b> enrich (drag one on, then attach from its inspector — <b>⊘</b> on the line detaches) · <b>concepts</b> expand/edit · <b>double-click</b> opens internals.</span>
       </div>
-      {browsingLibrary && <NarrativeLibraryBrowser sections={libraryBrowserSections} onClose={() => setBrowsingLibrary(false)} />}
+      {browsingLibrary && <StoryLibraryBrowser library={lib} mode={browsingLibrary} onPick={insertStoryLibraryRecord} onClose={() => setBrowsingLibrary(null)} game={s}
+        onPickGame={({ref})=>{setBrowsingLibrary(null);if(ref.coll==='conversations'){setConversationBrowser({id:ref.nodeId});return;}setOpenPath(ref.parentPath||[]);onSelect(ref.parentPath?.length?{kind:'graphnode',scope:{coll:'nodes',parentPath:ref.parentPath},id:ref.nodeId}:{kind:'node',id:ref.nodeId});}}
+        onDeleteGame={payload=>{const action=gameContentDeleteAction(payload);if(action){dispatch(action);onSelect(null);}}}/>}
+      {conversationMenu}
+      {storyConnect.dialog}
+      {relationshipBrowser && <RelationshipsCanvas onClose={() => setRelationshipBrowser(false)} />}
+      {openRelationship && <RelationshipDetails id={openRelationship} onClose={() => setOpenRelationship(null)} />}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useAppearance } from '../components/AppearanceContext.jsx';
-import AnnotationTools from '../components/AnnotationTools.jsx';
+import AnnotationTools, { AnnotationButtons } from '../components/AnnotationTools.jsx';
 import MasterAct from './MasterAct.jsx';
 import { prepareMasterAct } from '../lib/masterAct.js';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -9,6 +9,7 @@ import FlowCanvas, { visibleCanvasPlacement } from '../components/FlowCanvas.jsx
 import { storyTrackToStructure } from '../state/bridge.js';
 import { genId } from '../data/csvSchemas.js';
 import { LIB_PREFIX } from '../data/seed.js';
+import { StoryPlanningButton } from '../components/StoryPlanning.jsx';
 import { nextVisualMarkerValue } from '../lib/visualMarkers.js';
 import { remapCanvasClipboard } from '../lib/canvasClipboard.js';
 
@@ -281,7 +282,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
           <div className="crumb">{s.meta.name} / <b>Master Story</b></div>
           <h2>Master Story of {s.meta.name}</h2>
         </div>
-        <div className="right"><span className="dim" style={{ fontSize: 12 }}>
+        <div className="right"><StoryPlanningButton /><span className="dim" style={{ fontSize: 12 }}>
           {armed ? 'Now click a site time on the timeline to link it; click the act again to cancel' : 'Click an act, then a site time, to align them'}
         </span></div>
       </div>
@@ -308,15 +309,7 @@ export default function Weaver({ selection, onSelect = () => {} }) {
             <span>Macro Story Track - <b>{Object.keys(masterNodes).length} acts</b></span>
             <div className="canvas-add-groups">
               <div className="canvas-tool-cluster node-tool-group"><span className="tool-kind-label">Nodes</span><button className="btn ghost small" onClick={addAct}>+ Add act</button></div>
-              <AnnotationTools className="canvas-tool-cluster support-tool-group"><span className="tool-kind-label">Support</span>
-              <button className="btn ghost small" onClick={addFrame}>+ Frame</button>
-              <button className="btn ghost small" onClick={addCircle}>+ Circle</button>
-              <button className="btn ghost small" onClick={() => addVisualMarker('number')}>+ Number</button>
-              <button className="btn ghost small" onClick={() => addVisualMarker('letter')}>+ Letter</button>
-              <button className="btn ghost small" onClick={addTitleMarker}>+ Title</button>
-              <button className="btn ghost small" onClick={addArrow}>+ Arrow</button>
-              <button className="btn ghost small" onClick={addSpline}>+ Spline</button>
-              </AnnotationTools>
+              <AnnotationTools className="canvas-tool-cluster support-tool-group"><AnnotationButtons onFrame={addFrame} onCircle={addCircle} onVisualMarker={addVisualMarker} onTitle={addTitleMarker} onArrow={addArrow} onSpline={addSpline} /></AnnotationTools>
               <button className="btn ghost small" onClick={saveTemplate}>Save as Template</button>
             </div>
           </div>

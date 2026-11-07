@@ -3,7 +3,7 @@ import { useGame, useLibrary, useDispatch } from '../state/store.jsx';
 import { locateGraph } from '../state/reducer.js';
 import { BASE_NODE_TYPES } from '../data/seed.js';
 import { genId } from '../data/csvSchemas.js';
-import { buildNarrativeLinkInsertion, narrativeLinkRecords } from '../lib/narrativeLinks.js';
+import { buildNarrativeLinkInsertion } from '../lib/narrativeLinks.js';
 import { buildMechanicsPaletteGroups, mechanicsPayloadToNode } from '../mechanics/palette.js';
 import GraphEditor from '../components/GraphEditor.jsx';
 import { useMechanicsToolbox } from '../components/MechanicsToolbox.jsx';
@@ -11,13 +11,18 @@ import { visibleCanvasPlacement } from '../components/FlowCanvas.jsx';
 import { mechanicWizardGraph } from '../mechanics/toolbox.js';
 import { libraryWithMechanismDraft } from '../mechanics/collections.js';
 import NarrativeLibraryBrowser from '../components/NarrativeLibraryBrowser.jsx';
-import { NarrativeWizardButton } from '../components/NarrativeWizard.jsx';
+import StoryLibraryBrowser from '../components/StoryLibraryBrowser.jsx';
+import { ConversationBrowserDialog } from '../components/Conversations.jsx';
+import { conversationFromLibrary } from '../lib/conversations.js';
+import { CharacterCanvasWizard } from '../components/CharacterInputNode.jsx';
 import './MasterAct.css';
+import { StoryPlanningButton } from '../components/StoryPlanning.jsx';
 
 function ActLane({ actId, lane, selection, onSelect, expanded, onExpand, visible = true }) {
   const game = useGame(), lib = useLibrary(), dispatch = useDispatch();
   const [path, setPath] = useState([]);
   const [browsing, setBrowsing] = useState(false);
+  const [conversationBrowser, setConversationBrowser] = useState(null);
   const act = game.masterNodes[actId];
   const root = [actId, act.actLanes[lane]];
   const scope = { coll: 'masterNodes', parentPath: [...root, ...path] };
@@ -32,12 +37,16 @@ function ActLane({ actId, lane, selection, onSelect, expanded, onExpand, visible
     setBrowsing(false);
   };
   const position = { x: 90 + Object.keys(graph.nodes).length % 4 * 60, y: 90 + Object.keys(graph.nodes).length % 4 * 60 };
-  const sections = story
-    ? ['narrative', 'concepts', 'stories'].map(type => ({ id: type, label: { narrative: 'Story Nodes', concepts: 'Concepts', stories: 'Story Structures' }[type], items: narrativeLinkRecords(lib, type).map(record => ({
-      id: record.id, label: record.name || record.label, blurb: record.description || record.body,
-      onPick: () => add(buildNarrativeLinkInsertion(lib, { type, id: record.id }, graph.nodes, position, 'ACT-STORY-')),
-    })) }))
-    : buildMechanicsPaletteGroups(lib, { includeTask: true, includeTemplates: true, includeDetail: true, onAdd: payload => add(mechanicsPayloadToNode(payload, lib, graph.nodes, position.x, position.y, 'ACT-MECH-')) }).filter(Boolean).map(group => ({ ...group, items: group.items.map(item => ({ ...item, onPick: item.onClick })) }));
+  const sections = story ? [] : buildMechanicsPaletteGroups(lib, { includeTask: true, includeTemplates: true, includeDetail: true, onAdd: payload => add(mechanicsPayloadToNode(payload, lib, graph.nodes, position.x, position.y, 'ACT-MECH-')) }).filter(Boolean).map(group => ({ ...group, items: group.items.map(item => ({ ...item, onPick: item.onClick })) }));
+  const insertStoryLibraryRecord = ({ coll, id, record }) => {
+    const point = visibleCanvasPlacement(position);
+    if (coll === 'conversationTemplates') {
+      const conversation = conversationFromLibrary(record, 'conversation-' + crypto.randomUUID());
+      dispatch({ type: 'ADD_ENTITY', coll: 'conversations', entity: conversation });
+      setBrowsing(false); setConversationBrowser({ id: conversation.id });
+    } else if (coll === 'frameworks') add({ id: genId(graph.nodes, 'ACT-FW-'), kind: 'framework', frameworkId: id, title: record.title || record.label, body: record.summary, color: record.color, ...point });
+    else add(buildNarrativeLinkInsertion(lib, { type: coll, id }, graph.nodes, point, 'ACT-STORY-'));
+  };
   const create = (kind, pos, nodes) => story
     ? { id: genId(nodes, 'ACT-STORY-'), kind, title: BASE_NODE_TYPES[kind]?.label || kind, body: '', ...pos, sub: { nodes: {}, edges: [] } }
     : mechanicsPayloadToNode(kind, lib, nodes, pos.x, pos.y, 'ACT-MECH-');
@@ -58,11 +67,12 @@ function ActLane({ actId, lane, selection, onSelect, expanded, onExpand, visible
   return <section className={`act-lane act-lane-${lane}`} aria-label={`${title} canvas`}>
     <header className="act-lane-header">
       <div className="act-crumbs"><button className="crumblink" onClick={() => go(0)}><b>{title}</b></button>{crumbs.map((name, index) => <React.Fragment key={path[index]}><span> / </span><button className="crumblink" onClick={() => go(index + 1)}>{name}</button></React.Fragment>)}</div>
-      <div className="right">{story && <NarrativeWizardButton gameScope={scope} className="btn small" onSaved={id => onSelect({ kind: 'graphnode', scope, id })} />}{!story && toolbox.actions}<button className="btn small" onClick={() => setBrowsing(true)}>Browse {story ? 'Story' : 'Mechanics'}</button><button className="btn ghost small" onClick={onExpand}>{expanded ? 'Restore split' : 'Expand'}</button></div>
+      <div className="right">{story ? <><CharacterCanvasWizard scope={scope} className="btn small" onInsert={insertStoryLibraryRecord} /><button className="btn small" onClick={() => setBrowsing('content')}>Created Content</button></> : <>{toolbox.actions}<button className="btn small" onClick={() => setBrowsing(true)}>Browse Mechanics</button></>}<button className="btn ghost small" onClick={onExpand}>{expanded ? 'Restore split' : 'Expand'}</button></div>
     </header>
     <div className="act-mechanics-workspace">{!story && toolbox.palette}<div className="act-graph-editor"><GraphEditor key={scope.parentPath.join('/')} scope={scope} palette={palette} showToolbar={story} createNodeFromPalette={create} enableFrames allowOpen onOpen={id => { setPath([...path, id]); onSelect(null); }} selection={selection} onSelect={onSelect} /></div></div>
     {!story && toolbox.dialogs}
-    {browsing && <NarrativeLibraryBrowser title={`${title} Library`} subtitle="Add an editable copy to this act. Templates stay unchanged." sections={sections} onClose={() => setBrowsing(false)} />}
+    {conversationBrowser && <ConversationBrowserDialog initialConversationId={conversationBrowser.id} onClose={() => setConversationBrowser(null)} />}
+    {browsing && (story ? <StoryLibraryBrowser library={lib} mode={browsing} includeSubnodes={false} onPick={insertStoryLibraryRecord} onClose={() => setBrowsing(false)} /> : <NarrativeLibraryBrowser title={`${title} Library`} subtitle="Add an editable copy to this act. Templates stay unchanged." sections={sections} onClose={() => setBrowsing(false)} />)}
   </section>;
 }
 
@@ -72,7 +82,7 @@ export default function MasterAct({ actId, selection, onSelect, onClose }) {
   const split = useRef(null);
   const clamp = value => Math.min(75, Math.max(25, value));
   return <div className="main master-act-workspace">
-    <header className="mhead"><div><div className="crumb">Master Story / Act contents</div><h2>{game.masterNodes[actId]?.title}</h2></div><button className="btn" onClick={onClose}>Back to Master Story</button></header>
+    <header className="mhead"><div><div className="crumb">Master Story / Act contents</div><h2>{game.masterNodes[actId]?.title}</h2></div><div className="right"><StoryPlanningButton /><button className="btn" onClick={onClose}>Back to Master Story</button></div></header>
     <div ref={split} className="master-act-split" style={{ gridTemplateRows: expanded ? 'minmax(0, 1fr)' : `minmax(0, ${ratio}fr) 9px minmax(0, ${100 - ratio}fr)` }}>
       <div className="act-lane-host" hidden={expanded === 'mechanics'}><ActLane actId={actId} lane="story" selection={selection} onSelect={onSelect} expanded={expanded === 'story'} onExpand={() => setExpanded(expanded ? null : 'story')} /></div>
       {!expanded && <div className="act-divider" role="separator" aria-label="Resize Story and Game Mechanics" aria-orientation="horizontal" aria-valuemin={25} aria-valuemax={75} aria-valuenow={Math.round(ratio)} tabIndex={0}

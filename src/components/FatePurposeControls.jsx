@@ -18,7 +18,9 @@ export function FateProfileGuidance({ draft, pillar }) {
   const context = fateProfileContext(draft, pillar);
   return context ? <section className="fp-profile-guidance"><b>{P.known}: {draft.communication.profile.name}</b><p>{context.summary}</p><strong>{context.question}</strong></section> : null;
 }
-export function FateSelectedIdeas({ draft }) {
+export function FateSelectedIdeas({ draft, onGo }) {
   const choices = ['F', 'A', 'T', 'E'].flatMap(pillar => fateChoiceDetails(draft, pillar));
-  return <section className="fp-selected" aria-label={P.selected}><b>{P.selected}</b>{choices.length ? <div>{choices.map(item => <span key={`${item.field.path}:${item.option}`} title={item.text || item.field.label}>{item.option}</span>)}</div> : <p>{P.selectedEmpty}</p>}</section>;
+  const extra = draft.meta.purpose === 'character' ? [...(draft.focus.signals || []).map(row => ({ key: row.id, label: row.label, pillar: 'F' })), ...(draft.authority.people || []).map(row => ({ key: row.id, label: row.name, pillar: 'A' })), ...(draft.tribe.people || []).map(row => ({ key: row.id, label: row.name, pillar: 'T' })), ...(draft.emotion.patterns || []).map((row, index) => ({ key: row.id, label: `Pattern ${index + 1}: ${(row.feelings || []).join(', ') || row.situation || 'Not described yet'}`, pillar: 'E' }))] : [];
+  const Container = draft.meta.purpose === 'character' ? 'details' : 'section';
+  return <Container className="fp-selected" aria-label={P.selected} open={draft.meta.purpose === 'character' ? true : undefined}>{draft.meta.purpose === 'character' ? <summary>{P.selected}</summary> : <b>{P.selected}</b>}{choices.length || extra.length ? <div>{choices.map(item => onGo ? <button type="button" className="fc-idea" key={`${item.field.path}:${item.option}`} title={item.text || item.field.label} onClick={() => onGo({ focus: 'F', authority: 'A', tribe: 'T', emotion: 'E' }[item.field.path.split('.')[0]])}>{item.option}</button> : <span key={`${item.field.path}:${item.option}`} title={item.text || item.field.label}>{item.option}</span>)}{extra.map(item => onGo ? <button type="button" className="fc-idea" key={item.key} onClick={() => onGo(item.pillar)}>{item.label}</button> : <span key={item.key}>{item.label}</span>)}</div> : <p>{P.selectedEmpty}</p>}</Container>;
 }

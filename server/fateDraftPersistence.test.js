@@ -24,6 +24,10 @@ describe('FATE project draft persistence', () => {
       draft = editFate(draft, 'meta.depth', 'advanced');
       draft = editFate(draft, 'lastStep', 'E');
       draft = editFate(draft, 'emotion.curve', [{ t: 0, v: 20 }, { t: 50, v: 90 }, { t: 100, v: 30 }]);
+      draft = editFate(draft, 'focus.signals', [{ id: 'sound', label: 'Loud sounds', channel: 'Audio', kind: 'attention', strength: 2, detail: 'A brief pause, unless their name is called.' }]);
+      draft = editFate(draft, 'authority.people', [{ id: 'mentor', name: 'An old mentor', type: 'person', entityKey: '', detail: 'Familiarity earns trust.' }]);
+      draft = editFate(draft, 'tribe.people', [{ id: 'crew', name: 'The crew', type: 'group', entityKey: '', symbol: 'A shared badge', board: {} }]);
+      draft = editFate(draft, 'emotion.patterns', [{ id: 'pattern', situation: 'the crew is threatened', feelings: ['Fear'], direction: 'Move toward it', intensity: 3, response: 'Protect the crew.', exception: 'someone asks for a pause' }]);
       draft = editFate(draft, 'meta.purpose', 'communication');
       draft = editFate(draft, 'title', 'Conversation A');
       draft = editFate(draft, 'communication.speaker', 'Mickey');
@@ -42,6 +46,10 @@ describe('FATE project draft persistence', () => {
       expect(disk.fateWizardDrafts['DRAFT-ON-DISK']).toEqual(draft);
       expect(reopened.fateWizardDrafts['DRAFT-ON-DISK'].lastStep).toBe('E');
       expect(reopened.fateWizardDrafts['DRAFT-ON-DISK'].emotion.curve[1].v).toBe(90);
+      expect(reopened.fateWizardDrafts['DRAFT-ON-DISK'].focus.signals[0]).toEqual(draft.focus.signals[0]);
+      expect(reopened.fateWizardDrafts['DRAFT-ON-DISK'].authority.people[0].name).toBe('An old mentor');
+      expect(reopened.fateWizardDrafts['DRAFT-ON-DISK'].tribe.people[0].symbol).toBe('A shared badge');
+      expect(reopened.fateWizardDrafts['DRAFT-ON-DISK'].emotion.patterns[0].exception).toBe('someone asks for a pause');
       const conversation = reopened.fateWizardDrafts['DRAFT-ON-DISK'].purposeBanks.communication;
       expect(conversation.communication.listener).toBe('Scooby');
       expect(conversation.authority.source).toEqual(['A secret', 'Evidence']);

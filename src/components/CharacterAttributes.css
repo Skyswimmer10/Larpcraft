@@ -1,0 +1,43 @@
+.character-attributes{padding:6px 12px;border-bottom:1px solid var(--line,#343a4b);font-size:13px}
+.character-attributes>.btn{margin:0}
+.ca-editor-body{flex:1;min-height:0;overflow:auto;padding:20px 24px}
+.ca-editor-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px}
+.ca-field{border-top:1px solid var(--line,#343a4b);padding-top:12px;margin-top:14px;min-width:0}
+.ca-field h4{margin:0 0 8px;font-size:13px}
+.ca-tags,.ca-choices{display:flex;flex-wrap:wrap;gap:6px}
+.ca-tag{display:inline-flex;align-items:center;gap:6px;max-width:100%;overflow-wrap:anywhere;background:#41547f55;color:var(--ink,#e2e7f1);border:1px solid #819dd955;padding:4px 7px;border-radius:6px}
+.ca-tag button{background:none;color:inherit;border:0;padding:0 2px;font-size:17px;cursor:pointer;flex:none}
+.ca-add-tag{display:flex;gap:6px;margin-top:8px}
+.ca-add-tag input{min-width:0;flex:1}
+.ca-suggestions{margin-top:8px;color:var(--muted)}
+.ca-suggestions summary{cursor:pointer;font-size:12px}
+.ca-choices{margin-top:8px}
+.ca-choices button{border:1px solid var(--line,#343a4b);border-radius:12px;padding:4px 8px;background:var(--panel,#191d26);color:var(--ink,#e2e7f1);font:inherit;cursor:pointer}
+.ca-choices button[aria-pressed=true]{background:#41547f88;border-color:#96b1ef;color:#e4edff}
+.ca-short-text{width:100%;box-sizing:border-box;resize:vertical}
+.ca-manager{position:fixed;inset:0;margin:auto;width:min(1000px,calc(100vw - 32px));max-width:none;height:min(780px,calc(100dvh - 32px));max-height:calc(100dvh - 32px);padding:0;box-sizing:border-box;border:1px solid var(--line,#343a4b);border-radius:12px;background:var(--panel,#191d26);color:var(--ink,#e2e7f1)}
+.ca-manager[open]{display:flex;flex-direction:column}
+.ca-manager::backdrop{background:#0009}
+.ca-manager>header,.ca-manager>footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px 24px;flex:none}
+.ca-manager>header{border-bottom:1px solid var(--line,#343a4b)}
+.ca-manager h2{margin:0;font-size:21px}
+.ca-manager p{font-size:13px;line-height:1.5;color:var(--muted);margin:6px 0 0}
+.ca-manager>footer{border-top:1px solid var(--line,#343a4b)}
+.ca-manager>footer p{max-width:60%;margin:0}
+.ca-manager-layout{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:0;flex:1;overflow:hidden}
+.ca-manager nav{display:flex;flex-direction:column;gap:8px;padding:18px;border-right:1px solid var(--line,#343a4b);overflow:auto}
+.ca-manager nav button{display:flex;align-items:center;gap:10px;border:1px solid transparent;padding:12px;text-align:left;border-radius:7px;background:none;color:var(--ink,#e2e7f1);font:inherit;cursor:pointer}
+.ca-manager nav button.active{border-color:#96b1ef88;background:#41547f55}
+.ca-manager main{overflow:auto;padding:14px 24px;min-width:0}
+.ca-field-options>label{display:flex;gap:12px;align-items:flex-start;padding:15px 6px;border-bottom:1px solid var(--line,#343a4b);cursor:pointer}
+.ca-field-options input{margin-top:3px}
+.ca-field-options b,.ca-field-options small{display:block}
+.ca-field-options small{color:var(--muted);margin-top:5px}
+.ca-custom{margin-top:24px;padding-top:12px;border-top:1px solid var(--line,#343a4b)}
+.character-attributes-readout{white-space:pre-wrap;line-height:1.7;overflow-wrap:anywhere}
+.character-node-attribute-chips{display:flex;gap:4px;max-width:100%;overflow:hidden;white-space:nowrap;font-size:11px;color:#c7d6f7}
+.character-node-attribute-chips>span{padding:2px 5px;border-radius:4px;background:#41547f55;max-width:100px;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+@media(max-width:600px){.ca-manager-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}.ca-manager nav{flex-direction:row;border-right:0;border-bottom:1px solid var(--line);padding:10px}.ca-manager nav button{white-space:nowrap;padding:8px}.ca-manager>header,.ca-manager>footer,.ca-manager main{padding:14px}.ca-manager>footer p{max-width:55%;font-size:11px}}
+@media(max-width:600px){.ca-editor-fields{grid-template-columns:minmax(0,1fr)}}
+
+.character-attributes{display:flex;align-items:center;gap:7px}.character-attributes>.ca-quick-button{width:36px;height:36px;min-width:36px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:5px}.character-media-footer{padding:12px;border-top:1px solid var(--line)}

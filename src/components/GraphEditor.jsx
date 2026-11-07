@@ -1,4 +1,4 @@
-import AnnotationTools from './AnnotationTools.jsx';
+import AnnotationTools, { AnnotationButtons } from './AnnotationTools.jsx';
 import React from 'react';
 import { useGame, useDispatch, useLibrary } from '../state/store.jsx';
 import { locateGraph } from '../state/reducer.js';
@@ -11,6 +11,12 @@ import FrameworkPreview from './FrameworkPreview.jsx';
 import { nextVisualMarkerValue } from '../lib/visualMarkers.js';
 import { remapCanvasClipboard } from '../lib/canvasClipboard.js';
 import MechanismNodePreview, { isMechanismPreviewNode } from './MechanismNodePreview.jsx';
+import CharacterInputNode from './CharacterInputNode.jsx';
+import GroupRoster from './GroupRoster.jsx';
+import { relationshipCanvasEdges } from '../lib/relationships.js';
+import { RelationshipDetails } from './Relationships.jsx';
+import StoryBeatStructureEditor from './StoryBeatStructureEditor.jsx';
+import {isStoryBeat} from '../lib/storyBeat.js';
 
 const scopeKey = (s) => `${s.coll}:${(s.parentPath ?? (s.parentId ? [s.parentId] : [])).join('/')}`;
 const sameScope = (a, b) => a && b && scopeKey(a) === scopeKey(b);
@@ -24,17 +30,26 @@ const sameScope = (a, b) => a && b && scopeKey(a) === scopeKey(b);
 export default function GraphEditor({
   scope, palette, allowOpen, onOpen, selection, onSelect, idPrefix = 'D',
   filterNode = () => true, showToolbar = true, createNodeFromPalette, enableFrames = false,
+  onStoryConnect, onOpenStoryConnection,
 }) {
   const s = useGame();
   const lib = useLibrary();
   const dispatch = useDispatch();
+  const [openRelationship, setOpenRelationship] = React.useState(null);
+  const [legacyScope,setLegacyScope]=React.useState(null);
   const g = locateGraph(s, scope);
+  const path=scope.parentPath||(scope.parentId?[scope.parentId]:[]);
+  const ownerScope={coll:scope.coll,parentPath:path.slice(0,-1)};
+  const owner=path.length?locateGraph(s,ownerScope).nodes[path.at(-1)]:null;
+  if(isStoryBeat(owner)&&legacyScope!==scopeKey(scope))return <StoryBeatStructureEditor key={scopeKey(scope)} node={owner} game={s} scope={ownerScope}
+    onPatch={patch=>dispatch({type:'GRAPH_UPDATE_NODE',scope:ownerScope,id:owner.id,patch})}
+    legacyCount={Object.keys(g.nodes).length+Object.keys(g.frames).length+Object.keys(g.numberMarkers).length+Object.keys(g.titleMarkers).length} onShowLegacy={()=>setLegacyScope(scopeKey(scope))}/>;
   const nodes = Object.fromEntries(Object.entries(g.nodes).filter(([, n]) => filterNode(n)));
   const frames = g.frames || {};
   const numberMarkers = g.numberMarkers || {};
   const titleMarkers = g.titleMarkers || {};
   const isVisibleEndpoint = (id) => Boolean(nodes[id] || titleMarkers[id]);
-  const edges = g.edges.filter((e) => isVisibleEndpoint(e.from) && isVisibleEndpoint(e.to));
+  const edges = [...g.edges.filter((e) => isVisibleEndpoint(e.from) && isVisibleEndpoint(e.to)), ...relationshipCanvasEdges(s, scope, nodes)];
   const paletteById = Object.fromEntries(palette.map((p) => [p.id, p]));
   const selId = selection?.kind === 'graphnode' && sameScope(selection.scope, scope) && nodes[selection.id] ? selection.id : null;
   const selFrame = selection?.kind === 'graphframe' && sameScope(selection.scope, scope) && frames[selection.id] ? selection.id : null;
@@ -155,6 +170,7 @@ export default function GraphEditor({
 
   return (
     <>
+      {isStoryBeat(owner)&&<div className="toolrow"><button type="button" className="btn small" onClick={()=>setLegacyScope(null)}>← Story Beat structure</button></div>}
       {(showToolbar || enableFrames) && (
         <div className={`toolrow${enableFrames && !showToolbar ? ' framebar' : ''}`}>
           {showToolbar && <div className="canvas-tool-group node-tool-group"><span className="tool-kind-label">Nodes</span>{palette.map((p) => (
@@ -162,29 +178,7 @@ export default function GraphEditor({
               <span className="sq" style={{ background: p.color }}>{p.icon && <PrimIcon icon={p.icon} color="#fff" size={11} />}</span>{p.label}
             </button>
           ))}</div>}
-          {enableFrames && <AnnotationTools className="canvas-tool-group support-tool-group"><span className="tool-kind-label">Support</span>
-            <button className="addnode frameadd" title="Add a visual grouping frame" onClick={addFrame}>
-              <span className="sq" style={{ background: '#8B92A6' }}><PrimIcon icon="layers" color="#fff" size={11} /></span>Frame
-            </button>
-            <button className="addnode frameadd" title="Add a resizable circle" onClick={addCircle}>
-              <span className="sq shapecircle" style={{ borderColor: '#5CA8F5' }} />Circle
-            </button>
-            <button className="addnode frameadd" title="Add a visual number marker" onClick={() => addVisualMarker('number')}>
-              <span className="sq" style={{ background: '#E8D25C', color: '#111' }}>1</span>Number
-            </button>
-            <button className="addnode frameadd" title="Add a visual letter marker (A-Z)" onClick={() => addVisualMarker('letter')}>
-              <span className="sq" style={{ background: '#E8D25C', color: '#111' }}>A</span>Letter
-            </button>
-            <button className="addnode frameadd" title="Add a draggable title label" onClick={addTitleMarker}>
-              <span className="sq" style={{ background: '#E9EBF3', color: '#111' }}>T</span>Title
-            </button>
-            <button className="addnode frameadd" title="Add a directional support arrow" onClick={addArrow}>
-              <span className="sq arrowglyph" style={{ color: '#5CA8F5' }}>→</span>Arrow
-            </button>
-            <button className="addnode frameadd" title="Add an editable curved support line" onClick={addSpline}>
-              <span className="sq splineglyph" style={{ color: '#5CA8F5' }}>∿</span>Spline
-            </button>
-          </AnnotationTools>}
+          {enableFrames && <AnnotationTools className="canvas-tool-group support-tool-group"><AnnotationButtons onFrame={addFrame} onCircle={addCircle} onVisualMarker={addVisualMarker} onTitle={addTitleMarker} onArrow={addArrow} onSpline={addSpline} /></AnnotationTools>}
         </div>
       )}
       {empty ? (
@@ -201,7 +195,9 @@ export default function GraphEditor({
         </div>
       ) : (
         <FlowCanvas
+          graphScope={scope}
           nodes={nodes} edges={edges} selId={selId} colorOf={colorOf} iconOf={iconOf}
+          onOpenRelationship={edge => setOpenRelationship(edge.relationshipId)}
           onSelect={(id) => onSelect({ kind: 'graphnode', scope, id })}
           onMove={(id, x, y) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch: { x, y } })}
           onUpdateNode={(id, patch) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch })}
@@ -221,9 +217,14 @@ export default function GraphEditor({
             ],
           })}
           onResizeNode={(id, patch) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch })}
-          onConnect={(from, to, edgePatch = {}) => dispatch({ type: 'GRAPH_ADD_EDGE', scope, from, to, color: colorOf(g.nodes[from] || titleMarkers[from]), ...edgePatch })}
-          onRemoveEdge={(e) => dispatch({ type: 'GRAPH_REMOVE_EDGE', scope, from: e.from, to: e.to })}
-          onRemoveEdges={(hit) => hit.forEach((e) => dispatch({ type: 'GRAPH_REMOVE_EDGE', scope, from: e.from, to: e.to }))}
+          onConnect={(from, to, edgePatch = {}) => {
+            const patch = { color: colorOf(g.nodes[from] || titleMarkers[from]), ...edgePatch };
+            const fallback = () => dispatch({ type: 'GRAPH_ADD_EDGE', scope, from, to, ...patch });
+            if (onStoryConnect) onStoryConnect(scope, from, to, patch, fallback); else fallback();
+          }}
+          onOpenStoryConnection={onOpenStoryConnection ? edge => onOpenStoryConnection(scope, edge) : undefined}
+          onRemoveEdge={(e) => dispatch(e.relationshipId ? { type: 'DELETE_ENTITY', coll: 'relationships', id: e.relationshipId } : { type: 'GRAPH_REMOVE_EDGE', scope, from: e.from, to: e.to })}
+          onRemoveEdges={(hit) => dispatch({ type: 'BATCH', actions: hit.map(e => e.relationshipId ? { type: 'DELETE_ENTITY', coll: 'relationships', id: e.relationshipId } : { type: 'GRAPH_REMOVE_EDGE', scope, from: e.from, to: e.to }) })}
           onSetColor={(id, color) => dispatch({ type: 'GRAPH_UPDATE_NODE', scope, id, patch: { color } })}
           onDeleteNode={(id) => { dispatch({ type: 'GRAPH_DELETE_NODE', scope, id }); onSelect(null); }}
           onDeleteNodes={(ids) => {
@@ -273,14 +274,18 @@ export default function GraphEditor({
             if (marker) dispatch({ type: 'GRAPH_UPDATE_TITLE_MARKER', scope, id, patch: { x: marker.x + dx, y: marker.y + dy } });
           } : undefined}
           onTitleMarkerDelete={enableFrames ? (id) => { dispatch({ type: 'GRAPH_DELETE_TITLE_MARKER', scope, id }); onSelect(null); } : undefined}
-          onOpenNode={allowOpen ? onOpen : undefined}
+          onOpenNode={allowOpen ? id => {
+            if (g.nodes[id]?.groupRoster) { onSelect({ kind: 'graphnode', scope, id }); return; }
+            if (['character', 'group'].includes(g.nodes[id]?.kind)) dispatch({ type: 'MATERIALIZE_CHARACTER_INPUTS', scope, id });
+            onOpen?.(id);
+          } : undefined}
           onPasteNode={(p) => {
             const id = genId(g.nodes, `${idPrefix}-`);
             dispatch({ type: 'GRAPH_ADD_NODE', scope, node: { id, kind: p.kind, title: p.title, body: p.body ?? '', color: p.color ?? null, x: p.x, y: p.y, w: p.w ?? undefined, h: p.h ?? undefined } });
             onSelect({ kind: 'graphnode', scope, id });
           }}
           onPasteNodes={(clipboard) => {
-            const pasted = remapCanvasClipboard(clipboard, g.nodes, `${idPrefix}-COPY-`);
+            const pasted = remapCanvasClipboard(clipboard, g.nodes, `${idPrefix}-COPY-`, scope);
             dispatch({
               type: 'BATCH',
               actions: [
@@ -290,8 +295,10 @@ export default function GraphEditor({
             });
             onSelect({ kind: 'graphnode', scope, id: pasted.ids[pasted.ids.length - 1] });
           }}
-          renderBody={(n) => (isSupportingMechanicSubnode(n) || isMechanismPreviewNode(n) || n.kind === 'item' || n.kind === 'framework' ? null : n.body)}
+          renderBody={(n) => (n.characterInput || n.groupRoster || isSupportingMechanicSubnode(n) || isMechanismPreviewNode(n) || n.kind === 'item' || n.kind === 'framework' ? null : n.body)}
           renderExtra={(n, dimensions) => {
+            if (n.groupRoster) return <GroupRoster scope={scope} onSelect={onSelect} />;
+            if (n.characterInput) return <CharacterInputNode node={n} scope={scope} />;
             if (n.kind === 'framework') {
               const fw = FRAMEWORK_TYPES[n.frameworkId] || FRAMEWORK_TYPES.fate;
               return <FrameworkPreview frameworkId={fw.id} nodeWidth={dimensions.width} nodeHeight={dimensions.height} />;
@@ -314,6 +321,7 @@ export default function GraphEditor({
           }}
         />
       )}
+      {openRelationship && <RelationshipDetails id={openRelationship} onClose={() => setOpenRelationship(null)} />}
     </>
   );
 }

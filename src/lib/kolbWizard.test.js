@@ -168,7 +168,9 @@ describe('Kolb Simple and Advanced shared draft', () => {
     const updated = reviseWizardResult(old, node(draft), source);
     expect(updated.id).toBe(old.id);
     expect(updated.questions.find(row => row.id === 'custom').answer).toBe('Keep me.');
-    expect(updated.sub).toEqual(old.sub);
+    expect(updated.sub.nodes.keep).toEqual(old.sub.nodes.keep);
+    expect(updated.sub.edges).toEqual(old.sub.edges);
+    expect(Object.values(updated.sub.nodes).some(child => child.characterInput)).toBe(true);
     expect(updated.body).not.toContain('Working on:');
     expect(savedWizardSession(updated, {}).answers['phase:CE']).toBe(answers['phase:CE']);
   });

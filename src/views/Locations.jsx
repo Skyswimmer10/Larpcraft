@@ -24,7 +24,7 @@ export default function Locations({ selection, onSelect }) {
   // Clicking a location opens its map stage: schematic or street map with
   // item/sensor markers and player-movement arrows.
   if (openLoc && s.locations[openLoc]) {
-    return <LocationStage location={s.locations[openLoc]} onSelect={onSelect} onBack={() => setOpenLoc(null)} />;
+    return <LocationStage key={openLoc} location={s.locations[openLoc]} onSelect={onSelect} onBack={() => setOpenLoc(null)} />;
   }
 
   return (

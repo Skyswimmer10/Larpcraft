@@ -1,0 +1,13 @@
+.annotation-trigger{padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--raised,#242936);color:var(--ink);font-size:13px;white-space:nowrap}
+.annotation-tray-host{flex:none;grid-column:1/-1;min-width:0}
+.annotation-tray{padding:10px 14px;background:var(--panel,#191d26);border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.annotation-tray>div{display:flex;gap:7px;flex-wrap:wrap;border:0;padding:0;box-shadow:none;background:none;min-width:0}
+.annotation-tray .tool-kind-label{display:none}
+.annotation-tray .addnode{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--ink);font:inherit;font-size:12px;line-height:1.2;white-space:nowrap}
+.annotation-tray .addnode:hover{background:#ffffff0a;border-color:#7f91b7}
+.annotation-tray .sq{width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;flex:none;border-radius:3px;font-size:11px}
+.annotation-tray .shapecircle{border:2px solid;border-radius:50%;box-sizing:border-box;background:none}
+.annotation-tray .arrowglyph{background:none;border:1px solid currentColor;font-size:15px;line-height:1}
+.annotation-tray .splineglyph{background:none;font-size:20px;line-height:1}
+.annotation-tray>.annotation-close{margin-left:auto;font-size:12px;padding:6px;background:none;color:var(--ink);white-space:nowrap}
+.annotation-trigger:focus-visible,.annotation-tray button:focus-visible{outline:2px solid #a8b6ff;outline-offset:3px}

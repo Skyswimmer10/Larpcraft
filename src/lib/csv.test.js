@@ -91,7 +91,7 @@ describe('import merge via reducer', () => {
     const rows = CSV_SCHEMAS.nodes.toRows(s);
     const brief = rows.find((r) => r.id === 'N-BRIEF');
     expect(brief.connectsTo).toBe('N-S7');
-    expect(brief.kindName).toBe('Event');
+    expect(brief.kindName).toBe('Story Beat');
     expect(brief.connectsToTitles).toContain('Sector 7 Warehouse');
     // simulate importing a new node connected to two existing ones
     const row = { id: 'N-NEW', kind: 'objective', title: 'Extra step', x: '50', y: '60', connectsTo: 'N-GATE;N-PATROL' };

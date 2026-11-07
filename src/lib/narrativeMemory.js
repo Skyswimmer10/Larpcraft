@@ -1,4 +1,5 @@
 import { FRAMEWORK_TYPES } from '../data/seed.js';
+import { GROUP_FOUNDATIONS_ID } from './groupFoundations.js';
 
 const text = value => typeof value === 'string' ? value.trim() : '';
 
@@ -60,6 +61,8 @@ export function questionMemory({ source, type, questions, answers, active, roles
     guidance = 'Try this language pattern in the conversation you already described. It can clarify the same exchange or reveal another misunderstanding within it.';
   } else if (source?.layout === 'profileDomains' && previousPhase) {
     guidance = `You have described ${previousPhase.name}. Show how this next aspect appears in the same fictional person, including any differences between situations.`;
+  } else if (source?.id === GROUP_FOUNDATIONS_ID && earlier.length) {
+    guidance = 'Use the group identity and earlier answers below as context for membership, authority and bonds. These are optional lenses; do not infer fixed behaviour from belonging.';
   } else if (type === 'concept' && earlier.length) {
     guidance = `Use the roles and earlier answers below to develop this part of ${source.name || source.title || 'your concept'}. Keep the connection between the parts, even when you change the original example.`;
   }
@@ -78,11 +81,16 @@ export function questionMemory({ source, type, questions, answers, active, roles
 // restores a choice even if the originating library entry is no longer present.
 export function savedWizardSession(node, library, record = node?.narrativeWizard) {
   if (!record?.sourceId || !record.sourceType) return null;
-  const source = record.sourceType === 'framework' ? FRAMEWORK_TYPES[record.sourceId] : library?.concepts?.[record.sourceId];
+  if (record.sourceId === GROUP_FOUNDATIONS_ID && record.sourceType !== 'framework') record = { ...record, sourceType: 'framework' };
+  const source = record.sourceType === 'framework' ? FRAMEWORK_TYPES[record.sourceId] : record.sourceSnapshot || library?.concepts?.[record.sourceId];
   if (!source && !record.questions?.length) return null;
   const answers = { ...(record.answers || {}) };
-  const attachedId = record.attachedChildId || Object.values(node.sub?.nodes || {}).find(child => child.narrativeWizard?.sourceId === record.sourceId && child.narrativeWizard?.title === record.title)?.id;
-  const plan = attachedId ? node.sub.nodes[attachedId] : node;
+  const attachedId = record.attachedChildId || Object.values(node.sub?.nodes || {}).find(child => {
+    const saved = child.narrativeWizard;
+    return saved?.sessionId && record.sessionId ? saved.sessionId === record.sessionId : saved?.sourceId === record.sourceId && saved?.title === record.title;
+  })?.id;
+  const plan = attachedId ? node.sub?.nodes?.[attachedId] || (node.characterCanvas ? {} : node) : node;
+  const wizardSaved = plan.characterInput?.generated && JSON.stringify(record.answers) !== JSON.stringify(plan.characterInput.generated.answers);
   const readAnswer = (row, value) => {
     if (row.choiceAnswerKey) {
       const [first, ...rest] = value.split('\n\n');
@@ -95,13 +103,34 @@ export function savedWizardSession(node, library, record = node?.narrativeWizard
     } else answers[row.textAnswerKey || row.key] = value;
   };
   for (const row of record.questions || []) {
+    if (row.nodeField && !wizardSaved) {
+      let bound;
+      let graph = plan.sub;
+      for (const id of row.nodePath || []) { bound = graph?.nodes?.[id]; graph = bound?.sub; }
+      if (bound?.wizardFields?.[row.key]) { readAnswer(row, bound.wizardFields[row.key].answer || ''); continue; }
+    }
     const id = record.questionIds?.[row.key];
     const editable = id && node.questions?.find(question => question.id === id);
-    const note = Object.values(plan.sub?.nodes || {}).find(child => child.wizardQuestionKey === row.key);
-    if (editable) readAnswer(row, editable.answer || '');
-    else if (note) readAnswer(row, note.body || '');
+    const noteAt = graph => {
+      for (const child of Object.values(graph?.nodes || {})) {
+        if (child.characterInput || child.narrativeWizard?.sourceId) continue;
+        if (child.wizardQuestionKey === row.key) return child;
+        const found = noteAt(child.sub);
+        if (found) return found;
+      }
+      return null;
+    };
+    const note = noteAt(plan.sub);
+    const changedAnswer = note?.wizardAnswer !== undefined && note.wizardAnswer !== note.wizardGeneratedAnswer;
+    const changedBody = note?.wizardGeneratedBody !== undefined && note.body !== note.wizardGeneratedBody;
+    if (changedAnswer && !wizardSaved) readAnswer(row, note.wizardAnswer);
+    else if (changedBody && !wizardSaved) readAnswer(row, note.wizardReferenceBody && note.body.startsWith(note.wizardReferenceBody + '\n\nYour version: ')
+      ? note.body.slice(note.wizardReferenceBody.length + '\n\nYour version: '.length) : note.body || '');
+    else if (editable) readAnswer(row, editable.answer || '');
+    else if (note && !wizardSaved) readAnswer(row, note.wizardAnswer ?? note.body ?? '');
   }
-  return { source: source || { id: record.sourceId, name: record.sourceLabel, description: '', savedQuestions: record.questions }, type: record.sourceType, record, answers, targetId: node.id };
+  const currentSource = record.summaryFormat === 'dragon-prose' && plan.sub ? { ...source, ...plan.sub, id: record.sourceId, dragonWorkshop: 1 } : source;
+  return { source: currentSource || { id: record.sourceId, name: record.sourceLabel, description: '', savedQuestions: record.questions }, type: record.sourceType, record, answers, targetId: node.id };
 }
 
 export function savedWizardSessions(node, library) {

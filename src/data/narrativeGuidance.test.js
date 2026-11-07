@@ -8,7 +8,12 @@ import { buildNarrativeLinkInsertion } from '../lib/narrativeLinks.js';
 describe('framework and concept use guidance', () => {
   it('covers every current framework and authored concept without changing their saved categories', () => {
     for (const source of Object.values(FRAMEWORK_TYPES)) expect(FRAMEWORK_GUIDANCE[source.id]).toBeTruthy();
-    for (const source of Object.values(deployedLibrary.concepts)) expect(CONCEPT_GUIDANCE[source.id]).toBeTruthy();
+    for (const source of Object.values(deployedLibrary.concepts)) {
+      const before=JSON.stringify(source),guidance=narrativeGuidance(source,'concept');
+      expect(guidance.best.length,source.name).toBeGreaterThan(0);
+      expect(guidance.best.every(focus=>NARRATIVE_FOCUSES[focus])).toBe(true);
+      expect(JSON.stringify(source)).toBe(before);
+    }
     for (const guidance of [...Object.values(FRAMEWORK_GUIDANCE), ...Object.values(CONCEPT_GUIDANCE)]) {
       expect(guidance.best.length).toBeGreaterThan(0);
       expect([...guidance.best, ...guidance.useful].every(focus => NARRATIVE_FOCUSES[focus])).toBe(true);

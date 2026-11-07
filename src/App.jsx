@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import StorageStatus from './components/StorageStatus.jsx';
 import { AppearanceProvider, useAppearance } from './components/AppearanceContext.jsx';
 import './ui-refresh.css';
+import PalettePicker from './components/PalettePicker.jsx';
 import { StoreProvider, useGame, useDispatch, useLibrary, useLibraryDispatch, resetDemoData } from './state/store.jsx';
 import Inspector from './components/Inspector.jsx';
 import ProjectMenu from './components/ProjectMenu.jsx';
@@ -12,6 +13,9 @@ import Teams from './views/Teams.jsx';
 import Players from './views/Players.jsx';
 import Locations from './views/Locations.jsx';
 import Library from './views/Library.jsx';
+import CreatedContent from './views/CreatedContent.jsx';
+import Research from './views/Research.jsx';
+import { buildStoryLibrarySections } from './lib/narrativeLibrary.js';
 import GameMasterRules from './views/GameMasterRules.jsx';
 import Weaver from './views/Weaver.jsx';
 import TasksView from './views/TasksView.jsx';
@@ -20,7 +24,7 @@ import NarrativeLinkSourceModal from './components/NarrativeLinkSourceModal.jsx'
 
 const BUILD_VIEWS = [
   { id: 'weaver', label: 'Master Story', color: 'var(--c-sensor)', comp: Weaver, count: (p) => Object.keys(p.masterNodes ?? {}).length },
-  { id: 'storyDynamics', label: 'Story Dynamics Graph', color: '#F08CB4', comp: StoryDynamics, count: (p) => (p.storyDynamicsGraph?.curves?.length ?? 0) + (p.storyDynamicsGraph?.tags?.length ?? 0) },
+  { id: 'storyDynamics', label: 'Story Dynamics Graph', color: '#F08CB4', comp: StoryDynamics, count: (p) => (p.storyDynamicsGraph?.curves?.length ?? 0) + (p.storyDynamicsGraph?.tags?.length ?? 0) + (p.storyDynamicsGraph?.activities?.length ?? 0) },
   { id: 'flow', label: 'Narrative Weaver', color: 'var(--c-narrative)', comp: ScenarioFlow, count: (p) => Object.keys(p.nodes).length },
   { id: 'tasks', label: 'Mechanics Weaver', color: 'var(--c-mechanic)', comp: TasksView, count: (p) => Object.values(p.taskNodes ?? {}).filter((n) => n.kind !== 'travel').length },
   { id: 'locations', label: 'Locations', color: 'var(--c-location)', comp: Locations, count: (p) => Object.keys(p.locations).length },
@@ -34,20 +38,22 @@ const MANAGE_VIEWS = [
 // The Library, grouped: physical templates, game mechanics, story content.
 const LIB_GROUPS = [
   { id: 'physical', label: 'Physical', color: 'var(--c-item)', colls: ['items', 'locations', 'sensors'] },
+  { id: 'content', label: 'Created Content', color: '#87CCAC', count: library => buildStoryLibrarySections(library, 'content').reduce((sum, section) => sum + section.items.length, 0) },
   { id: 'mechanics', label: 'Game Mechanics', color: 'var(--c-mechanic)', colls: ['mechPrimitives', 'mechSubnodes', 'mechStructures'] },
-  { id: 'story', label: 'Story & Narrative', color: 'var(--c-narrative)', colls: ['concepts', 'narrative', 'stories'] },
+  { id: 'story', label: 'Story & Narrative', color: 'var(--c-narrative)', colls: ['concepts', 'narrative', 'stories', 'conversationTemplates'] },
+  { id: 'research', label: 'Research & References', color: '#91c8c0', colls: ['research'] },
 ];
 
 const INSPECTOR_WIDTH_KEY = 'larpcraft:inspectorWidth';
 const NAV_ICONS = {
   weaver: 'book', storyDynamics: 'pulse', flow: 'branches', tasks: 'wrench',
   locations: 'pin', items: 'box', teams: 'users', players: 'user',
-  physical: 'layers', mechanics: 'wrenches', story: 'book', gmrules: 'rules',
+  physical: 'layers', content: 'box', mechanics: 'wrenches', story: 'book', research: 'book', gmrules: 'rules',
 };
 const NAV_ACCENTS = {
   weaver: '#65D6D0', storyDynamics: '#F19BC1', flow: '#80B9FF', tasks: '#BAA0FF',
   locations: '#70D3A0', items: '#EDB66A', teams: '#D1A5EC', players: '#91CFEB',
-  physical: '#D8C4A1', mechanics: '#E8A38A', story: '#A8B6FF', gmrules: '#E3D47D',
+  physical: '#D8C4A1', content: '#87CCAC', mechanics: '#E8A38A', story: '#A8B6FF', research: '#91c8c0', gmrules: '#E3D47D',
 };
 const inspectorWidthFromStorage = () => {
   const saved = Number(window.localStorage.getItem(INSPECTOR_WIDTH_KEY));
@@ -60,7 +66,8 @@ function Shell() {
   const lib = useLibrary();
   const dispatch = useDispatch();
   const libDispatch = useLibraryDispatch();
-  const [view, setView] = useState('items');
+  const [selectedView, setView] = useState('items');
+  const view = selectedView === 'conversations' ? 'flow' : selectedView;
   const [libGroup, setLibGroup] = useState('physical');
   const [selection, setSelection] = useState(null);
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -72,6 +79,8 @@ function Shell() {
 
   const all = [...BUILD_VIEWS, ...MANAGE_VIEWS];
   const isLibrary = view === 'library';
+  const isContent = isLibrary && libGroup === 'content';
+  const isResearch = isLibrary && libGroup === 'research';
   const isRules = view === 'gmrules';
   const ActiveView = isLibrary || isRules ? null : all.find((v) => v.id === view).comp;
 
@@ -110,7 +119,7 @@ function Shell() {
   };
   return (
     <div
-      className={`chrome${refreshed && (!selection || isRules) ? ' inspector-idle' : ''}${navCollapsed ? ' nav-collapsed' : ''}${inspectorCollapsed ? ' inspector-collapsed' : ''}${contentBackdrop?.image?.dataUrl ? ' has-content-backdrop' : ''}`}
+      className={`chrome${refreshed && (!selection || isRules || isContent || isResearch) ? ' inspector-idle' : ''}${navCollapsed ? ' nav-collapsed' : ''}${inspectorCollapsed ? ' inspector-collapsed' : ''}${contentBackdrop?.image?.dataUrl ? ' has-content-backdrop' : ''}`}
       style={{ '--insp-w': inspectorCollapsed ? '38px' : `${inspectorWidth}px` }}
     >
       {contentBackdrop?.image?.dataUrl && (
@@ -134,7 +143,7 @@ function Shell() {
           <button key={g.id} className={`nav${view === 'library' && libGroup === g.id ? ' on' : ''}`} style={{ '--nav-accent': NAV_ACCENTS[g.id] }}
             onClick={() => { setView('library'); setLibGroup(g.id); }}>
             {refreshed ? <span className="nav-icon"><PrimIcon icon={NAV_ICONS[g.id]} color="currentColor" size={19} /></span> : <span className="sq" style={{ background: g.color }} />}{g.label}
-            <span className="n">{g.colls.reduce((sum, c) => sum + Object.keys(lib[c]).length, 0)}</span>
+            <span className="n">{g.count ? g.count(lib) : g.colls.reduce((sum, c) => sum + Object.keys(lib[c] || {}).length, 0)}</span>
           </button>
         ))}
         <button className={`nav${isRules ? ' on' : ''}`} style={{ '--nav-accent': NAV_ACCENTS.gmrules }} onClick={() => setView('gmrules')}>
@@ -146,12 +155,12 @@ function Shell() {
         </div>
       </div>
       {isLibrary
-        ? <Library group={libGroup} selection={selection} onSelect={setSelection} onNavigate={showNarrativeLibrarySource} />
+        ? isResearch ? <Research /> : isContent ? <CreatedContent onOpen={navigateToNarrativeLibraryEditor} /> : <Library group={libGroup} selection={selection} onSelect={setSelection} onNavigate={showNarrativeLibrarySource} />
         : isRules
           ? <GameMasterRules />
           : <ActiveView selection={selection} onSelect={setSelection} onNavigate={showNarrativeLibrarySource} />}
       <Inspector
-        selection={isRules ? null : selection}
+        selection={isRules || isContent || isResearch ? null : selection}
         onSelect={setSelection}
         onNavigate={showNarrativeLibrarySource}
         collapsed={inspectorCollapsed}
@@ -172,7 +181,7 @@ function Shell() {
 }
 
 function TitleBar() {
-  const { refreshed, focus, toggleAppearance, toggleFocus } = useAppearance();
+  const { refreshed, focus, toggleFocus } = useAppearance();
   const proj = useGame();
   const headerBackdrop = proj?.meta?.backdrops?.header;
   return (
@@ -186,8 +195,8 @@ function TitleBar() {
       <span className="appname">LARP Craft — {proj?.meta?.name || 'Loading game...'}</span>
       <StorageStatus />
       <div className="appearance-controls">
+        <PalettePicker />
         {refreshed && <button aria-pressed={focus} onClick={toggleFocus}>{focus ? 'Exit focus' : 'Focus mode'}</button>}
-        <button aria-pressed={refreshed} onClick={toggleAppearance} title="Switch appearances without changing game content">{refreshed ? 'Refreshed UI · On' : 'Refreshed UI · Off'}</button>
       </div>
     </div>
   );

@@ -1,5 +1,7 @@
 import { isMechanicIO } from '../lib/mechanicIO.js';
 import { GameTypePreview } from './GameType.jsx';
+import CharacterNode, { usesNarrativeEntityCard } from './CharacterNode.jsx';
+import { isStoryBeat, storyBeatCanvasText } from '../lib/storyBeat.js';
 import { useAppearance } from './AppearanceContext.jsx';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ENTITY_COLORS, PrimIcon } from './bits.jsx';
@@ -45,9 +47,10 @@ export function visibleCanvasPlacement(fallback = { x: 80, y: 80 }, size = { w: 
   if (!canvas) return fallback;
 
   const zoom = Math.max(0.1, Number(canvas.dataset.canvasZoom) || 1);
+  const cameraX = Number(canvas.dataset.canvasX) || 0, cameraY = Number(canvas.dataset.canvasY) || 0;
   const view = {
-    x: canvas.scrollLeft / zoom,
-    y: canvas.scrollTop / zoom,
+    x: -cameraX / zoom,
+    y: -cameraY / zoom,
     w: canvas.clientWidth / zoom,
     h: canvas.clientHeight / zoom,
   };
@@ -58,8 +61,8 @@ export function visibleCanvasPlacement(fallback = { x: 80, y: 80 }, size = { w: 
   const occupied = Array.from(canvas.querySelectorAll('[data-node]')).map((el) => {
     const rect = el.getBoundingClientRect();
     return {
-      x: (rect.left - canvasRect.left + canvas.scrollLeft) / zoom,
-      y: (rect.top - canvasRect.top + canvas.scrollTop) / zoom,
+      x: (rect.left - canvasRect.left - cameraX) / zoom,
+      y: (rect.top - canvasRect.top - cameraY) / zoom,
       w: rect.width / zoom,
       h: rect.height / zoom,
     };
@@ -84,7 +87,7 @@ export function visibleCanvasPlacement(fallback = { x: 80, y: 80 }, size = { w: 
     x: Math.max(view.x + margin, Math.min(view.x + view.w - w - margin, center.x + offset.x)),
     y: Math.max(view.y + margin, Math.min(view.y + view.h - h - margin, center.y + offset.y)),
   })).find((point) => !overlaps(point)) || center;
-  return { x: Math.max(8, Math.round(candidate.x)), y: Math.max(8, Math.round(candidate.y)) };
+  return { x: Math.round(candidate.x), y: Math.round(candidate.y) };
 }
 export const NODE_W = NODE_DEFAULT_WIDTH;
 export const KIND_LABEL = {
@@ -94,7 +97,7 @@ export const KIND_LABEL = {
   // Tasks + task-detail node types.
   task: 'Task', travel: 'Travel Time', placement: 'Placement', rule: 'Rule', prop: 'Prop / kit', power: 'Power', effect: 'Effect',
   // Narrative Weaver: base nodes, concept containers, subnodes.
-  event: 'Event', character: 'Character', storyLocation: 'Story Location', item: 'Story Item', quest: 'Quest', concept: 'Concept', masterAct: 'Master Act',
+  storyBeat: 'Story Beat', event: 'Story Beat', character: 'Character', storyLocation: 'Story Location', item: 'Story Item', quest: 'Story Beat', concept: 'Concept', masterAct: 'Master Act',
   characterShadow: 'Dark Side',
   characterArchetypeFacet: 'Archetype',
   characterArchetypeCombinations: 'Archetype Combinations',
@@ -130,8 +133,8 @@ const normalizeSide = (side, fallback) => {
 //   onSetColor(id,color|null) · onSelect(id) · onDropPalette(payload,x,y)
 // Also accepts drops of palette entries carrying dataTransfer 'text/x-palette'.
 export default function FlowCanvas({
-  nodes, edges, selId, colorOf,
-  onSelect, onMove, onConnect, onRemoveEdge, onRemoveEdges, onSetColor, onDropPalette,
+  nodes, edges, selId, colorOf, graphScope,
+  onSelect, onMove, onConnect, onRemoveEdge, onRemoveEdges, onSetColor, onDropPalette, onOpenRelationship, onOpenStoryConnection,
   onPasteNode, onPasteNodes, onDeleteNode, onDeleteNodes, onMoveNodes, onMoveSelection, onDeleteSelection, onClearCanvas, onEditEdge, onResizeNode, onUpdateNode, renderBody, renderExtra,
   // Optional presentation hooks (unused by the library structure editors):
   //   iconOf(node) → icon name · teamOf(node) → {name,color} · dimNode(node) →
@@ -148,13 +151,17 @@ export default function FlowCanvas({
   // and everything inside (host reducer handles containment).
   frames, onFrameMove, onFrameMoveTo, onFrameResize, onFrameGeometry, onFrameScale, onFrameSelect, onFrameDelete, selFrame,
   // numberMarkers: visual Miro-style numbered badges, not graph nodes.
-  numberMarkers, onNumberMarkerSelect, onNumberMarkerMove, onNumberMarkerUpdate, onNumberMarkerDelete, selNumberMarker,
+  numberMarkers, onNumberMarkerSelect, onNumberMarkerMove, onNumberMarkerUpdate, onNumberMarkerDelete, selNumberMarker, fitOnMount=false,minZoom=MIN_ZOOM,
   // titleMarkers: draggable text headings for visually grouping graph areas.
   titleMarkers, onTitleMarkerSelect, onTitleMarkerMove, onTitleMarkerDelete, selTitleMarker,
 }) {
   const { refreshed } = useAppearance();
+  const limitZoom=z=>Math.min(MAX_ZOOM,Math.max(minZoom,+z.toFixed(2)));
   const [arrangeUndo, setArrangeUndo] = useState(null);
   const canvasRef = useRef(null);
+  const panRef = useRef(null), cameraRef = useRef({x:0,y:0}), wheelRef = useRef(null);
+  const [camera,setCamera] = useState({x:0,y:0}), [panning,setPanning] = useState(false);
+  const moveCamera = next => { cameraRef.current=next;setCamera(next); };
   const dragRef = useRef(null);
   const resizeRef = useRef(null);
   const frameRef = useRef(null);
@@ -237,7 +244,7 @@ export default function FlowCanvas({
         if (window.getSelection()?.toString()) return; // real text copy wins
         const selectedNodeIds = Array.from(multiSel).filter((id) => nodes[id]);
         if (!selectedNodeIds.length && selId && nodes[selId]) selectedNodeIds.push(selId);
-        nodeClipboard = createCanvasClipboard(nodes, edges, selectedNodeIds);
+        nodeClipboard = createCanvasClipboard(nodes, edges.filter(edge => !edge.relationshipId), selectedNodeIds);
         if (!nodeClipboard) return;
         e.preventDefault();
       } else if (k === 'v' || k === 'p') {
@@ -411,7 +418,7 @@ export default function FlowCanvas({
   const canvasPoint = (e) => {
     const el = canvasRef.current;
     const r = el.getBoundingClientRect();
-    return { x: (e.clientX - r.left + el.scrollLeft) / zoom, y: (e.clientY - r.top + el.scrollTop) / zoom };
+    return { x: (e.clientX - r.left - cameraRef.current.x) / zoom, y: (e.clientY - r.top - cameraRef.current.y) / zoom };
   };
   const setZoomAt = (nextZoom, clientX, clientY) => {
     const el = canvasRef.current;
@@ -420,18 +427,15 @@ export default function FlowCanvas({
       return;
     }
     const r = el.getBoundingClientRect();
-    const localX = clientX - r.left;
-    const localY = clientY - r.top;
-    const worldX = (localX + el.scrollLeft) / zoom;
-    const worldY = (localY + el.scrollTop) / zoom;
+    const localX = Number.isFinite(clientX) ? clientX - r.left : el.clientWidth / 2;
+    const localY = Number.isFinite(clientY) ? clientY - r.top : el.clientHeight / 2;
+    const worldX = (localX - cameraRef.current.x) / zoom;
+    const worldY = (localY - cameraRef.current.y) / zoom;
     setZoom(nextZoom);
-    requestAnimationFrame(() => {
-      el.scrollLeft = Math.max(0, worldX * nextZoom - localX);
-      el.scrollTop = Math.max(0, worldY * nextZoom - localY);
-    });
+    moveCamera({x:localX-worldX*nextZoom,y:localY-worldY*nextZoom});
   };
   const zoomBy = (direction, clientX, clientY) => {
-    const nextZoom = clampZoom(zoom + direction * ZOOM_STEP);
+    const nextZoom = limitZoom(zoom + direction * ZOOM_STEP);
     if (nextZoom === zoom) return;
     setZoomAt(nextZoom, clientX, clientY);
   };
@@ -442,26 +446,59 @@ export default function FlowCanvas({
       zoomBy(e.deltaY > 0 ? -1 : 1, e.clientX, e.clientY);
       return;
     }
-    if (e.shiftKey) {
-      e.preventDefault();
-      const el = canvasRef.current;
-      if (el) el.scrollLeft += Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    }
+    e.preventDefault();
+    const factor=e.deltaMode===1?22:e.deltaMode===2?canvasRef.current.clientHeight:1;
+    const dx=e.shiftKey?(Math.abs(e.deltaY)>=Math.abs(e.deltaX)?e.deltaY:e.deltaX):e.deltaX;
+    moveCamera({x:cameraRef.current.x-dx*factor,y:cameraRef.current.y-(e.shiftKey?0:e.deltaY*factor)});
+  };
+  wheelRef.current=onWheel;
+  useEffect(()=>{
+    const canvas=canvasRef.current,handle=event=>wheelRef.current?.(event);
+    canvas.addEventListener('wheel',handle,{passive:false});
+    return()=>canvas.removeEventListener('wheel',handle);
+  },[]);
+  const finishPan=()=>{
+    const pan=panRef.current;panRef.current=null;setPanning(false);
+    const canvas=canvasRef.current;
+    if(pan&&canvas?.hasPointerCapture?.(pan.pointerId))canvas.releasePointerCapture(pan.pointerId);
+  };
+  useEffect(()=>{
+    const blur=()=>finishPan();
+    window.addEventListener('blur',blur);
+    return()=>window.removeEventListener('blur',blur);
+  },[]);
+  const startPan=event=>{
+    activeCanvasElement=event.currentTarget;
+    if(event.button!==1)return;
+    event.preventDefault();event.stopPropagation();
+    panRef.current={pointerId:event.pointerId,x:event.clientX,y:event.clientY,camera:{...cameraRef.current}};
+    event.currentTarget.setPointerCapture(event.pointerId);setPanning(true);
+  };
+  const movePan=event=>{
+    const pan=panRef.current;
+    if(!pan||event.pointerId!==pan.pointerId)return;
+    event.preventDefault();event.stopPropagation();
+    if(!(event.buttons&4)){finishPan();return;}
+    moveCamera({x:pan.camera.x+event.clientX-pan.x,y:pan.camera.y+event.clientY-pan.y});
+  };
+  const endPan=event=>{
+    if(panRef.current?.pointerId!==event.pointerId)return;
+    event.preventDefault();event.stopPropagation();finishPan();
   };
   const anchorFor = (n, side = 'right') => pointOnEntity(n, side);
   const outAnchor = (n, side = 'right') => anchorFor(n, side);
   const inAnchor = (n, side = 'left') => anchorFor(n, side);
-  const controlPoints = (a, b, fromSide = 'right', toSide = 'left') => {
+  const controlPoints = (a, b, fromSide = 'right', toSide = 'left', offset = 0) => {
     const distance = Math.max(55, Math.min(220, Math.hypot(b.x - a.x, b.y - a.y) * 0.35));
     const start = SIDE_VECTOR[normalizeSide(fromSide, 'right')];
     const end = SIDE_VECTOR[normalizeSide(toSide, 'left')];
     return {
-      c1: { x: a.x + start.x * distance, y: a.y + start.y * distance },
-      c2: { x: b.x + end.x * distance, y: b.y + end.y * distance },
+      c1: { x: a.x + start.x * distance, y: a.y + start.y * distance + offset },
+      c2: { x: b.x + end.x * distance, y: b.y + end.y * distance + offset },
     };
   };
-  const edgePath = (a, b, fromSide = 'right', toSide = 'left') => {
-    const { c1, c2 } = controlPoints(a, b, fromSide, toSide);
+  const edgePath = (a, b, fromSide = 'right', toSide = 'left', offset = 0) => {
+    const { c1, c2 } = controlPoints(a, b, fromSide, toSide, offset);
     return `M ${a.x} ${a.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${b.x} ${b.y}`;
   };
   const cubicPoint = (a, c1, c2, b, t) => {
@@ -493,7 +530,7 @@ export default function FlowCanvas({
     const fromSide = normalizeSide(e.fromSide, 'right');
     const toSide = normalizeSide(e.toSide, 'left');
     const a = outAnchor(from, fromSide), b = inAnchor(to, toSide);
-    const { c1, c2 } = controlPoints(a, b, fromSide, toSide);
+    const { c1, c2 } = controlPoints(a, b, fromSide, toSide, e.curveOffset);
     const curve = Array.from({ length: 25 }, (_, i) => cubicPoint(a, c1, c2, b, i / 24));
     for (let i = 1; i < cutPoints.length; i += 1) {
       for (let j = 1; j < curve.length; j += 1) {
@@ -531,7 +568,7 @@ export default function FlowCanvas({
     if (!d.moved && Math.abs(dx) + Math.abs(dy) < 4) return true;
     d.moved = true;
     const patches = {
-      nodes: Object.fromEntries(Object.entries(d.starts.nodes).map(([id, start]) => [id, { x: Math.max(8, start.x + dx), y: Math.max(8, start.y + dy) }])),
+      nodes: Object.fromEntries(Object.entries(d.starts.nodes).map(([id, start]) => [id, { x: start.x + dx, y: start.y + dy }])),
       frames: Object.fromEntries(Object.entries(d.starts.frames).map(([id, start]) => [id, { x: start.x + dx, y: start.y + dy }])),
       numberMarkers: Object.fromEntries(Object.entries(d.starts.numberMarkers).map(([id, start]) => [id, { x: start.x + dx, y: start.y + dy }])),
       titleMarkers: Object.fromEntries(Object.entries(d.starts.titleMarkers).map(([id, start]) => [id, { x: start.x + dx, y: start.y + dy }])),
@@ -606,7 +643,7 @@ export default function FlowCanvas({
       const positions = {};
       d.group.forEach((id) => {
         const start = d.starts[id];
-        if (start) positions[id] = { x: Math.max(8, start.x + dx), y: Math.max(8, start.y + dy) };
+        if (start) positions[id] = { x: start.x + dx, y: start.y + dy };
       });
       if (onMoveNodes) onMoveNodes(positions, { undoGroup: d.undoGroup });
       else Object.entries(positions).forEach(([id, pos]) => onMove(id, pos.x, pos.y));
@@ -621,8 +658,8 @@ export default function FlowCanvas({
       }, d.group);
       return;
     }
-    const x = Math.max(8, Math.round(p.x - d.offX));
-    const y = Math.max(8, Math.round(p.y - d.offY));
+    const x = Math.round(p.x - d.offX);
+    const y = Math.round(p.y - d.offY);
     const n = nodes[d.id];
     if (!d.moved && Math.abs(x - n.x) + Math.abs(y - n.y) < 4) return;
     d.moved = true;
@@ -666,7 +703,7 @@ export default function FlowCanvas({
       h = Math.max(MIN_NODE_H, d.h - dy);
       y = d.y + (d.h - h);
     }
-    onResizeNode(d.id, { x: Math.max(8, x), y: Math.max(8, y), w: Math.round(w), h: Math.round(h) });
+    onResizeNode(d.id, { x, y, w: Math.round(w), h: Math.round(h) });
   };
   const onResizeUp = () => { resizeRef.current = null; };
 
@@ -1133,7 +1170,7 @@ export default function FlowCanvas({
     const hit = edges.filter((e) => cutHitsEdge(active.points, e));
     if (hit.length) {
       if (onRemoveEdges) onRemoveEdges(hit);
-      else hit.forEach((e) => onRemoveEdge(e));
+      else if (onRemoveEdge) hit.forEach((e) => onRemoveEdge(e));
     }
     cutDragRef.current = null;
     setCutDrag(null);
@@ -1196,13 +1233,18 @@ export default function FlowCanvas({
     const canvasRect = canvas.getBoundingClientRect();
     const elements = [...canvas.querySelectorAll('[data-node], .gframe, .numarker, .titlemarker')].filter(el => !selectedOnly || el.dataset.node === selId || multiSel.has(el.dataset.node));
     if (!elements.length) return;
-    const boxes = elements.map(el => { const r = el.getBoundingClientRect(); return { x: (r.left - canvasRect.left + canvas.scrollLeft) / zoom, y: (r.top - canvasRect.top + canvas.scrollTop) / zoom, w: r.width / zoom, h: r.height / zoom }; });
+    const boxes = elements.map(el => { const r = el.getBoundingClientRect(); return { x: (r.left - canvasRect.left - cameraRef.current.x) / zoom, y: (r.top - canvasRect.top - cameraRef.current.y) / zoom, w: r.width / zoom, h: r.height / zoom }; });
     const x = Math.min(...boxes.map(b => b.x)), y = Math.min(...boxes.map(b => b.y));
     const w = Math.max(...boxes.map(b => b.x + b.w)) - x, h = Math.max(...boxes.map(b => b.y + b.h)) - y;
-    const next = clampZoom(Math.min(1.5, (canvas.clientWidth - 100) / Math.max(1,w), (canvas.clientHeight - 100) / Math.max(1,h)));
+    const next = limitZoom(Math.min(1.5, (canvas.clientWidth - 100) / Math.max(1,w), (canvas.clientHeight - 100) / Math.max(1,h)));
     setZoom(next);
-    requestAnimationFrame(() => { canvas.scrollLeft = Math.max(0,x * next - 50); canvas.scrollTop = Math.max(0,y * next - 50); });
+    moveCamera({x:50-x*next,y:50-y*next});
   };
+  useEffect(()=>{
+    if(!fitOnMount)return;
+    const frame=requestAnimationFrame(()=>fitView());
+    return()=>cancelAnimationFrame(frame);
+  },[]);
   const arrangeNodes = () => {
     const items = list.filter(n => multiSel.size < 2 || multiSel.has(n.id));
     const before = {}, after = {};
@@ -1215,9 +1257,16 @@ export default function FlowCanvas({
   };
   return (
     <div
-      className={`canvas${refreshed && selId ? ' canvas-selection-emphasis' : ''}`} ref={canvasRef}
+      className={`canvas${refreshed && selId ? ' canvas-selection-emphasis' : ''}${panning?' canvas-panning':''}`} ref={canvasRef}
       data-canvas-zoom={zoom}
-      onPointerDownCapture={(e) => { activeCanvasElement = e.currentTarget; }}
+      data-canvas-x={camera.x} data-canvas-y={camera.y}
+      style={{backgroundPosition:`${camera.x}px ${camera.y}px`,backgroundSize:`${22*zoom}px ${22*zoom}px`}}
+      onPointerDownCapture={startPan}
+      onPointerMoveCapture={movePan}
+      onPointerUpCapture={endPan}
+      onPointerCancelCapture={endPan}
+      onLostPointerCapture={event=>{if(panRef.current?.pointerId===event.pointerId)finishPan();}}
+      onAuxClick={event=>{if(event.button===1)event.preventDefault();}}
       onFocusCapture={(e) => { activeCanvasElement = e.currentTarget; }}
       onPointerEnter={(e) => { activeCanvasElement = e.currentTarget; }}
       onScroll={(e) => { activeCanvasElement = e.currentTarget; }}
@@ -1225,21 +1274,21 @@ export default function FlowCanvas({
       onPointerMove={onCanvasMove}
       onPointerUp={onCanvasUp}
       onPointerCancel={() => { setCutDrag(null); setBoxDrag(null); clearAlignmentGuides(); }}
-      onWheel={onWheel}
       onDragOver={onDropPalette ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } : undefined}
       onDrop={onDropPalette ? (e) => {
         e.preventDefault();
         const payload = e.dataTransfer.getData('text/x-palette');
         if (!payload) return;
         const p = canvasPoint(e);
-        onDropPalette(payload, Math.max(8, p.x - NODE_W / 2), Math.max(8, p.y - 20));
+        onDropPalette(payload, p.x - NODE_W / 2, p.y - 20);
       } : undefined}
     >
       <div className="zoomctl" onPointerDown={(e) => e.stopPropagation()}>
-        <button title="Zoom out" onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}>-</button>
+        <button title="Zoom out" onClick={() => zoomBy(-1)}>-</button>
         <span>{Math.round(zoom * 100)}%</span>
-        <button title="Zoom in" onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}>+</button>
-        <button title="Reset zoom" onClick={() => setZoom(1)}>1:1</button>
+        <button title="Zoom in" onClick={() => zoomBy(1)}>+</button>
+        <button title="Reset zoom" onClick={() => setZoomAt(1)}>1:1</button>
+        <span className="canvas-pan-hint" title="Hold the middle mouse button and drag in any direction. Wheel scrolls; Shift + wheel moves sideways; Alt + wheel zooms.">Middle-drag to pan</span>
         {refreshed && <>
           <button onClick={() => fitView()}>Fit all</button>
           <button disabled={!selId && !multiSel.size} onClick={() => fitView(true)}>Focus selection</button>
@@ -1248,8 +1297,8 @@ export default function FlowCanvas({
         </>}
       </div>
       {multiSel.size > 1 && <div className="multisel-count">{multiSel.size} objects selected</div>}
-      <div className="canvas-zoom" style={{ width: extentX * zoom, height: extentY * zoom }}>
-        <div className="canvas-world" style={{ width: extentX, height: extentY, transform: `scale(${zoom})` }}>
+      <div className="canvas-zoom">
+        <div className="canvas-world" style={{ width: extentX, height: extentY, transform: `translate(${camera.x}px, ${camera.y}px) scale(${zoom})` }}>
       {frames && Object.values(frames).map((f) => (f.shape === 'arrow' || f.shape === 'spline') ? (() => {
         const isSpline = f.shape === 'spline';
         const geometry = resolvedSupportGeometry(f);
@@ -1405,23 +1454,24 @@ export default function FlowCanvas({
           const fromSide = normalizeSide(e.fromSide, 'right');
           const toSide = normalizeSide(e.toSide, 'left');
           const a = outAnchor(from, fromSide), b = inAnchor(to, toSide);
-          const { c1, c2 } = controlPoints(a, b, fromSide, toSide);
+          const { c1, c2 } = controlPoints(a, b, fromSide, toSide, e.curveOffset);
           const mid = cubicPoint(a, c1, c2, b, 0.5);
           const color = e.color || ENTITY_COLORS[e.kindColor] || colorOf(from) || '#8B92A6';
           const fact = edgeFact?.(e);
           return (
             <g key={idx} className={refreshed && selId ? (e.from === selId || e.to === selId ? 'connection-active' : 'connection-muted') : undefined}>
-              <path d={edgePath(a, b, fromSide, toSide)} stroke={color} strokeWidth="2" fill="none" opacity=".8" />
+              <path d={edgePath(a, b, fromSide, toSide, e.curveOffset)} stroke={color} strokeWidth="2" fill="none" opacity=".8" />
               <foreignObject x={mid.x - 100} y={mid.y - 26} width="200" height="32">
-                <div className={`elab${e.label ? '' : ' empty'}`} style={{ borderColor: color, color }}>
+                <div className={`elab${e.label ? '' : ' empty'}${e.relationshipId ? ' relationship-edge-label' : ''}`} style={{ borderColor: color, color }}>
                   {fact && <span className="efact" style={{ background: fact.color }} title={fact.title} />}
-                  <span className={onEditEdge ? 'editable' : ''}
+                  {e.storyLink && onOpenStoryConnection ? <button type="button" className="relationship-edge-button" aria-label={'Open connected story: ' + (e.label || 'Story link')} title="Open connected story" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); onOpenStoryConnection(e); }}>{e.label || 'Story link'}</button> : e.relationshipId && onOpenRelationship ? <button type="button" className="relationship-edge-button" aria-label={`Open relationship: ${from.title || from.name} ${e.label} ${to.title || to.name}`}
+                    title="Open relationship description" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); onOpenRelationship(e); }}>{e.label}</button> : <span className={onEditEdge ? 'editable' : ''}
                     title={onEditEdge ? 'Click to edit the connection label' : undefined}
                     onClick={onEditEdge ? () => editEdgeLabel(e) : undefined}>
                     {e.label || (onEditEdge ? '+ label' : '•')}
-                  </span>
-                  {onEditEdge && <button className="sidebtn" title={`Attach sides: ${EDGE_SIDE_LABELS[fromSide]} to ${EDGE_SIDE_LABELS[toSide]}`} onClick={() => editEdgeSides(e)}>sides</button>}
-                  {onRemoveEdge && <button className="x" title="Remove connection" onClick={() => onRemoveEdge(e)}>×</button>}
+                  </span>}
+                  {!e.relationshipId && onEditEdge && <button className="sidebtn" title={`Attach sides: ${EDGE_SIDE_LABELS[fromSide]} to ${EDGE_SIDE_LABELS[toSide]}`} onClick={() => editEdgeSides(e)}>sides</button>}
+                  {!e.relationshipId && onRemoveEdge && <button className="x" title="Remove connection" onClick={() => onRemoveEdge(e)}>×</button>}
                 </div>
               </foreignObject>
             </g>
@@ -1452,7 +1502,8 @@ export default function FlowCanvas({
         const team = teamOf?.(n);
         const isFramework = n.kind === 'framework';
         const isActionMechanism = n.mechKind === 'actionMechanism';
-        const body = renderBody ? renderBody(n) : n.body;
+        const entityCard = usesNarrativeEntityCard(n);
+        const body = entityCard ? null : isStoryBeat(n) ? storyBeatCanvasText(n) : renderBody ? renderBody(n) : n.body;
         const w = nodeW(n);
         const h = explicitNodeH(n);
         const isArchetypeCombinations = n.kind === 'characterArchetypeCombinations';
@@ -1474,7 +1525,7 @@ export default function FlowCanvas({
             onPointerMove={onNodeMove}
             onPointerUp={(e) => onNodeUp(e, n)}
             onPointerCancel={(e) => onNodeUp(e, n)}
-            onDoubleClick={onOpenNode && !isFramework ? (e) => { e.stopPropagation(); onOpenNode(n.id); } : undefined}
+            onDoubleClick={onOpenNode && (!isFramework || n.characterInput) ? (e) => { e.stopPropagation(); onOpenNode(n.id); } : undefined}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(n.id); }}
           >
             <div className="nh">
@@ -1484,9 +1535,9 @@ export default function FlowCanvas({
                   {icon && <PrimIcon icon={icon} color="#fff" size={12} />}
                 </button>
               ) : <span className="icpick" style={{ background: color }}>{icon && <PrimIcon icon={icon} color="#fff" size={12} />}</span>}
-              <div className="nhmeta"><small style={{ color }}>{isActionMechanism ? (n.mechanismCategory || 'Action Mechanism') : (KIND_LABEL[n.kind] ?? n.kind)}</small><b>{n.kind === 'item' ? (n.shortTitle || n.title) : n.title}</b></div>
+              <div className="nhmeta"><small style={{ color: `color-mix(in srgb,${color} var(--node-label-mix,100%),var(--ink))` }}>{isActionMechanism ? (n.mechanismCategory || 'Action Mechanism') : (n.kindLabel || KIND_LABEL[n.kind] || n.kind)}</small><b>{n.kind === 'item' ? (n.shortTitle || n.title) : n.title}</b></div>
               {team && <span className="nteam" style={{ background: team.color }} title={`Lane: ${team.name}`}>{team.name}</span>}
-              {onOpenNode && !isFramework && (
+              {onOpenNode && (!isFramework || n.characterInput) && (
                 <button className="nopen" title="Open detail graph (or double-click the node)"
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => { e.stopPropagation(); onOpenNode(n.id); }}>
@@ -1495,7 +1546,7 @@ export default function FlowCanvas({
               )}
             </div>
             <div className="nb">
-              {n.image?.dataUrl && n.subnodeKind !== 'actionTypePattern' && (
+              {!entityCard && n.image?.dataUrl && n.subnodeKind !== 'actionTypePattern' && (
                 <span className={`nimgframe${n.mechKind === 'actionProbability' ? ' resolution' : ''}${isActionMechanism ? ' action-mechanism' : ''}`}>
                   <img className="nimg" src={n.image.dataUrl} alt="" draggable={false}
                     style={{ transform: n.mechKind === 'actionProbability' || isActionMechanism
@@ -1516,7 +1567,7 @@ export default function FlowCanvas({
                   ))}
                 </div>
               ) : n.mechKind === 'gameType' ? <GameTypePreview node={n} /> : body}
-              {n.mechKind !== 'gameType' && renderExtra?.(n, { width: w, height: h })}
+              {entityCard ? <CharacterNode node={n} graph={{ nodes, edges }} scope={graphScope} /> : n.mechKind !== 'gameType' && renderExtra?.(n, { width: w, height: h })}
             </div>
             {onConnect && EDGE_SIDES.map((side) => (
               <span key={side} data-side={side}

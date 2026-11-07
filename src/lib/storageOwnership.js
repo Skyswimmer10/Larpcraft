@@ -1,4 +1,5 @@
 export const MASTER_LIBRARY_COLLECTIONS = new Set([
+  'research',
   'mechanicsSources',
   'actionPatternMechanisms',
   'actionProbabilityMechanisms',
@@ -24,6 +25,7 @@ export const MASTER_LIBRARY_COLLECTIONS = new Set([
   'mechanicSensorTypes',
   'mechanicSequenceModes',
   'narrative',
+  'conversationTemplates',
   'narrativeCategories',
   'stories',
 ]);

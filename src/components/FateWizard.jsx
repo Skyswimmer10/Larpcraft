@@ -16,6 +16,8 @@ import { normalizeFateDraft, addFateEmotionPattern, linkFateListenerProfile, fat
 import { FateTypePicker, FateSelectionDetails, FateEmotionPatterns, FateProfileGuidance, FateSelectedIdeas } from './FatePurposeControls.jsx';
 import './FateWizard.css';
 import './FatePurposes.css';
+import FateCharacter, { FateCharacterNavigation, FateCharacterPreview } from './FateCharacter.jsx';
+import { fateCharacterEntities, fateCharacterScope, fateReferenceNode, refreshFateCharacterLinks, currentFateCharacterDraft } from '../lib/fateCharacter.js';
 
 const EMPTY = Object.freeze({});
 const formatValue = value => Array.isArray(value) ? value.join(', ') : value === true ? 'Yes' : value === false ? 'No' : value ?? C.unset;
@@ -24,9 +26,13 @@ const selectEntry = (label, value, options, onChange) => <label className="nw-fi
 
 function initialFate(game, session, initialTargetId, scope, initialPurpose) {
   const targetId = session?.targetId || initialTargetId || '';
-  const existing = Object.values(game.fateWizardDrafts || {}).filter(draft => draft.workspace?.scopeKey === fateScopeKey(scope) && (draft.workspace?.targetId || '') === targetId && (!session || draft.workspace?.sessionId === session.record.sessionId)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+  const existing = session && Object.values(game.fateWizardDrafts || {}).filter(draft => draft.workspace?.scopeKey === fateScopeKey(scope) && (draft.workspace?.targetId || '') === targetId && (!session || draft.workspace?.sessionId === session.record.sessionId)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
   if (existing?.schemaVersion > 1) throw new Error('This FATE draft was made by a newer version of Larpcraft. Update the app before editing it.');
-  return existing ? normalizeFateDraft(existing) : createFateDraft({ record: session?.record, answers: session?.answers, preferences: game.fateWizardPreferences || {}, purpose: session?.record.focus || initialPurpose || game.fateWizardPreferences?.lastPurpose || 'communication', targetId, scope });
+  const value = existing ? normalizeFateDraft(existing) : createFateDraft({ record: session?.record, answers: session?.answers, preferences: game.fateWizardPreferences || {}, purpose: session?.record.focus || initialPurpose || game.fateWizardPreferences?.lastPurpose || 'communication', targetId, scope });
+  const target = locateGraph(game, scope || { coll: 'nodes' }).nodes[targetId];
+  if (value.meta.purpose === 'character' && !existing && target?.kind === 'character') value.title = target.title || target.name || value.title;
+  if (value.meta.purpose === 'character' && target && target.kind !== 'character') value.workspace.targetId = '';
+  return value;
 }
 
 export default function FateWizard(props) {
@@ -50,6 +56,7 @@ function FateEditor({ initial, session, sessions = [], onContinueSession, onClos
   const [selectedModel, setSelectedModel] = useState('');
   const [selectedProfile, setSelectedProfile] = useState('');
   const [savedDraft, setSavedDraft] = useState(false);
+  const [showSessions, setShowSessions] = useState(false);
   const dialog = useRef(null), main = useRef(null), latest = useRef(draft), stopped = useRef(false), group = useRef(null);
   latest.current = draft;
   const preferences = game.fateWizardPreferences || EMPTY;
@@ -58,16 +65,21 @@ function FateEditor({ initial, session, sessions = [], onContinueSession, onClos
   const entities = useMemo(() => fateEntities(game), [game.nodes, game.masterNodes, game.locations, game.items, game.teams, game.players]);
   const models = useMemo(() => fateSavedModels(game), [game.nodes, game.masterNodes]);
   const profiles = models.filter(model => model.record.focus === 'character');
+  const characterEntities = useMemo(() => fateCharacterEntities(game), [game.nodes, game.masterNodes, game.taskNodes, game.storyboardNodes, game.teams, game.factions]);
   const profileSource = profiles.find(model => model.key === draft.communication.profile?.key);
   const stepIndex = Math.max(0, FATE_STEPS.findIndex(step => step.key === draft.lastStep));
   const step = FATE_STEPS[stepIndex], pillar = step.section ? step.key : null;
   const locked = pillar && draft.meta.locks[pillar];
-  const scope = draft.workspace.scope || { coll: 'nodes' }, graph = locateGraph(game, scope), target = graph.nodes[draft.workspace.targetId];
+  const storedScope = draft.workspace.scope || { coll: 'nodes' };
+  const existingTarget = locateGraph(game, storedScope).nodes[draft.workspace.targetId];
+  const scope = character && !existingTarget ? fateCharacterScope(game, storedScope) : storedScope, graph = locateGraph(game, scope), target = graph.nodes[draft.workspace.targetId];
+  const characterDraft = character ? currentFateCharacterDraft(draft, characterEntities, target) : draft;
+  latest.current = characterDraft;
   const record = fateSessionRecord(target, draft.workspace);
   const checks = fateChecks(draft), suggestions = pillar ? fateSuggestions(draft, pillar) : [];
   const stale = Object.entries(draft.fieldMeta).filter(([, meta]) => meta.stale);
-  const output = fateOutput(draft);
-  const resultReady = !!draft.title.trim() && !(draft.workspace.targetId && !target) && (!communication || !!output.trim());
+  const output = fateOutput(characterDraft);
+  const resultReady = !!characterDraft.title.trim() && !(draft.workspace.targetId && !target) && (!communication || !!output.trim());
   const transition = (updater, key = null) => {
     const coalesce = key && key === group.current;
     group.current = key;
@@ -79,7 +91,7 @@ function FateEditor({ initial, session, sessions = [], onContinueSession, onClos
   };
   const edit = (path, value) => {
     if (path === 'meta.purpose' && record) return;
-    transition(current => editFate(current, path, value), typeof value === 'string' ? path : null);
+    transition(current => { const next = editFate(current, path, value); if (path === 'title' && current.meta.purpose === 'character') next.workspace = { ...next.workspace, pendingCharacterName: true }; if (path === 'meta.purpose' && value === 'character' && target && target.kind !== 'character') next.workspace = { ...next.workspace, targetId: '', sessionId: null }; if (path === 'meta.purpose' && value === 'character' && target?.kind === 'character') next.title = target.title || target.name || next.title; return next; }, typeof value === 'string' ? path : null);
     const preference = { 'meta.purpose': 'lastPurpose', 'meta.depth': 'lastDepth', 'output.format': 'lastOutputFormat' }[path];
     if (preference) dispatch({ type: 'SET_FATE_PREFERENCES', preferences: { ...preferences, [preference]: value } });
   };
@@ -88,7 +100,7 @@ function FateEditor({ initial, session, sessions = [], onContinueSession, onClos
   const remember = (path, value, custom) => dispatch({ type: 'SET_FATE_PREFERENCES', preferences: rememberFateOption(game.fateWizardPreferences || {}, path, value, custom) });
   const go = key => edit('lastStep', key);
   const next = () => go(FATE_STEPS[Math.min(stepIndex + 1, FATE_STEPS.length - 1)].key);
-  const keepDraft = () => { if (!stopped.current) dispatch({ type: 'SAVE_FATE_DRAFT', draft: { ...latest.current, updatedAt: Date.now() } }); };
+  const keepDraft = () => { if (!stopped.current) dispatch({ type: 'SAVE_FATE_DRAFT', draft: { ...refreshFateCharacterLinks(latest.current, characterEntities), updatedAt: Date.now() } }); };
   const close = () => { keepDraft(); onClose(); };
 
   useEffect(() => {
@@ -100,9 +112,9 @@ function FateEditor({ initial, session, sessions = [], onContinueSession, onClos
   useEffect(() => {
     if (stopped.current || finished) return;
     setSavedDraft(false);
-    const timer = setTimeout(() => { dispatch({ type: 'SAVE_FATE_DRAFT', draft: { ...draft, updatedAt: Date.now() } }); setSavedDraft(true); }, 500);
+    const timer = setTimeout(() => { dispatch({ type: 'SAVE_FATE_DRAFT', draft: { ...characterDraft, updatedAt: Date.now() } }); setSavedDraft(true); }, 500);
     return () => clearTimeout(timer);
-  }, [draft, dispatch, finished]);
+  }, [draft, dispatch, finished, characterEntities]);
   useEffect(() => { main.current?.scrollTo(0, 0); main.current?.focus(); }, [draft.lastStep]);
   const linked = keys => keys.map(key => entities.find(entity => entity.key === key) || { key, name: C.missingEntity, type: '', description: '' });
   const targetKey = target ? JSON.stringify([scope.coll || 'nodes', ...(scope.parentPath || (scope.parentId ? [scope.parentId] : [])), target.id]) : '';
@@ -114,7 +126,16 @@ function FateEditor({ initial, session, sessions = [], onContinueSession, onClos
   const loadDraft = id => {
     const value = game.fateWizardDrafts?.[id];
     if (!value || value.schemaVersion !== 1) return;
-    keepDraft(); setHistory({ past: [], present: normalizeFateDraft(value), future: [] }); group.current = null;
+    keepDraft(); setHistory({ past: [], present: normalizeFateDraft(value), future: [] }); group.current = null; setShowSessions(false);
+  };
+  const loadModel = model => {
+    if (!model) return;
+    keepDraft();
+    const node = fateReferenceNode(game, model.entity.ref);
+    const modelScope = { coll: model.entity.ref.coll, parentPath: model.entity.ref.path.slice(0, -1) };
+    const value = createFateDraft({ record: model.record, answers: savedWizardSession(node, library, model.record)?.answers, targetId: node.id, scope: modelScope });
+    if (value.meta.purpose === 'character') value.title = node.title || node.name || value.title;
+    setHistory({ past: [], present: value, future: [] }); group.current = null; setShowSessions(false);
   };
   const fresh = model => {
     keepDraft();
@@ -126,10 +147,11 @@ function FateEditor({ initial, session, sessions = [], onContinueSession, onClos
   const save = includeLibrary => {
     if (!resultReady || stopped.current) return;
     const id = record?.resultId || genId(graph.nodes, `${game.meta.prefix}-N-`);
-    let node = createWizardNode({ source: FRAMEWORK_TYPES.fate, type: 'framework', title: draft.title, context: draft.context, focus: draft.meta.purpose, questions: fateQuestions(draft), answers: fateAnswers(draft), fateDraft: draft, id, position: visibleCanvasPlacement({ x: 100, y: 100 }), characterTemplate: game.meta.characterCardTemplate });
+    let node = createWizardNode({ source: FRAMEWORK_TYPES.fate, type: 'framework', title: characterDraft.title, context: character ? '' : draft.context, focus: draft.meta.purpose, questions: fateQuestions(characterDraft), answers: fateAnswers(characterDraft), fateDraft: character ? { ...characterDraft, workspace: { ...characterDraft.workspace, pendingCharacterName: false } } : characterDraft, id, position: visibleCanvasPlacement({ x: 100, y: 100 }), characterTemplate: game.meta.characterCardTemplate });
     if (record?.sessionId) node.narrativeWizard.sessionId = record.sessionId;
     if (target) node = record ? reviseWizardResult({ ...target, narrativeWizard: { ...record, answers: savedWizardSession(target, library, record)?.answers || record.answers } }, node, FRAMEWORK_TYPES.fate) : appendWizardResult(target, node);
-    const action = target ? { type: 'GRAPH_UPDATE_NODE', scope, id: target.id, patch: { ...(record ? { title: node.title, name: node.name } : {}), body: node.body, description: node.description, narrativeWizard: node.narrativeWizard, narrativeWizardHistory: node.narrativeWizardHistory, ...(node.questions ? { questions: node.questions } : {}), ...(node.sub ? { sub: node.sub } : {}) } } : { type: 'GRAPH_ADD_NODE', scope, node };
+    if (character && (!target || target.kind === 'character')) node = { ...node, title: characterDraft.title, name: characterDraft.title };
+    const action = target ? { type: 'GRAPH_UPDATE_NODE', scope, id: target.id, patch: { ...(record || character ? { title: node.title, name: node.name } : {}), body: node.body, description: node.description, ...(node.characterProfile ? { characterProfile: node.characterProfile } : {}), ...(node.characterCanvas ? { characterCanvas: node.characterCanvas } : {}), narrativeWizard: node.narrativeWizard, narrativeWizardHistory: node.narrativeWizardHistory, ...(node.questions ? { questions: node.questions } : {}), ...(node.sub ? { sub: node.sub } : {}) } } : { type: 'GRAPH_ADD_NODE', scope, node };
     stopped.current = true;
     dispatch({ type: 'BATCH', actions: [action, { type: 'REMOVE_FATE_DRAFT', id: draft.id }] });
     if (includeLibrary) {
@@ -152,20 +174,21 @@ function FateEditor({ initial, session, sessions = [], onContinueSession, onClos
   };
   const calibration = () => <details className="fw-calibration"><summary>{C.calibration}</summary>{selectEntry(C.cap, String(draft.safety.cap), ['0', '1', '2', '3', '4'], value => edit('safety.cap', Number(value)))}<p>{FATE_FIELDS.A.find(field => field.path === 'authority.cost').options[draft.safety.cap]}</p><label className="fw-toggle"><input type="checkbox" checked={draft.safety.optIn} onChange={event => edit('safety.optIn', event.target.checked)} />{C.optIn}</label>{draft.safety.optIn && textEntry(C.safetyNote, draft.safety.note, value => edit('safety.note', value))}<label className="fw-toggle"><input type="checkbox" checked={draft.safety.debrief} onChange={event => edit('safety.debrief', event.target.checked)} />{C.debrief}</label>{draft.safety.debrief && textEntry(C.debriefNote, draft.safety.debriefNote, value => edit('safety.debriefNote', value))}</details>;
 
-  return createPortal(<dialog ref={dialog} className={`narrative-wizard fate-wizard${advanced ? ' fw-advanced' : ''}`} aria-labelledby="fate-title" onCancel={event => { event.preventDefault(); event.stopPropagation(); close(); }} onBlurCapture={() => { group.current = null; }} onKeyDown={event => {
+  return createPortal(<dialog ref={dialog} className={`narrative-wizard fate-wizard${character ? ' fw-character nw-fullscreen' : ''}${advanced ? ' fw-advanced' : ''}`} aria-labelledby="fate-title" onCancel={event => { event.preventDefault(); event.stopPropagation(); close(); }} onBlurCapture={() => { group.current = null; }} onKeyDown={event => {
     if (!(event.ctrlKey || event.metaKey)) return;
     if (event.key === 'Enter' && !finished) { event.preventDefault(); event.stopPropagation(); next(); }
     if (event.key.toLowerCase() === 'z') { event.preventDefault(); event.stopPropagation(); event.shiftKey ? redo() : undo(); }
   }}>
-    <div className="nw-shell"><header className="nw-header"><div><small>{C.title}</small><h2 id="fate-title">{finished ? C.saved : step.name}</h2></div><div className="fw-header-actions">{!finished && <><fieldset className="fw-mode"><legend>{C.depth}</legend>{['simple', 'advanced'].map(depth => <label key={depth} className={draft.meta.depth === depth ? 'selected' : ''}><input type="radio" name="fate-depth" checked={draft.meta.depth === depth} onChange={() => edit('meta.depth', depth)} />{C[depth]}</label>)}</fieldset><button type="button" className="btn" aria-label={C.undo} disabled={!history.past.length} onClick={undo}>↶</button><button type="button" className="btn" aria-label={C.redo} disabled={!history.future.length} onClick={redo}>↷</button></>}<button type="button" className="btn" onClick={close}>{C.close}</button></div></header>
-      {!finished && <nav className="fw-stepper" aria-label="FATE steps">{FATE_STEPS.map(item => { const progress = item.section ? fateCompletion(draft, item.key) : null; const changed = stale.some(([path]) => fatePillarFor(path) === item.key); return <button type="button" key={item.key} aria-current={draft.lastStep === item.key ? 'step' : undefined} onClick={() => go(item.key)}><b>{item.section ? item.key : item.key === 'setup' ? '1' : '✓'}</b><span>{item.name}{changed ? ' ⟳' : ''}</span>{progress && <meter aria-label={`${item.name}: ${C.completed}`} min="0" max="1" value={progress.ratio} />}</button>; })}</nav>}
-      <div className="fw-body"><aside className="fw-context"><b>{C.contextRail}</b><p>{advanced ? C.advancedHelp : C.simpleHelp}</p>{linkedEntities.map(entity => <details className="fw-context-card" key={entity.key}><summary>{entity.name}<small>{entity.type}</small></summary><p>{entity.description}</p></details>)}{['F', 'A', 'T', 'E'].map(key => { const item = FATE_STEPS.find(step => step.key === key), value = draft[item.section]; return <div className={`fw-context-card${key === pillar ? ' current' : ''}`} key={key} style={{ '--fate-accent': item.color }}><button type="button" onClick={() => go(key)}><b>{item.name}{draft.meta.locks[key] ? ' · 🔒' : ''}</b><span>{summarizeFateStep(draft, key) || C.notStarted}</span></button>{!!draft.notes[key] && <details><summary>{C.notes}</summary><p>{draft.notes[key]}</p></details>}{advanced && <small>{FATE_FIELDS[key].filter(field => ['single', 'multi'].includes(field.control)).flatMap(field => { const v = value[field.path.split('.')[1]]; return Array.isArray(v) ? v : v ? [v] : []; }).slice(0, 4).join(' · ')}</small>}</div>; })}<small role="status">{savedDraft ? C.draft : C.saving}</small></aside>
-        <main className="nw-main fw-main" ref={main} tabIndex={-1}>
+    <div className="nw-shell"><header className="nw-header"><div><small>{C.title}</small><h2 id="fate-title">{finished ? C.saved : character ? draft.lastStep === 'setup' ? 'Start a character' : draft.lastStep === 'review' ? 'Character description' : step.name : step.name}</h2></div><div className="fw-header-actions">{!finished && <><fieldset className="fw-mode"><legend>{C.depth}</legend>{['simple', 'advanced'].map(depth => <label key={depth} className={draft.meta.depth === depth ? 'selected' : ''}><input type="radio" name="fate-depth" checked={draft.meta.depth === depth} onChange={() => edit('meta.depth', depth)} />{C[depth]}</label>)}</fieldset><button type="button" className="btn" aria-label={C.undo} disabled={!history.past.length} onClick={undo}>↶</button><button type="button" className="btn" aria-label={C.redo} disabled={!history.future.length} onClick={redo}>↷</button></>}<button type="button" className="btn small" aria-expanded={showSessions} onClick={() => setShowSessions(!showSessions)}>Drafts & saved work</button><button type="button" className="btn" onClick={close}>{C.close}</button></div></header>
+      {!finished && showSessions && <section className="fc-session-panel" aria-label="Drafts and saved FATE work"><label className="nw-field">Unfinished draft<select className="field-input" value={selectedDraft} onChange={event => setSelectedDraft(event.target.value)}><option value="">Choose a draft…</option>{Object.values(game.fateWizardDrafts || {}).filter(item => item.id !== draft.id && item.schemaVersion === 1).map(item => <option key={item.id} value={item.id}>{item.title || 'Unnamed'} · {NARRATIVE_FOCUSES[item.meta.purpose]?.label}</option>)}</select></label><button type="button" className="btn" disabled={!selectedDraft} onClick={() => loadDraft(selectedDraft)}>Continue draft</button><label className="nw-field">Saved profile or conversation<select className="field-input" value={selectedModel} onChange={event => setSelectedModel(event.target.value)}><option value="">Choose saved work…</option>{models.map(model => <option key={model.key} value={model.key}>{model.entity.name} · {model.record.title} · {model.entity.ref.path.join(' / ')}</option>)}</select></label><button type="button" className="btn" disabled={!selectedModel} onClick={() => loadModel(models.find(model => model.key === selectedModel))}>Edit saved work</button><button type="button" className="btn" disabled={!selectedModel} onClick={() => { fresh(models.find(model => model.key === selectedModel)); setShowSessions(false); }}>Copy as new</button></section>}
+      {!finished && !character && <nav className="fw-stepper" aria-label="FATE steps">{FATE_STEPS.map(item => { const progress = item.section ? fateCompletion(draft, item.key) : null; const changed = stale.some(([path]) => fatePillarFor(path) === item.key); return <button type="button" key={item.key} aria-current={draft.lastStep === item.key ? 'step' : undefined} onClick={() => go(item.key)}><b>{item.section ? item.key : item.key === 'setup' ? '1' : '✓'}</b><span>{character && item.key === 'setup' ? 'Start' : character && item.key === 'review' ? 'Character description' : item.name}{changed ? ' ⟳' : ''}</span>{progress && !character && <meter aria-label={`${item.name}: ${C.completed}`} min="0" max="1" value={progress.ratio} />}</button>; })}</nav>}
+      <div className={`fw-body${character && finished ? ' fc-finished' : ''}`}>{!finished && character && <FateCharacterNavigation draft={characterDraft} onGo={go} />}{!character && <aside className="fw-context"><b>{C.contextRail}</b><p>{advanced ? C.advancedHelp : C.simpleHelp}</p>{linkedEntities.map(entity => <details className="fw-context-card" key={entity.key}><summary>{entity.name}<small>{entity.type}</small></summary><p>{entity.description}</p></details>)}{['F', 'A', 'T', 'E'].map(key => { const item = FATE_STEPS.find(step => step.key === key), value = draft[item.section]; return <div className={`fw-context-card${key === pillar ? ' current' : ''}`} key={key} style={{ '--fate-accent': item.color }}><button type="button" onClick={() => go(key)}><b>{item.name}{draft.meta.locks[key] ? ' · 🔒' : ''}</b><span>{summarizeFateStep(draft, key) || C.notStarted}</span></button>{!!draft.notes[key] && <details><summary>{C.notes}</summary><p>{draft.notes[key]}</p></details>}{advanced && <small>{FATE_FIELDS[key].filter(field => ['single', 'multi'].includes(field.control)).flatMap(field => { const v = value[field.path.split('.')[1]]; return Array.isArray(v) ? v : v ? [v] : []; }).slice(0, 4).join(' · ')}</small>}</div>; })}<small role="status">{savedDraft ? C.draft : C.saving}</small></aside>}
+        <main id={character ? 'fate-character-step-content' : undefined} className="nw-main fw-main" ref={main} tabIndex={-1}>
           {finished ? <><h3>{finished.library ? C.savedBoth : C.savedGame}</h3><button type="button" className="btn primary" onClick={() => { onSaved?.(finished.id); onClose(); }}>{C.done}</button></> : <>
+            {character ? <FateCharacter draft={characterDraft} onEdit={edit} onTransition={transition} field={field} entities={characterEntities} output={output} record={record} onGo={go} /> : <>
             {communication && draft.communication.profile && <section className="fp-profile-status"><b>{P.known}: {draft.communication.profile.name}</b>{(!profileSource || fateProfileSignature(profileSource) !== draft.communication.profile.signature) && <p>{profileSource ? P.changedProfile : P.missingProfile}</p>}{profileSource && fateProfileSignature(profileSource) !== draft.communication.profile.signature && <button type="button" className="btn" onClick={() => transition(current => linkFateListenerProfile(current, profileSource))}>{P.refreshProfile}</button>}<button type="button" className="linkbtn" onClick={() => edit('communication.profile', null)}>{P.unlinkProfile}</button></section>}
             {draft.lastStep === 'setup' && <>
               <p>{advanced ? C.advancedHelp : C.simpleHelp}</p>
-              {sessions.length > 1 && <label className="nw-field">{C.savedWizard}<select aria-label={C.savedWizard} className="field-input" value={sessions.findIndex(item => item.record.sourceId === session?.record.sourceId && (item.record.sessionId ? item.record.sessionId === session?.record.sessionId : item.record.title === session?.record.title))} onChange={event => { keepDraft(); onContinueSession(event.target.value); }}>{sessions.map((item, index) => <option key={index} value={index}>{item.record.sourceLabel} — {item.record.title}</option>)}</select></label>}
               <FateTypePicker purpose={draft.meta.purpose} onChange={value => edit('meta.purpose', value)} disabled={!!record} />
               <label className="nw-field">{C.titleLabel}<input className="field-input" value={draft.title} onChange={event => edit('title', event.target.value)} /></label>
               <details open={!FATE_TYPES[draft.meta.purpose]}><summary>{P.otherUses}</summary><label className="nw-field">{C.purpose}<select aria-label={C.purpose} className="field-input" disabled={!!record} value={draft.meta.purpose} onChange={event => edit('meta.purpose', event.target.value)}>{Object.entries(NARRATIVE_FOCUSES).map(([key, value]) => <option key={key} value={key}>{FATE_TYPES[key]?.label || value.label}</option>)}</select></label></details>
@@ -184,8 +207,6 @@ function FateEditor({ initial, session, sessions = [], onContinueSession, onClos
                 edit('workspace', entity ? { ...draft.workspace, targetId: entity.ref.path.at(-1), scope: { coll: entity.ref.coll, parentPath: entity.ref.path.slice(0, -1) }, scopeKey: fateScopeKey({ coll: entity.ref.coll, parentPath: entity.ref.path.slice(0, -1) }), sessionId: null } : { ...draft.workspace, targetId: '', sessionId: null });
               }}><option value="">{communication ? P.separateConversation : character ? P.separateProfile : C.newResult}</option>{entities.filter(entity => ['nodes', 'masterNodes'].includes(entity.ref.coll)).map(entity => <option key={entity.key} value={entity.key}>{C.attach}: {entity.name}</option>)}</select></label>
               <p className="nw-help">{P.destinationHelp}</p>
-              <details className="fw-drafts"><summary>{C.drafts}</summary><label className="nw-field">{C.drafts}<select aria-label={C.drafts} className="field-input" value={selectedDraft} onChange={event => setSelectedDraft(event.target.value)}><option value="">{C.unset}</option>{Object.values(game.fateWizardDrafts || {}).filter(item => item.id !== draft.id && item.schemaVersion === 1).map(item => <option key={item.id} value={item.id}>{item.title || C.notStarted} · {NARRATIVE_FOCUSES[item.meta.purpose]?.label}</option>)}</select></label><button type="button" className="btn" disabled={!selectedDraft} onClick={() => loadDraft(selectedDraft)}>{C.drafts}</button><button type="button" className="btn" onClick={() => fresh()}>{C.fresh}</button><p>{C.draftHelp}</p></details>
-              {models.length > 0 && <details><summary>{C.startFrom}</summary><label className="nw-field">{C.startFrom}<select aria-label={C.startFrom} className="field-input" value={selectedModel} onChange={event => setSelectedModel(event.target.value)}><option value="">{C.unset}</option>{models.map(model => <option key={model.key} value={model.key}>{model.entity.name} · {model.record.title}</option>)}</select></label><button type="button" className="btn" disabled={!selectedModel} onClick={() => fresh(models.find(model => model.key === selectedModel))}>{C.duplicate}</button></details>}
               {advanced && <>
                 <FateChoices field={{ path: 'meta.mode', label: C.mode, control: 'single', options: [C.build, C.diagnose] }} value={draft.meta.mode === 'diagnose' ? C.diagnose : C.build} preferences={EMPTY} onChange={value => edit('meta.mode', value === C.diagnose ? 'diagnose' : 'build')} onRemember={() => {}} />
                 {draft.meta.mode === 'diagnose' && <>{entityPicker(C.diagnoseSource, 'meta.source')}<p className="nw-help">{C.diagnosisHelp}</p>{draft.meta.source && <details open><summary>{C.sourceText}</summary><p className="fw-source-description">{entities.find(entity => entity.key === draft.meta.source)?.description || C.missingEntity}</p></details>}</>}
@@ -233,11 +254,13 @@ function FateEditor({ initial, session, sessions = [], onContinueSession, onClos
               {advanced && draft.meta.intensity >= 4 && linked(draft.meta.targets).some(entity => entity.type === 'players' || entity.type === 'teams') && <p className="nw-help">{C.playerReminder}</p>}
             </>}
             {pillar && <details className="fw-inline-preview"><summary>{C.preview}</summary><p>{output || (communication ? P.dialogueEmpty : C.previewEmpty)}</p>{communication && <div className="fp-design-notes">{fateDesignNotes(draft)}</div>}</details>}
+            </>}
           </>}
         </main>
-        {!finished && <aside className="fw-live-preview"><small>{draft.meta.mode === 'diagnose' ? C.gaps : C.preview}</small><p>{output || (communication ? P.dialogueEmpty : C.previewEmpty)}</p><FateSelectedIdeas draft={draft} />{communication && <details open><summary>{P.design}</summary><div className="fp-design-notes">{fateDesignNotes(draft)}</div></details>}<details><summary>{C.linked}</summary>{linkedEntities.map(entity => <section key={entity.key}><b>{entity.name}</b><p>{entity.description}</p></section>)}</details></aside>}
+        {!finished && !character && <aside className="fw-live-preview"><small>{draft.meta.mode === 'diagnose' ? C.gaps : C.preview}</small><p>{output || (communication ? P.dialogueEmpty : C.previewEmpty)}</p><FateSelectedIdeas draft={draft} />{communication && <details open><summary>{P.design}</summary><div className="fp-design-notes">{fateDesignNotes(draft)}</div></details>}<details><summary>{C.linked}</summary>{linkedEntities.map(entity => <section key={entity.key}><b>{entity.name}</b><p>{entity.description}</p></section>)}</details></aside>}
+        {!finished && character && <aside className="fw-live-preview fc-ideas"><FateCharacterPreview draft={characterDraft} onGo={go} /></aside>}
       </div>
-      {!finished && <footer className="nw-footer"><button type="button" className="btn" onClick={() => stepIndex ? go(FATE_STEPS[stepIndex - 1].key) : close()}>{C.back}</button><span>{savedDraft ? C.draft : C.saving}</span>{draft.lastStep === 'review' ? <><button type="button" className="btn" disabled={!resultReady} onClick={() => save(false)}>{C.saveGame}</button><button type="button" className="btn primary" disabled={!resultReady} onClick={() => save(true)}>{C.saveLibrary}</button></> : <><button type="button" className="btn" onClick={() => go('review')}>{C.reviewNow}</button><button type="button" className="btn primary" onClick={next}>{stepIndex === 4 ? C.review : C.next}</button></>}</footer>}
+      {!finished && <footer className="nw-footer"><button type="button" className="btn" onClick={() => stepIndex ? go(FATE_STEPS[stepIndex - 1].key) : close()}>{C.back}</button><span>{savedDraft ? C.draft : C.saving}</span>{draft.lastStep === 'review' ? <><button type="button" className="btn" disabled={!resultReady} onClick={() => save(false)}>{C.saveGame}</button><button type="button" className="btn primary" disabled={!resultReady} onClick={() => save(true)}>{C.saveLibrary}</button></> : <><button type="button" className="btn" onClick={() => go('review')}>{character ? 'Character description' : C.reviewNow}</button><button type="button" className="btn primary" onClick={next}>{character && stepIndex === 0 ? 'Start exploring' : stepIndex === 4 ? character ? 'Character description' : C.review : C.next}</button></>}</footer>}
     </div>
   </dialog>, document.body);
 }

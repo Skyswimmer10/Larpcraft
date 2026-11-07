@@ -1,6 +1,7 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 export function frameworkBaseSize(framework = {}) {
+  if (framework.layout === 'groupFoundations') return { w: 360, h: 400 };
   if (framework.layout === 'preferenceSpectra') return { w: 460, h: 1050 };
   if (framework.layout === 'languageSpectrum') return { w: 560, h: 1800 };
   if (framework.layout === 'profileDomains') return { w: 420, h: 680 };

@@ -30,6 +30,7 @@ function JourneyDiagram({ framework }) {
 
 function FrameworkDesign({ fw, className }) {
   const layout = fw.layout || 'fate';
+  if (layout === 'groupFoundations') return <div className={`framework-design ${className}`} style={{ '--framework-accent': fw.color }}><div className="framework-design-caption"><span>Optional lenses for group creation</span><b>{fw.phases.length}</b></div><div className="framework-stages">{fw.phases.map(phase => <div className="framework-stage" key={phase.key}><div><strong>{phase.name}</strong><small>{phase.short}</small></div></div>)}</div></div>;
   if (layout === 'preferenceSpectra') return <div className={`framework-design ${className}`} style={{ '--framework-accent': fw.color }}><PreferenceSpectra framework={fw} /></div>;
   if (layout === 'languageSpectrum') return <div className={`framework-design ${className}`} style={{ '--framework-accent': fw.color }}><LanguageSpectrum framework={fw} /></div>;
   if (layout === 'profileDomains') return <div className={`framework-design framework-profile ${className}`} style={{ '--framework-accent': fw.color }}>

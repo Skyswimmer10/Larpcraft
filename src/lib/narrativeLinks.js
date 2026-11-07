@@ -1,4 +1,5 @@
 import { ADDITIONAL_NODE_TYPES, BASE_NODE_TYPES, FRAMEWORK_TYPES } from '../data/seed.js';
+import { detachStoryBeatLinks } from './storyBeat.js';
 
 export const LINKING_NODE_KIND = 'linkingNode';
 export const STORY_STRUCTURE_CONTAINER_KIND = 'storyStructureContainer';
@@ -30,7 +31,7 @@ const frameworkNodes = (frameworks = {}) => Object.fromEntries(
   }),
 );
 
-const sourceGraph = (source) => ({
+const sourceGraph = (source) => detachStoryBeatLinks({
   nodes: {
     ...clone(source?.nodes || {}),
     ...frameworkNodes(source?.frameworks || {}),
@@ -107,12 +108,13 @@ export function buildNarrativeLinkInsertion(lib, ref, nodes, position = { x: 100
 
   if (ref.type === 'narrative') {
     const template = lib.narrative?.[ref.id];
-    const source = clone(template?.template || {});
+    const source = detachStoryBeatLinks({ ...clone(template?.template || {}), kind: template?.template?.kind || template.nodeKind || 'storyBeat' });
     return {
       ...source,
       id,
       primitiveId: template.id,
       kind: source.kind || template.nodeKind || 'event',
+      ...((source.kind || template.nodeKind) === 'item' ? { itemId: null } : {}),
       title: template.name,
       body: source.body ?? template.body ?? '',
       x: position.x,

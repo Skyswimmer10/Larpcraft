@@ -1,0 +1,155 @@
+/* Application chrome follows the palette. Authored node colors, illustrations,
+   photographs, charts, map tiles and visual PDF exports retain their own colors. */
+:root[data-palette]{
+  --bg:var(--ground);--text:var(--ink);--border:var(--line);--accent:var(--brand);
+  --faint:var(--theme-muted);--line-soft:color-mix(in srgb,var(--line) 55%,var(--panel));
+  --surface-tint:color-mix(in srgb,var(--secondary) 6%,var(--panel));
+  --surface-glass:color-mix(in srgb,var(--panel) 95%,transparent);
+  --field-bg:var(--ground);--on-color:#fff;
+  --node-label-mix:100%;
+  --ok:#86D9AD;--warn:#EDBC76;--bad:#F19AA6;--danger:var(--bad);--info:#8AC4F0;
+}
+:root[data-tone=light]{--ok:#237552;--warn:#8E5A12;--bad:#B3384F;--info:#286BA1;--node-label-mix:25%}
+:root[data-palette] body{background:var(--ground);color:var(--ink)}
+:root[data-palette] .ui-refresh{--muted:var(--theme-muted);--faint:var(--theme-muted)}
+:root[data-palette] :is(input,textarea,select){accent-color:var(--brand)}
+:root[data-palette] :is(input,textarea)::placeholder{color:var(--muted);opacity:.85}
+:root[data-palette] select{color-scheme:inherit}
+:root[data-palette] option{background:var(--panel);color:var(--ink)}
+:root[data-palette] :is(.titlebar,.menudrop,.modal,.library-browser.library-browser-assets,.librows,.playersplit,.nodepal,.nodebuilder-wrap,.cptsectionhead,.structeditor,.story-planning-dialog){background:var(--panel);color:var(--ink)}
+:root[data-palette] :is(.titlebar,.modalhead,.nw-header,.reference-dialog>header,.cp-workspace>header){border-color:var(--line)}
+:root[data-palette] :is(.mhead,.library-browser-head,.toolrow,.lanerow,.story-view-options){color:var(--ink)}
+:root[data-palette] .appname{color:var(--muted)}
+:root[data-palette] .storage-status{color:var(--ok)}
+:root[data-palette] .storage-status.error{color:var(--warn)}
+:root[data-palette] .storage-status details[open]{background:var(--raised);color:var(--ink)}
+:root[data-palette] .appearance-controls button[aria-pressed=true]{color:var(--brand)}
+:root[data-palette] .ui-refresh .nav{color:color-mix(in srgb,var(--nav-accent) 45%,var(--ink))}
+:root[data-palette] .ui-refresh .nav.on{color:var(--ink);background:var(--selected)}
+:root[data-palette] .btn.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+:root[data-palette] :is(.linkbtn,.libtag,.framework-open-label,.nw-kicker,.nw-header small,.nw-source-intro a){color:var(--brand)}
+:root[data-palette] .libbadge{color:var(--brand);border-color:var(--brand)}
+:root[data-palette] :is(.scopebadge.template,.scopebadge.instance){color:var(--ink)}
+:root[data-palette] :is(.field-input,.search,.readonlyfield){background:var(--field-bg);color:var(--ink);border-color:var(--line)}
+:root[data-palette] .nodepal-card{background:var(--panel)}
+:root[data-palette] :is(.library-browser-assets .library-browser-categories,.library-browser-assets .library-browser-categories button.on,.mechanism-browser-filters,.mechanism-browser-filter-footer,.mechanics-toolbox-filters,.location-annotation-panel){background:var(--surface-tint);color:var(--ink);border-color:var(--line)}
+:root[data-palette] :is(.card,.library-browser-card,.conversation-card,.playerrow,.team,.loccard){background:linear-gradient(145deg,var(--raised),var(--panel));color:var(--muted)}
+:root[data-palette] :is(.card,.library-browser-card,.conversation-card):hover{background:var(--raised)}
+:root[data-palette] :is(.card .ctitle,.card b,.library-browser-card-main b,.conversation-card-main>b,.team h3,.loccard b){color:var(--ink)}
+:root[data-palette] .mechanism-tile{background:var(--panel);color:var(--muted)}
+:root[data-palette] .mechanism-tile-image:not(.has-image){background:var(--ground)}
+:root[data-palette] .mechanism-tile-copy b{color:var(--ink)}
+:root[data-palette] :is(.nodepal-title,.nodepal-card b,.nodepal-kicker){color:var(--ink)}
+:root[data-palette] :is(.library-browser-card-main small,.library-browser-kicker,.conversation-card-names,.conversation-card-context,.conversation-card-footer>small,.conversation-card-cast>span:not(.cw-custom-icon)){color:var(--muted)}
+:root[data-palette] :is(.conversation-card-visual,.library-browser-reference .nw-source-symbol){color:var(--secondary)}
+:root[data-palette] .library-browser-card .library-browser-icon{color:var(--on-color)}
+:root[data-palette] .canvas{background:radial-gradient(circle at 1px 1px,var(--canvas-grid) 1px,transparent 1.5px) 0 0/22px 22px,var(--ground)}
+:root[data-palette] :is(.zoomctl,.multisel-count,.gcirclemove,.elab,.attlab){background:var(--panel);color:var(--ink)}
+:root[data-palette] :is(.node,.node.subnode,.node.concept,.node.framework){background:var(--panel);color:var(--ink)}
+:root[data-palette] :is(.nimgframe,.cptmap,.structthumb,.link-source-map,.modalthumb,.reference-file-preview img){background:var(--ground)}
+:root[data-palette] :is(.library-asset-body,.card .thumb,.library-asset-card .thumb,.masterrule-card,.act-lane-story,.act-lane-mechanics,.dynamics-toolbar){background:var(--surface-tint)}
+:root[data-palette] .timeline{background:radial-gradient(circle at 1px 1px,var(--canvas-grid) 1px,transparent 1.5px) 0 0/28px 28px,var(--ground)}
+:root[data-palette] :is(.dynamics-stage,.dynamics-chart){background:var(--ground)}
+:root[data-palette] .dynamics-plot-bg{fill:var(--panel);stroke:var(--line)}
+:root[data-palette] .dynamics-grid{stroke:var(--line-soft)}
+:root[data-palette] .dynamics-axis{stroke:var(--muted)}
+:root[data-palette] .dynamics-axis-label{fill:var(--ink)}
+:root[data-palette] :is(.seg button.on,.menuseg .segrow button.on){background:var(--brand);color:var(--on-brand)}
+:root[data-palette] :is(.act-lane-story,.act-lane-mechanics) .act-lane-header b{color:var(--ink)}
+:root[data-palette] :is(.support-preview,.progress-preview,.mechanism-filter-note,.mechanism-browser-filter-footer){color:var(--ink)}
+:root[data-palette] .character-node-portrait-fill{background:var(--ground)}
+:root[data-palette] .character-node-description-sidebar{background:var(--surface-tint)}
+:root[data-palette] .character-node-description-main{background:var(--panel)}
+
+/* Small title-bar palette picker; it never adds a permanent settings pane. */
+.palette-picker{position:relative;flex:none}
+.palette-trigger{display:grid;place-items:center;width:32px;height:28px;padding:4px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--brand);cursor:pointer;list-style:none}
+.palette-trigger::-webkit-details-marker{display:none}
+.palette-trigger svg{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.palette-trigger svg circle{fill:currentColor;stroke:none}
+.palette-trigger:hover,.palette-trigger:focus-visible,.palette-picker[open]>.palette-trigger{border-color:var(--brand);outline-offset:2px}
+.palette-options{position:absolute;right:0;top:calc(100% + 7px);z-index:6500;width:228px;max-width:calc(100vw - 24px);padding:6px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);box-shadow:0 14px 40px #0005}
+.palette-options>small{display:block;padding:5px 7px 8px;font-size:11px;color:var(--muted)}
+:root[data-palette] .appearance-controls .palette-options button{display:flex;align-items:center;gap:9px;width:100%;min-height:33px;padding:6px 7px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ink);font-size:12px;text-align:left}
+:root[data-palette] .appearance-controls .palette-options button:hover{background:var(--raised);border-color:var(--line)}
+:root[data-palette] .appearance-controls .palette-options button[aria-pressed=true]{color:var(--ink);background:var(--selected);border-color:var(--brand)}
+.palette-samples{display:flex;flex:none;gap:2px}
+.palette-samples i{display:block;width:10px;height:14px;border-radius:2px;box-shadow:inset 0 0 0 1px #80808055}
+.palette-check{margin-left:auto;color:var(--brand)}
+
+/* Portalled editors inherit the document palette as well as the main frame. */
+:root[data-palette] :is(.narrative-wizard,.character-node-description,.reference-dialog,.cp-workspace,.character-attributes-dialog,.story-planning-dialog,.relationship-dialog){background:var(--panel);color:var(--ink);border-color:var(--line)}
+:root[data-palette] :is(.fw-context,.fw-live-preview,.nw-summary,.nw-side,.dragon-preview,.cp-sidebar,.cp-workspace-sidebar,.research-panel,.character-media-card){background:var(--surface-tint);color:var(--ink)}
+:root[data-palette] :is(.dragon-live,.group-live-preview,.fw-context,.fw-preview,.mp-field,.mp-stepper button,.mp-step-list button){background:var(--surface-tint)}
+:root[data-palette] .nw-source-framework{--source-tint:#579F7D}
+:root[data-palette] .nw-source-concept{--source-tint:#BE864E}
+:root[data-palette] .nw-source-structure{--source-tint:#658FC9}
+:root[data-palette] .nw-source-template{--source-tint:#9C85D3}
+:root[data-palette] .nw-source{background:color-mix(in srgb,var(--source-tint,var(--brand)) 9%,var(--panel));color:var(--ink);border-color:color-mix(in srgb,var(--source-tint,var(--brand)) 45%,var(--line));--nw-symbol-paper:var(--panel)}
+:root[data-palette] .nw-source:hover{background:color-mix(in srgb,var(--source-tint,var(--brand)) 15%,var(--panel));--nw-symbol-paper:var(--panel)}
+:root[data-palette] .nw-source .nw-source-art{color:color-mix(in srgb,var(--source-tint,var(--brand)) 65%,var(--ink))}
+:root[data-palette] .nw-source>small{color:var(--secondary)}
+:root[data-palette] :is(.relationship-person,.relationship-review,.relationship-target-list button,.relationship-word,.relationship-label){background:var(--raised);color:var(--ink);border-color:var(--line)}
+:root[data-palette] :is(.relationship-word[aria-pressed=true],.relationship-target .btn[aria-pressed=true],.relationship-target-list button[aria-pressed=true]){background:var(--selected);color:var(--ink);border-color:var(--brand)}
+:root[data-palette] :is(.story-direction-acts>details,.story-stage-card,.story-plot-preview,.story-thread,.story-open-thread-board>article,.story-structure-choices button,.story-tag-choices button,.story-planning-tabs button){background:var(--raised);color:var(--ink);border-color:var(--line)}
+:root[data-palette] :is(.story-plot-preview section.active,.story-structure-choices button[aria-pressed=true],.story-tag-choices button[aria-pressed=true],.story-planning-tabs button[aria-pressed=true]){background:var(--selected);color:var(--ink);border-color:var(--brand)}
+:root[data-palette] :is(.dragon-toolbar,.dragon-node-picker) [aria-pressed=true]{color:var(--on-brand)}
+:root[data-palette] .framework-design{background:var(--ground);color:var(--ink);border-color:var(--line)}
+:root[data-palette] .framework-stage{background:color-mix(in srgb,var(--framework-accent) 7%,var(--panel));border-color:var(--line)}
+:root[data-palette] :is(.framework-design-caption,.framework-stage strong,.framework-stage p){color:var(--ink)}
+:root[data-palette] :is(.language-spectrum-pattern,.preference-spectrum){background:var(--panel);border-color:var(--line);color:var(--ink)}
+:root[data-palette] :is(.language-spectrum-pattern h5,.preference-spectrum h4,.preference-prompt,.language-spectrum-question){color:var(--ink)}
+
+/* Conversation surfaces follow the chosen palette; bubble identity colors stay
+   distinct and retain their own readable light text. PDF colors stay stable. */
+:root[data-palette] .conversation-editor{background:linear-gradient(135deg,var(--surface-glass),var(--ground));color:var(--ink);border-color:var(--line)}
+:root[data-palette] .conversation-editor>header{background:linear-gradient(110deg,var(--panel),var(--surface-tint));border-color:var(--line)}
+:root[data-palette] .cw-title-field>input{color:var(--ink)}
+:root[data-palette] .cw-editor-meta :is(small,select){color:var(--muted);color-scheme:inherit}
+:root[data-palette] .cw-editor-meta select{background:var(--ground);border-color:var(--line)}
+:root[data-palette] .cw-workbench{--cw-bg:var(--ground);--cw-panel:var(--panel);--cw-surface:var(--raised);--cw-line:var(--line);background:radial-gradient(ellipse at 65% 0%,color-mix(in srgb,var(--secondary) 7%,transparent),transparent 65%),var(--ground);color:var(--ink)}
+:root[data-palette] .cw-workbench h3{color:var(--ink)}
+:root[data-palette] .cw-workbench .field-input{background:var(--ground);color:var(--ink);border-color:var(--line)}
+:root[data-palette] .cw-workbench :is(.cw-field,.cw-speaker small,.cw-bio,.cw-scene>span,.cw-conversation-heading h3 small){color:var(--muted)}
+:root[data-palette] :is(.cw-sidebar,.cw-inspector){background:linear-gradient(155deg,var(--surface-tint),var(--panel));border-color:var(--line)}
+:root[data-palette] :is(.cw-scene,.cw-summary,.cw-composer){background:linear-gradient(110deg,var(--surface-tint),var(--panel));border-color:var(--line)}
+:root[data-palette] .cw-scene .field-input{background:transparent;border-color:transparent}
+:root[data-palette] .cw-speaker[aria-pressed=true]{background:var(--selected);border-color:var(--brand)}
+:root[data-palette] :is(.cw-goal,.cw-ribbon-detail,.cw-speaker-ribbon,.cw-floating-profile,.cw-export-options,.cw-participant-list){background:var(--panel);color:var(--ink);border-color:var(--line)}
+:root[data-palette] .cw-goal{border-top-color:var(--goal-color)}
+:root[data-palette] .cw-goal-title{color:var(--ink)}
+:root[data-palette] .cw-icon-button{color:var(--secondary)}
+:root[data-palette] .cw-goal .cw-icon-button{color:var(--goal-color)}
+:root[data-palette] :is(.cw-tool,.cw-tags>span,.cw-participant-option){background:var(--raised);color:var(--ink);border-color:var(--line)}
+:root[data-palette] :is(.cw-tool[aria-expanded=true],.cw-tool[aria-pressed=true],.cw-tool:hover:not(:disabled),.cw-speaker-ribbon .cw-side-buttons .cw-tool[aria-pressed=true]){background:var(--selected);border-color:var(--brand)}
+:root[data-palette] .cw-tool-danger{color:var(--bad)}
+:root[data-palette] .cw-sidebar-resizer{background:var(--ground)}
+:root[data-palette] :is(.cw-sidebar-resizer:hover,.cw-sidebar-resizer:focus-visible,.cw-resizing .cw-sidebar-resizer){background:var(--brand)}
+:root[data-palette] .cw-floating-profile .cw-floating-image{background:var(--ground)}
+:root[data-palette] .cw-floating-profile small{color:var(--muted)}
+:root[data-palette] :is(.conversations-browser .library-browser-categories,.conversations-browser>.library-browser-inline){background:var(--surface-tint);border-color:var(--line)}
+:root[data-palette] .conversations-browser .library-browser-category-list>button.on{background:var(--selected);border-color:var(--brand)}
+:root[data-palette] .conversations-browser .library-browser-toolbar>.search{background:var(--ground);border-color:var(--line)}
+:root[data-palette] .conversation-status{color:var(--brand);background:color-mix(in srgb,var(--brand) 12%,transparent)}
+:root[data-palette] .conversation-status.happened{color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}
+:root[data-palette] .cw-workbench .cw-message-row.narration .cw-bubble{background:var(--raised);color:var(--ink);border-color:var(--muted)}
+
+/* Daylight keeps category hues in borders and artwork while neutral chrome and
+   labels use dark ink. No inversion/filter is applied to content or photos. */
+:root[data-tone=light] .ui-refresh .nav-icon{color:color-mix(in srgb,var(--nav-accent) 55%,var(--ink))}
+:root[data-tone=light] :is(.cw-center-toggle,.cw-goal-icon,.cp-input-symbols .framework,.cp-input-symbols .concept,.library-reference-symbol){color:var(--secondary)}
+:root[data-tone=light] :is(.cw-center-toggle:hover,.cw-center-toggle[aria-pressed=true]){background:var(--selected);color:var(--brand)}
+:root[data-tone=light] :is(.nw-header small,.preference-heading,.language-spectrum-caption,.language-spectrum-group h4,.preference-poles b,.preference-explanations h5){color:var(--secondary)}
+:root[data-tone=light] :is(.flag,.pill,.factchip,.chip,.beat,.scopebadge,.csvmsg,.hint,.nw-help,.nw-examples,.nw-card small,.fw-context>b,.fw-live-preview>small,.fw-context-card b){color:var(--ink)}
+:root[data-tone=light] :is(.nw-purpose svg,.fw-pillar-number,.fw-mode label.selected,.mp-page-heading>small,.hv-library-card>small){color:var(--secondary)}
+:root[data-tone=light] :is(.archetype-detail h4,.archetype-expression h5,.player-type-card h4,.dragon-nav .btn,.dragon-routes .btn,.group-live-preview h3){color:var(--ink)}
+:root[data-tone=light] :is(.language-spectrum-endpoints,.language-spectrum-question,.preference-scale,.preference-example){color:var(--muted)}
+:root[data-tone=light] .language-spectrum-endpoints>span:first-child{color:#88547C}
+:root[data-tone=light] .language-spectrum-endpoints>span:last-child{color:#176E63}
+:root[data-tone=light] .ca-choices button[aria-pressed=true]{background:var(--selected);color:var(--ink);border-color:var(--brand)}
+:root[data-tone=light] :is(.nw-fit-toggle,.nw-fit,.nw-fit-details dt,.nw-filters .btn,.relationship-vocabulary legend,.relationship-target h3 strong,.relationship-paired-labels b,.fw-stepper b,.fw-main summary,.fw-scale output,.fw-inherited,.fw-deeper>summary){color:var(--ink)}
+:root[data-tone=light] :is(.story-tag-summary,.story-inherit,.story-plot-intro,.story-stage-link,.story-thread-filters label,.story-thread>summary span,.story-structure-choices button span,.story-open-thread-board>article>small){color:var(--muted)}
+:root[data-tone=light] :is(.story-stage-card h3,.story-plot-preview h4){color:var(--ink)}
+:root[data-tone=light] .nw-filters :is(.nw-filter-structure,.nw-filter-template){background:var(--raised);color:var(--ink)}
+:root[data-tone=light] .nw-filters .btn[aria-pressed=true]{background:var(--selected);border-color:var(--brand)}
+@media(pointer:coarse){.palette-trigger{width:40px;height:40px}:root[data-palette] .appearance-controls .palette-options button{min-height:44px}}

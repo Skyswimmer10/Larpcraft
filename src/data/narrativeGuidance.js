@@ -1,5 +1,6 @@
 // Practical writing recommendations for Larpcraft's existing references.
 // These do not change library categories or claim to score a framework's validity.
+import { STORY_ARCHETYPES, storyArchetype } from './storyArchetypes.js';
 export const NARRATIVE_FOCUSES = {
   character: { label: 'Character', result: 'Character', category: 'characterConcept', hint: 'Motives, behaviour, strengths, limits, and change.' },
   relationship: { label: 'Relationships & groups', result: 'Relationship / group dynamic', category: 'storyConcept', hint: 'Trust, conflict, roles, needs, and how people affect one another.' },
@@ -13,6 +14,7 @@ export const NARRATIVE_FOCUSES = {
 
 const profile = (best, useful, reason) => ({ best, useful, reason });
 export const FRAMEWORK_GUIDANCE = {
+  larpcraftGroupFoundations: profile(['relationship'], ['story', 'character'], 'Create a group, faction, band or institution through shared identity, membership, authority, bonds and possible tensions.'),
   fate: profile(['communication', 'scene'], ['relationship', 'style', 'character', 'story'], 'Shape an invitation, briefing, speech, or important reveal through attention, credibility, belonging, and feeling.'),
   kolbLearningCycle: profile(['learning'], ['scene', 'character', 'story'], 'Build an experience that leads to reflection, an idea, and a chance to try it. It is a learning cycle rather than a personality description.'),
   humanValues: profile(['values'], ['character', 'relationship', 'scene', 'story'], 'Find what someone stands to gain or lose, and make a choice emotionally meaningful.'),
@@ -53,6 +55,7 @@ const CONCEPT_GROUPS = [
 ];
 
 export const CONCEPT_GUIDANCE = Object.fromEntries(CONCEPT_GROUPS.flatMap(([ids, best, useful, reason]) => ids.map(id => [id, profile(best, useful, reason)])));
+for (const reference of Object.values(STORY_ARCHETYPES)) CONCEPT_GUIDANCE[reference.id] = profile(['character'], [], reference.tagline);
 const CATEGORY_GUIDANCE = {
   characterConcept: profile(['character'], ['relationship', 'scene', 'communication'], 'Develop a character through this concept, or explore how it affects other people.'),
   storyConcept: profile(['story', 'scene'], ['character', 'relationship', 'values'], 'Apply this idea to a situation or story, keeping the relationships between its parts.'),
@@ -68,6 +71,8 @@ export function narrativeGuidance(source, type) {
     const base = CATEGORY_GUIDANCE[source.category || source.conceptKind] || CATEGORY_GUIDANCE.storyConcept;
     return profile([savedFocus], [...new Set([...base.best, ...base.useful])].filter(f => f !== savedFocus), `This saved version was developed for ${NARRATIVE_FOCUSES[savedFocus].label.toLowerCase()}. ${base.reason}`);
   }
+  const archetype = storyArchetype(source);
+  if (archetype) return profile(['character'], [], archetype.tagline);
   return CONCEPT_GUIDANCE[source?.conceptId || source?.id] || CATEGORY_GUIDANCE[source?.category || source?.conceptKind] || CATEGORY_GUIDANCE.storyConcept;
 }
 
@@ -77,9 +82,10 @@ export function narrativeFit(guidance, focus) {
 
 export function defaultNarrativeFocus(source, type, target) {
   if (target?.kind === 'character') return 'character';
+  if (target?.kind === 'group') return 'relationship';
   const targetFocus = target?.narrativeFocus || target?.narrativeWizard?.focus;
   if (NARRATIVE_FOCUSES[targetFocus]) return targetFocus;
-  if (['event', 'storyLocation', 'item'].includes(target?.kind)) return 'scene';
+  if (['storyBeat', 'event', 'storyLocation', 'item'].includes(target?.kind)) return 'scene';
   if (['quest', 'storyStructureContainer'].includes(target?.kind)) return 'story';
   return narrativeGuidance(source, type).best[0];
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useGame, useDispatch, useLibrary, useLibraryDispatch } from '../state/store.jsx';
 import { locateGraph } from '../state/reducer.js';
@@ -12,10 +12,38 @@ import { META_PROGRAM_STEPS } from '../data/metaProgramWizard.js';
 import FateWizard from './FateWizard.jsx';
 import KolbWizard from './KolbWizard.jsx';
 import HumanValuesWizard from './HumanValuesWizard.jsx';
+import { PrimIcon } from './bits.jsx';
+import NarrativeSourceCard from './NarrativeSourceCard.jsx';
+import GroupWizard from './GroupWizard.jsx';
+import { GROUP_FOUNDATIONS_ID } from '../lib/groupFoundations.js';
+import DragonWorkshop from './DragonWorkshop.jsx';
+import NarrativeSetup from './NarrativeSetup.jsx';
+import { StoryPlanningButton } from './StoryPlanning.jsx';
+import NarrativeReferenceInfo from './NarrativeReferenceInfo.jsx';
+import { storyWizardSources, storyToolInsertion } from '../lib/storyTools.js';
+import { isDragonConcept, dragonAnswers, dragonQuestions, dragonKey } from '../lib/dragonWorkshop.js';
 import './NarrativeWizard.css';
+import ArchetypeWorkshop from './ArchetypeWorkshop.jsx';
+import { storyArchetype } from '../data/storyArchetypes.js';
+import { archetypeConceptQuestions } from '../lib/archetypeConcept.js';
+import KwmlWizard from './KwmlWizard.jsx';
+import { KWML_ID } from '../data/kwml.js';
+import { kwmlInitialAnswers, kwmlQuestionRows } from '../lib/kwmlWizard.js';
 
 const EMPTY_ANSWERS = Object.freeze({});
+const FrameworkDetail = lazy(() => import('./FrameworkDetail.jsx'));
 const FIT_LABELS = { best: 'Best fit', useful: 'Also useful', other: 'Another use' };
+const PURPOSE_STYLES = {
+  all: { icon: 'layers', color: '#b8c2d9' },
+  character: { icon: 'user', color: '#f0a1c2' },
+  relationship: { icon: 'users', color: '#f2b788' },
+  communication: { icon: 'swap', color: '#88c9f4' },
+  values: { icon: 'heart', color: '#e7ce7e' },
+  scene: { icon: 'pin', color: '#9bd49a' },
+  story: { icon: 'branches', color: '#bca4f4' },
+  learning: { icon: 'book', color: '#7cd8cb' },
+  style: { icon: 'star', color: '#e6aaa0' },
+};
 const focusNames = values => values.map(value => NARRATIVE_FOCUSES[value]?.label).filter(Boolean).join(' · ');
 
 export function NarrativeFitDetails({ source, type = 'framework' }) {
@@ -23,20 +51,20 @@ export function NarrativeFitDetails({ source, type = 'framework' }) {
   return <div className="nw-fit-details"><p>{guidance.reason}</p><dl><div><dt>Best for</dt><dd>{focusNames(guidance.best)}</dd></div><div><dt>Also useful for</dt><dd>{focusNames(guidance.useful)}</dd></div></dl><small>These are writing suggestions. You can choose another use.</small></div>;
 }
 
-export function NarrativeWizardButton({ source, sourceType, targetId, resumeNode, gameScope, onSaved, label = 'Story wizard', className = 'btn' }) {
+export function NarrativeWizardButton({ source, sourceType, targetId, resumeNode, resumeRecord, gameScope, onSaved, onInsert, onInserted, includeSubnodes, label = 'Story wizard', className = 'btn', ariaLabel }) {
   const [open, setOpen] = useState(false);
   return <>
-    <button type="button" className={className} onClick={() => setOpen(true)}>{label}</button>
-    {open && <NarrativeWizard initialSource={source} initialType={sourceType} initialTargetId={targetId} resumeNode={resumeNode} gameScope={gameScope} onClose={() => setOpen(false)} onSaved={onSaved} />}
+    <button type="button" className={className} aria-label={ariaLabel} title={ariaLabel} onClick={() => setOpen(true)}>{label}</button>
+    {open && <NarrativeWizard initialSource={source} initialType={sourceType} initialTargetId={targetId} resumeNode={resumeNode} resumeRecord={resumeRecord} gameScope={gameScope} onInsert={onInsert} onInserted={onInserted} includeSubnodes={includeSubnodes} onClose={() => setOpen(false)} onSaved={onSaved} />}
   </>;
 }
 
-export default function NarrativeWizard({ initialSource, initialType, initialTargetId, resumeNode, gameScope, onClose, onSaved }) {
+export default function NarrativeWizard({ initialSource, initialType, initialTargetId, resumeNode, resumeRecord, gameScope, onClose, onSaved, onInsert, onInserted, includeSubnodes = !gameScope }) {
   const game = useGame();
   const library = useLibrary();
   const dispatch = useDispatch();
   const libraryDispatch = useLibraryDispatch();
-  const [session, setSession] = useState(() => savedWizardSession(resumeNode, library));
+  const [session, setSession] = useState(() => savedWizardSession(resumeNode, library, resumeRecord || resumeNode?.narrativeWizard));
   const sessions = useMemo(() => savedWizardSessions(resumeNode, library), [resumeNode, library]);
   initialSource = session?.source || initialSource;
   initialType = session?.type || initialType;
@@ -48,6 +76,9 @@ export default function NarrativeWizard({ initialSource, initialType, initialTar
   const [chosen, setChosen] = useState(initialSource ? { source: initialSource, type: initialType || 'concept' } : null);
   const [stage, setStage] = useState(initialSource ? 'setup' : 'source');
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [informationSource, setInformationSource] = useState(null);
+  const searchButton = useRef(null);
   const [filter, setFilter] = useState('all');
   const [visibleFits, setVisibleFits] = useState({ best: true, useful: true, other: true });
   const [title, setTitle] = useState(session?.record.title || '');
@@ -56,7 +87,7 @@ export default function NarrativeWizard({ initialSource, initialType, initialTar
   const [purposeFilter, setPurposeFilter] = useState(initialTargetId ? defaultNarrativeFocus(initialSource, initialType, gameNodes?.[initialTargetId]) : 'all');
   const [targetId, setTargetId] = useState(initialTargetId || '');
   const [roles, setRoles] = useState(() => session?.record.roles || (initialType === 'concept' ? conceptRoles(initialSource) : []));
-  const [answerBanks, setAnswerBanks] = useState(() => session ? { [session.record.focus || defaultNarrativeFocus(initialSource, initialType)]: session.answers } : {});
+  const [answerBanks, setAnswerBanks] = useState(() => session ? { [session.record.focus || defaultNarrativeFocus(initialSource, initialType)]: session.record.sourceId === KWML_ID && session.record.focus === 'character' ? kwmlInitialAnswers(session.answers) : session.answers } : {});
   const [branchAnswers, setBranchAnswers] = useState(session?.record.branchAnswers || {});
   const [narrativeDrafts, setNarrativeDrafts] = useState(() => typeof session?.record.narrativeText === 'string' ? { [session.record.focus]: session.record.narrativeText } : {});
   const [index, setIndex] = useState(0);
@@ -67,14 +98,20 @@ export default function NarrativeWizard({ initialSource, initialType, initialTar
   const isFate = type === 'framework' && source?.id === 'fate';
   const isKolb = type === 'framework' && source?.id === 'kolbLearningCycle';
   const isValues = type === 'framework' && source?.id === 'humanValues';
+  const isGroupFoundations = source?.id === GROUP_FOUNDATIONS_ID;
+  const isDragon = type === 'concept' && isDragonConcept(source);
+  const isArchetype = type === 'concept' && focus === 'character' && !!storyArchetype(source);
+  const isKwml = type === 'framework' && source?.id === KWML_ID && focus === 'character';
   const isCharacterProse = isMetaPrograms && focus === 'character';
-  const answers = answerBanks[focus] || EMPTY_ANSWERS;
+  const rawAnswers = answerBanks[focus] || EMPTY_ANSWERS;
+  const answers = isDragon ? dragonAnswers(source, rawAnswers, roles, session?.record.questions) : isKwml ? kwmlInitialAnswers(rawAnswers) : rawAnswers;
   const metaAnswers = isMetaPrograms ? answers : EMPTY_ANSWERS;
+  const kwmlAnswers = isKwml ? rawAnswers : EMPTY_ANSWERS;
   const guidance = useMemo(() => source ? narrativeGuidance(source, type) : null, [source, type]);
-  const fit = guidance ? narrativeFit(guidance, focus) : null;
   const focusInfo = NARRATIVE_FOCUSES[focus];
-  const sources = useMemo(() => narrativeSources(library), [library.concepts]);
-  const questions = useMemo(() => !source ? [] : source.savedQuestions || (type === 'framework' ? frameworkQuestions(source, answers, focus) : conceptQuestions(source, focus)), [source, type, focus, answers.archetype, answers.otherRole, metaAnswers]);
+  const fullCatalogue = !initialSource && !initialTargetId && !resumeNode;
+  const sources = useMemo(() => fullCatalogue ? storyWizardSources(library, { includeSubnodes }) : narrativeSources(library), [library, fullCatalogue, includeSubnodes]);
+  const questions = useMemo(() => !source ? [] : isKwml ? kwmlQuestionRows(answers, session?.record.questions) : isDragon ? dragonQuestions(source, session?.record.questions) : isArchetype ? archetypeConceptQuestions(source, conceptQuestions(source, focus), session?.record.questions) : source.savedQuestions || (type === 'framework' ? frameworkQuestions(source, answers, focus) : conceptQuestions(source, focus)), [source, type, focus, answers.archetype, answers.otherRole, metaAnswers, kwmlAnswers, isKwml, isDragon, isArchetype, session?.record.questions]);
   const count = questions.filter(row => questionAnswer(row, answers)).length;
   const draftValue = JSON.stringify({ title, context, focus, roles, answerBanks, branchAnswers, narrativeDrafts });
   const initialDraft = useRef(draftValue);
@@ -100,13 +137,14 @@ export default function NarrativeWizard({ initialSource, initialType, initialTar
     const previousFocus = document.activeElement;
     element.showModal();
     return () => { element.close(); previousFocus?.focus?.(); };
-  }, [isFate, isKolb, isValues]);
+  }, [isFate, isKolb, isValues, isGroupFoundations, isDragon, isArchetype, isKwml]);
   useEffect(() => {
     main.current?.scrollTo(0, 0);
     main.current?.focus();
   }, [stage, index]);
 
   const choose = item => {
+    if (item.canWizard === false) return;
     const different = chosen?.source !== item.source;
     if (chosen && different && dirty && !window.confirm('Switch starting point? Your current answers and role replacements will be cleared.')) return;
     setChosen({ source: item.source, type: item.type });
@@ -117,8 +155,20 @@ export default function NarrativeWizard({ initialSource, initialType, initialTar
       setNarrativeDrafts({});
     }
     setIndex(0);
-    setFocus(purposeFilter === 'all' ? defaultNarrativeFocus(item.source, item.type, gameNodes?.[targetId]) : purposeFilter);
+    setFocus(item.type === 'concept' && storyArchetype(item.source) ? 'character' : purposeFilter === 'all' ? defaultNarrativeFocus(item.source, item.type, gameNodes?.[targetId]) : purposeFilter);
     setStage('setup');
+  };
+  const insertSource = item => {
+    if (dirty && !window.confirm('Add this reference directly and discard the unsaved wizard answers?')) return;
+    if (onInsert) onInsert(item.payload);
+    else {
+      const insertion = storyToolInsertion(library, item.payload, game, gameScope, visibleCanvasPlacement({ x: 110, y: 100 }), gameNodes);
+      if (!insertion) return;
+      dispatch(insertion.action);
+      onInserted?.(insertion.selection);
+      if (!onInserted && insertion.selection.kind === 'node') onSaved?.(insertion.selection.id);
+    }
+    onClose();
   };
   const setAnswerKey = (key, value) => {
     if (key === 'archetype' && value !== answers.archetype) {
@@ -136,7 +186,7 @@ export default function NarrativeWizard({ initialSource, initialType, initialTar
     const next = sessions[Number(value)];
     const nextFocus = next.record.focus || defaultNarrativeFocus(next.source, next.type);
     const nextRoles = next.record.roles || [];
-    const nextBanks = { [nextFocus]: next.answers };
+    const nextBanks = { [nextFocus]: next.record.sourceId === KWML_ID && nextFocus === 'character' ? kwmlInitialAnswers(next.answers) : next.answers };
     const nextBranches = next.record.branchAnswers || {};
     const nextNarratives = typeof next.record.narrativeText === 'string' ? { [nextFocus]: next.record.narrativeText } : {};
     setSession(next); setChosen({ source: next.source, type: next.type });
@@ -147,20 +197,22 @@ export default function NarrativeWizard({ initialSource, initialType, initialTar
   const setAnswer = value => setAnswerKey(questions[index].textAnswerKey || questions[index].key, value);
   const patchAnswers = patch => setAnswerBanks(current => ({ ...current, [focus]: { ...(current[focus] || {}), ...patch } }));
   const build = id => {
-    const node = createWizardNode({ source, type, title, context, roles, questions, answers, focus, id, narrativeText: narrativeDrafts[focus], position: visibleCanvasPlacement({ x: 100, y: 100 }), characterTemplate: game.meta.characterCardTemplate });
+    const actualRoles = isDragon ? roles.map(role => ['city', 'dragon'].includes(role.id) ? { ...role, replacement: answers[dragonKey(role.id)] || '' } : role) : roles;
+    const node = createWizardNode({ source, type, title, context, roles: actualRoles, questions, answers, focus, id, narrativeText: narrativeDrafts[focus], position: visibleCanvasPlacement({ x: 100, y: 100 }), characterTemplate: game.meta.characterCardTemplate });
     node.narrativeWizard.branchAnswers = branchAnswers;
+    if (session?.record.sessionId) node.narrativeWizard.sessionId = session.record.sessionId;
     return node;
   };
-  const preview = stage === 'review' ? wizardSummary({ source, type, title, context, roles, questions, answers, focus, narrativeText: narrativeDrafts[focus] }) : '';
+  const preview = stage === 'review' || isArchetype || isKwml ? wizardSummary({ source, type, title, context, roles, questions, answers, focus, narrativeText: narrativeDrafts[focus] }) : '';
   const target = gameNodes?.[targetId];
-  const possibleTargets = Object.values(gameNodes || {}).filter(node => ['character', 'concept', 'event', 'quest', 'storyLocation', 'item', 'storyStructureContainer'].includes(node.kind));
+  const possibleTargets = Object.values(gameNodes || {}).filter(node => ['character', 'group', 'concept', 'storyBeat', 'event', 'quest', 'storyLocation', 'item', 'storyStructureContainer'].includes(node.kind));
   const save = includeLibrary => {
     if (saved.current || !title.trim()) return;
     let node = build(resuming ? session.record.resultId || session.targetId : genId(gameNodes, `${game.meta.prefix}-N-`));
     if (targetId && !target) return;
     if (target) {
       node = resuming ? reviseWizardResult({ ...target, narrativeWizard: { ...session.record, answers: session.answers } }, node, source) : appendWizardResult(target, node);
-      dispatch({ type: gameScope ? 'GRAPH_UPDATE_NODE' : 'UPDATE_ENTITY', ...(gameScope ? { scope: gameScope } : { coll: 'nodes' }), id: target.id, patch: { ...(resuming ? { title: node.title, name: node.name } : {}), ...(node.questions ? { questions: node.questions } : {}), body: node.body, description: node.description, narrativeWizard: node.narrativeWizard, narrativeWizardHistory: node.narrativeWizardHistory, ...(node.sub ? { sub: node.sub } : {}) } });
+      dispatch({ type: gameScope ? 'GRAPH_UPDATE_NODE' : 'UPDATE_ENTITY', ...(gameScope ? { scope: gameScope } : { coll: 'nodes' }), id: target.id, patch: { ...(resuming ? { title: node.title, name: node.name } : {}), ...(node.questions ? { questions: node.questions } : {}), body: node.body, description: node.description, ...(node.characterProfile ? { characterProfile: node.characterProfile } : {}), ...(node.characterCanvas ? { characterCanvas: node.characterCanvas } : {}), narrativeWizard: node.narrativeWizard, narrativeWizardHistory: node.narrativeWizardHistory, ...(node.sub ? { sub: node.sub } : {}) } });
     } else dispatch({ type: gameScope ? 'GRAPH_ADD_NODE' : 'ADD_NODE', ...(gameScope ? { scope: gameScope } : {}), node });
     if (includeLibrary) {
       const coll = node.kind === 'character' ? 'narrative' : 'concepts';
@@ -179,48 +231,53 @@ export default function NarrativeWizard({ initialSource, initialType, initialTar
   const memory = questionMemory({ source, type, questions, answers, active, roles, target });
   const allAnswers = recordedAnswers(questions, answers);
   const sourceLabel = source?.label || source?.name || source?.title;
+  if (isKwml) return <KwmlWizard key={`kwml:${session?.record.sessionId || 'new'}`} answers={answers} onPatch={patchAnswers} title={title} onTitle={setTitle} context={context} onContext={setContext}
+    preview={preview} previousQuestions={session?.record.questions} narrativeEdited={narrativeDrafts[focus] !== undefined}
+    onNarrativeChange={value => setNarrativeDrafts(current => ({ ...current, [focus]: value }))}
+    onRebuild={() => { if (window.confirm('Replace your edited profile with the current choices?')) setNarrativeDrafts(current => { const next = { ...current }; delete next[focus]; return next; }); }}
+    target={target} targetId={targetId} onTargetChange={setTargetId} possibleTargets={possibleTargets} resuming={resuming} onClose={close}
+    onBack={() => { if (dirty && !window.confirm('Return to the catalogue and discard this unsaved draft?')) return; setChosen(null); setSession(null); setStage('source'); }}
+    onReset={() => { setAnswerBanks(current => ({ ...current, [focus]: {} })); setBranchAnswers(current => ({ ...current, [focus]: {} })); setNarrativeDrafts(current => { const next = { ...current }; delete next[focus]; return next; }); setContext(''); if (!resuming) setTitle(''); }}
+    onSave={save} result={result} onDone={() => { onSaved?.(result.id); onClose(); }} />;
+  if (isArchetype) return <ArchetypeWorkshop source={source} questions={questions} answers={answers} onPatch={patchAnswers}
+    title={title} onTitle={setTitle} context={context} onContext={setContext} preview={preview}
+    onNarrativeChange={value => setNarrativeDrafts(current => ({ ...current, [focus]: value }))} narrativeEdited={narrativeDrafts[focus] !== undefined}
+    onRebuild={() => { if (window.confirm('Replace your edited description with the current answers?')) setNarrativeDrafts(current => { const next = { ...current }; delete next[focus]; return next; }); }}
+    target={target} targetId={targetId} onTargetChange={setTargetId} possibleTargets={possibleTargets} resuming={resuming}
+    onClose={close} onBack={() => { if (dirty && !window.confirm('Return to the catalogue and discard these unsaved answers?')) return; setChosen(null); setSession(null); setStage('source'); }}
+    onSave={save} result={result} onDone={() => { onSaved?.(result.id); onClose(); }} />;
+  if (isDragon) return <DragonWorkshop key={`dragon:${session?.targetId || initialTargetId || 'new'}:${session?.record.sessionId || 'new'}`}
+    source={source} answers={answers} questions={questions} roles={roles} onAnswer={setAnswerKey} title={title} onTitle={setTitle}
+    focus={focus} onFocusChange={next => { setAnswerBanks(current => ({ ...current, [next]: answers })); setFocus(next); }} targetId={targetId} targetTitle={target?.title} possibleTargets={possibleTargets} onTargetChange={setTargetId} resuming={resuming}
+    onClose={close} onBack={() => { if (dirty && !window.confirm('Return to the catalogue and discard these unsaved answers?')) return; setChosen(null); setSession(null); setStage('source'); }}
+    onSave={save} result={result} onDone={() => { onSaved?.(result.id); onClose(); }} />;
+  if (isGroupFoundations) return <GroupWizard key={`group:${session?.targetId || initialTargetId || 'new'}:${session?.record.sessionId || 'new'}`}
+    targetId={gameNodes?.[initialTargetId]?.kind === 'group' ? initialTargetId : ''} scope={gameScope || { coll: 'nodes' }} record={session?.record}
+    onClose={onClose} onSaved={onSaved} onBack={() => { setChosen(null); setSession(null); setStage('source'); }} />;
   if (isFate) return <FateWizard key={`${session?.targetId || ''}:${session?.record.sessionId || session?.record.title || 'new'}`} session={session} sessions={sessions} onContinueSession={continueSession} initialTargetId={initialTargetId} initialPurpose={purposeFilter === 'all' ? undefined : focus} gameScope={gameScope} onClose={onClose} onSaved={onSaved} onBack={() => { setChosen(null); setSession(null); setStage('source'); }} />;
   if (isKolb) return <KolbWizard key={`kolb:${session?.targetId || ''}:${session?.record.sessionId || session?.record.title || 'new'}`} session={session} sessions={sessions} onContinueSession={continueSession} initialTargetId={initialTargetId} initialPurpose={purposeFilter === 'all' ? undefined : focus} gameScope={gameScope} onClose={onClose} onSaved={onSaved} onBack={() => { setChosen(null); setSession(null); setStage('source'); }} />;
   if (isValues) return <HumanValuesWizard key={`values:${session?.targetId || ''}:${session?.record.sessionId || session?.record.title || 'new'}`} session={session} sessions={sessions} onContinueSession={continueSession} initialTargetId={initialTargetId} initialPurpose={purposeFilter === 'all' ? undefined : focus} gameScope={gameScope} onClose={onClose} onSaved={onSaved} onBack={() => { setChosen(null); setSession(null); setStage('source'); }} />;
-  return createPortal(<dialog ref={dialog} className="narrative-wizard" aria-labelledby="narrative-wizard-title" onCancel={event => { event.preventDefault(); event.stopPropagation(); close(); }} onClick={event => { event.stopPropagation(); if (event.target === event.currentTarget) close(); }}>
+  return createPortal(<><dialog ref={dialog} className="narrative-wizard nw-fullscreen" aria-labelledby="narrative-wizard-title" onCancel={event => { event.preventDefault(); event.stopPropagation(); close(); }} onClick={event => { event.stopPropagation(); if (event.target === event.currentTarget) close(); }}>
     <div className="nw-shell">
-      <header className="nw-header"><div><small>Narrative workshop</small><h2 id="narrative-wizard-title">{stage === 'source' ? 'Choose a starting point' : sourceLabel}</h2></div><button type="button" className="btn" onClick={close}>Close</button></header>
+      <header className="nw-header"><div><small>Story wizard</small><h2 id="narrative-wizard-title">{stage === 'source' ? 'Choose a starting point' : sourceLabel}</h2></div><div className="right">{stage === 'source' && !initialTargetId && <StoryPlanningButton label="Plot structure" initialTab="plot" />}<button type="button" className="btn" onClick={close}>Close</button></div></header>
       <div className="nw-body">
-        <aside className="nw-sidebar" aria-label="Wizard steps">
-          <b>Your version, step by step</b>
-          <p>{isMetaPrograms && ['questions', 'review'].includes(stage) ? 'Four steps to explore choices and try them in a scene. Return to any step whenever you need.' : 'Choose what you are developing. Use a framework or concept where it helps your story.'}</p>
-          {source && <div className="nw-current-focus"><small>Working on</small><b>{focusInfo.label}</b><span>{focusInfo.hint}</span></div>}
-          {!!memory.selections.length && (isMetaPrograms ? <details className="nw-recorded-choices nw-meta-choices"><summary>Your recorded choices ({memory.selections.length})</summary>{memory.selections.map((selection, i) => <p key={i}><span>{selection.label}</span><b>{selection.value}</b></p>)}</details> : <div className="nw-recorded-choices"><small>Your recorded choices</small>{memory.selections.map((selection, i) => <p key={i}><span>{selection.label}</span><b>{selection.value}</b></p>)}</div>)}
-          {(!isMetaPrograms || !['questions', 'review'].includes(stage)) && <ol><li className={stage === 'source' ? 'current' : ''}>Choose a useful starting point</li><li className={stage === 'setup' ? 'current' : ''}>Choose your purpose and destination</li>{type === 'concept' && <li className={stage === 'roles' ? 'current' : ''}>Adapt the roles if needed</li>}<li className={stage === 'questions' ? 'current' : ''}>Answer at your own pace</li><li className={stage === 'review' ? 'current' : ''}>Review and save</li></ol>}
-          {['questions', 'review'].includes(stage) && <><small>{isMetaPrograms ? `${count} answers recorded · every choice is optional` : `${count} of ${questions.length} answered · skipping is fine`}</small>{isMetaPrograms ? <MetaProgramsSteps compact step={stage === 'review' ? -1 : index} questions={questions} answers={answers} onStepChange={step => { setIndex(step); setStage('questions'); }} /> : <nav className="nw-question-nav" aria-label="Questions">{questions.map((row, i) => <button key={row.key} type="button" className={stage === 'questions' && i === index ? 'current' : ''} onClick={() => { setIndex(i); setStage('questions'); }}><span aria-label={questionAnswer(row, answers) ? 'Answered' : 'Unanswered'}>{questionAnswer(row, answers) ? '●' : '○'}</span>{questionText(row.prompt)}</button>)}</nav>}</>}
-        </aside>
         <main ref={main} className="nw-main" tabIndex={-1}>
+          {['questions', 'review'].includes(stage) && (!isMetaPrograms || stage === 'review') && <details className="nw-answer-memory"><summary>{isMetaPrograms ? 'Return to a step' : 'Jump to a question'} · {count} answers recorded</summary>{isMetaPrograms ? <MetaProgramsSteps step={-1} questions={questions} answers={answers} onStepChange={step => { setIndex(step); setStage('questions'); }} /> : <nav className="nw-question-nav" aria-label="Questions">{questions.map((row, i) => <button key={row.key} type="button" className={stage === 'questions' && i === index ? 'current' : ''} aria-current={stage === 'questions' && i === index ? 'step' : undefined} onClick={() => { setIndex(i); setStage('questions'); }}><span aria-label={questionAnswer(row, answers) ? 'Answered' : 'Unanswered'}>{questionAnswer(row, answers) ? '●' : '○'}</span>{questionText(row.prompt)}</button>)}</nav>}{!!memory.selections.length && <div className="nw-recorded-choices">{memory.selections.map((selection, i) => <p key={i}><span>{selection.label}</span><b>{selection.value}</b></p>)}</div>}</details>}
           {stage === 'source' && <>
-            <p>Develop a character, relationship, message, dilemma, encounter, story arc, discovery, or presentation. Recommendations help you choose; every reference stays available.</p>
-            <label className="nw-field">I am working on<select className="field-input" aria-label="I am working on" value={purposeFilter} onChange={event => setPurposeFilter(event.target.value)}><option value="all">Browse all purposes</option>{Object.entries(NARRATIVE_FOCUSES).map(([key, info]) => <option key={key} value={key}>{info.label}</option>)}</select></label>
-            <label className="nw-field">Search frameworks and concepts<input autoFocus className="field-input" type="search" value={query} onChange={e => setQuery(e.target.value)} /></label>
-            <div className="nw-filters">{[['all', 'All'], ['framework', 'Frameworks'], ['concept', 'Concepts']].map(([id, label]) => <button type="button" key={id} className={`btn${filter === id ? ' primary' : ''}`} aria-pressed={filter === id} onClick={() => setFilter(id)}>{label}</button>)}</div>
-            <fieldset className="nw-fit-visibility"><legend>Show recommendations</legend>
-              <div>{Object.entries(FIT_LABELS).map(([key, label]) => <label key={key} className={`nw-fit-toggle ${key}`}><input type="checkbox" aria-label={label} disabled={purposeFilter === 'all'} checked={visibleFits[key]} onChange={event => setVisibleFits(current => ({ ...current, [key]: event.target.checked }))} /><span>{label}</span>{purposeFilter !== 'all' && <small aria-hidden="true">{fitCounts[key]}</small>}</label>)}</div>
-              {purposeFilter === 'all' ? <small>Choose a purpose above to show or hide references by fit.</small> : <div className="nw-fit-visibility-footer"><small role="status">{visibleSources.length} of {matchingSources.length} matching references shown</small><button type="button" className="linkbtn" onClick={() => setVisibleFits({ best: true, useful: true, other: true })}>Show all</button></div>}
-            </fieldset>
-            {purposeFilter !== 'all' && <p className="nw-help">Best fits appear first. Check or uncheck each group to show or hide its references for {NARRATIVE_FOCUSES[purposeFilter].label.toLowerCase()}.</p>}
-            <div className="nw-source-grid">{visibleSources.map(item => <button type="button" className="nw-source" key={item.key} onClick={() => choose(item)}><small>{item.type === 'framework' ? 'Framework' : 'Concept'}{purposeFilter !== 'all' && <em className={`nw-fit ${narrativeFit(item.guidance, purposeFilter)}`}>{FIT_LABELS[narrativeFit(item.guidance, purposeFilter)]}</em>}</small><b>{item.label}</b><span>{item.guidance.reason}</span><div className="nw-source-uses"><strong>Best for</strong> {focusNames(item.guidance.best)}<br /><strong>Also useful</strong> {focusNames(item.guidance.useful)}</div></button>)}</div>
-            {!visibleSources.length && <p className="nw-help">{matchingSources.length ? 'No references in the visible fit groups. Show another group above, choose Show all, or change your search.' : 'No references match this search. Try a shorter phrase or change the source filter.'}</p>}
+            <fieldset className="nw-purpose-picker"><legend>I am working on</legend><div>{[['all', 'Browse all purposes'], ...Object.entries(NARRATIVE_FOCUSES).map(([key, info]) => [key, info.label])].map(([key, label]) => <button type="button" className="nw-purpose" key={key} style={{ '--nw-purpose-color': PURPOSE_STYLES[key].color }} aria-pressed={purposeFilter === key} onClick={() => setPurposeFilter(key)}><PrimIcon icon={PURPOSE_STYLES[key].icon} size={20} /><span>{label}</span></button>)}</div></fieldset>
+            <div className="nw-source-toolbar">
+              <div className="nw-filters" role="group" aria-label="Source type">{[['all', 'All'], ['framework', 'Frameworks'], ['concept', 'Concepts'], ...(fullCatalogue ? [['structure', 'Story structures'], ...(includeSubnodes ? [['template', 'Supporting templates']] : [])] : [])].map(([id, label]) => <button type="button" key={id} className={`btn nw-filter-${id}`} aria-pressed={filter === id} onClick={() => setFilter(id)}>{label}</button>)}</div>
+              <div className="nw-search"><button ref={searchButton} type="button" className="btn nw-search-button" aria-label={searchOpen ? 'Close search' : 'Search frameworks and concepts'} title={searchOpen ? 'Close search' : 'Search frameworks and concepts'} aria-expanded={searchOpen} aria-controls="nw-source-search" onClick={() => { setSearchOpen(!searchOpen); if (searchOpen) setQuery(''); }}><PrimIcon icon="search" size={19} /></button>{searchOpen && <input id="nw-source-search" autoFocus className="field-input" type="search" aria-label="Search frameworks and concepts" placeholder="Search frameworks and concepts…" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setQuery(''); setSearchOpen(false); searchButton.current?.focus(); } }} />}</div>
+            </div>
+            <div className="nw-fit-visibility" role="group" aria-label="Recommendation fit">{Object.entries(FIT_LABELS).map(([key, label]) => <label key={key} className={`nw-fit-toggle ${key}`}><input type="checkbox" aria-label={label} disabled={purposeFilter === 'all'} checked={visibleFits[key]} onChange={event => setVisibleFits(current => ({ ...current, [key]: event.target.checked }))} /><span>{label}</span>{purposeFilter !== 'all' && <small aria-hidden="true">{fitCounts[key]}</small>}</label>)}</div>
+            <div className="nw-source-grid">{visibleSources.map(item => <NarrativeSourceCard key={item.key} item={item} fit={purposeFilter === 'all' ? null : narrativeFit(item.guidance, purposeFilter)} fitLabel={FIT_LABELS[narrativeFit(item.guidance, purposeFilter)]} onChoose={choose} onInsert={fullCatalogue ? insertSource : undefined} onInformation={() => setInformationSource(item)} />)}</div>
+            {!visibleSources.length && <p className="nw-help">{matchingSources.length ? 'No references in the selected fit groups. Select another group or change your search.' : 'No references match this search. Try a shorter phrase or change the source filter.'}</p>}
           </>}
-          {stage === 'setup' && <>
-            <h3>Where will this help your story?</h3>
-            {resuming && <p className="nw-help">Continuing saved work. Your choices and answers have been restored. Saving updates this wizard's notes in {target?.title}; it does not create another copy.</p>}
-            {resuming && sessions.length > 1 && <label className="nw-field">Saved wizard<select className="field-input" aria-label="Saved wizard" value={sessions.findIndex(item => item.record === session.record || (item.record.sessionId && item.record.sessionId === session.record.sessionId))} onChange={event => continueSession(event.target.value)}>{sessions.map((item, i) => <option key={i} value={i}>{item.record.sourceLabel} — {item.record.title}</option>)}</select></label>}
+          {stage === 'setup' && <NarrativeSetup source={source} title={title} onTitle={setTitle} focus={focus} onFocus={nextFocus => { setFocus(nextFocus); setIndex(0); }}
+            purposeStyles={PURPOSE_STYLES} guidance={guidance} context={context} onContext={setContext} target={target} targetId={targetId} resuming={resuming}
+            savedVersions={resuming && sessions.length > 1 && <details className="nw-setup-reference"><summary>Other saved versions</summary><label className="nw-field">Saved wizard<select className="field-input" aria-label="Saved wizard" value={sessions.findIndex(item => item.record === session.record || (item.record.sessionId && item.record.sessionId === session.record.sessionId))} onChange={event => continueSession(event.target.value)}>{sessions.map((item, i) => <option key={i} value={i}>{item.record.sourceLabel} — {item.record.title}</option>)}</select></label></details>}>
             <NarrativeFitDetails source={source} type={type} />
-            <label className="nw-field">What are you developing?<select disabled={resuming} className="field-input" aria-label="What are you developing?" value={focus} onChange={event => { setFocus(event.target.value); setIndex(0); }}>{Object.entries(NARRATIVE_FOCUSES).map(([key, info]) => <option key={key} value={key}>{info.label}{narrativeFit(guidance, key) === 'best' ? ' — Best fit' : narrativeFit(guidance, key) === 'useful' ? ' — Also useful' : ''}</option>)}</select></label>
-            <p className="nw-help"><span className={`nw-fit ${fit}`}>{FIT_LABELS[fit]}</span> {focusInfo.hint} {fit === 'other' ? 'This is an exploratory use. The questions adapt the reference to your chosen situation.' : 'The questions will follow this purpose.'}</p>
-            <label className="nw-field">Where should the result go?<select disabled={resuming} className="field-input" aria-label="Where should the result go?" value={targetId} onChange={event => setTargetId(event.target.value)}><option value="">Create a new {focusInfo.result.toLowerCase()}</option>{possibleTargets.map(node => <option key={node.id} value={node.id}>Add notes to: {node.title}</option>)}</select></label>
-            <label className="nw-field">{target ? 'Title for these new notes' : 'Name this version'}<input className="field-input" aria-label={target ? 'Title for these new notes' : 'Name this version'} autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder={`Name this ${focusInfo.result.toLowerCase()}`} /></label>
-            <label className="nw-field">Situation or background <small>Optional</small><textarea className="field-input" aria-label="Situation or background" rows={3} value={context} onChange={e => setContext(e.target.value)} placeholder="Who is involved, what is happening, or what you want to explore" /></label>
-            {target && !resuming && <p className="nw-help">Notes will be added to {target.title}. Its type, existing fields, and connections stay intact. A separate plan or adapted tree is kept inside it.</p>}
-            <details className="nw-reference"><summary>Read the original reference</summary><p>{source.summary || source.description || source.body}</p>{source.usage && <p>{source.usage}</p>}{source.attribution && <p>{source.attribution}</p>}</details>
-          </>}
+          </NarrativeSetup>}
           {stage === 'roles' && <>
             <h3>Same story roles, your own entities</h3><p>Replace a literal example with what fills the same role in your version. A threat could be a dragon or a debt. What is protected could be a castle or a home.</p>
             <p className="nw-help">The copied graph keeps its layout and connections. Filled roles rename the matching nodes and wording in your copy.</p>
@@ -271,5 +328,7 @@ export default function NarrativeWizard({ initialSource, initialType, initialTar
         {stage === 'review' && <><button type="button" className="btn" disabled={!title.trim() || (targetId && !target)} onClick={() => save(false)}>Save to game</button><button type="button" className="btn primary" disabled={!title.trim() || (targetId && !target)} onClick={() => save(true)}>Save to library + game</button></>}
       </footer>}
     </div>
-  </dialog>, document.body);
+  </dialog>
+    {informationSource && (informationSource.type === 'framework' ? <Suspense fallback={null}><FrameworkDetail framework={informationSource.source} showUseButton={false} onClose={() => setInformationSource(null)} /></Suspense> : <NarrativeReferenceInfo item={informationSource} library={library} onClose={() => setInformationSource(null)} />)}
+  </>, document.body);
 }

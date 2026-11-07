@@ -7,6 +7,8 @@ import {
   STORY_DYNAMICS_TAG_TYPES,
 } from '../data/storyDynamics.js';
 import { genId } from '../data/csvSchemas.js';
+import { createStoryActivity, emptyActivityChart, storyDynamicsDuration, storyDynamicsSources, updateStoryDynamicsChart } from '../data/storyDynamics.js';
+import StoryActivityTimeline, { StoryActivityDetails, journeyTime } from '../components/StoryActivityTimeline.jsx';
 
 const VIEWBOX = { w: 1120, h: 620 };
 const CHART = { x: 78, y: 36, w: 970, h: 490 };
@@ -41,7 +43,7 @@ function makeCurveId(curves) {
   return genId(Object.fromEntries((curves || []).map((curve) => [curve.id, curve])), 'CURVE-');
 }
 
-export default function StoryDynamics() {
+export default function StoryDynamics({ onSelect }) {
   const s = useGame();
   const dispatch = useDispatch();
   const svgRef = useRef(null);
@@ -53,13 +55,36 @@ export default function StoryDynamics() {
   const [selected, setSelected] = useState(null);
   const [draftPoints, setDraftPointsState] = useState([]);
   const [drawing, setDrawing] = useState(false);
+  const [activityId, setActivityId] = useState(null);
 
-  const graph = useMemo(() => normalizeStoryDynamicsGraph(s.storyDynamicsGraph), [s.storyDynamicsGraph]);
+  const root = useMemo(() => normalizeStoryDynamicsGraph(s.storyDynamicsGraph), [s.storyDynamicsGraph]);
+  const activity = root.activities.find(item => item.id === activityId) || null;
+  const graph = activity?.graph || root;
+  const duration = storyDynamicsDuration(root, s.meta.timeline);
+  const chartDuration = activity ? (activity.end - activity.start) / 100 * duration : duration;
+  const sources = useMemo(() => storyDynamicsSources(s), [s.nodes, s.masterNodes, s.taskNodes]);
   const selectedTag = selected?.kind === 'tag' ? graph.tags.find((tag) => tag.id === selected.id) : null;
   const selectedCurve = selected?.kind === 'curve' ? graph.curves.find((curve) => curve.id === selected.id) : null;
 
-  const commit = (next, undoGroup = null) => {
+  const commitRoot = (next, undoGroup = null) => {
     dispatch({ type: 'SET_STORY_DYNAMICS_GRAPH', graph: normalizeStoryDynamicsGraph(next), undoGroup });
+  };
+  const commit = (next, undoGroup = null) => commitRoot(updateStoryDynamicsChart(root, activity?.id, next), undoGroup ? `${activity?.id || 'overview'}:${undoGroup}` : null);
+  const patchActivity = (patch, group) => commitRoot({ ...root, activities: root.activities.map(item => item.id === activity.id ? { ...item, ...patch } : item) }, group ? `activity:${activity.id}:${group}` : null);
+  const openActivity = id => {
+    setActivityId(id);
+    setSelected(null);
+    setDrawing(false);
+    draftRef.current = [];
+    setDraftPointsState([]);
+    dragTagRef.current = null;
+    dragCurvePointRef.current = null;
+    dispatch({ type: 'END_UNDO_GROUP' });
+  };
+  const addActivity = () => {
+    const next = createStoryActivity(root);
+    commitRoot({ ...root, activities: [...root.activities, next] });
+    openActivity(next.id);
   };
 
   const setDraftPoints = (points) => {
@@ -139,6 +164,7 @@ export default function StoryDynamics() {
   };
 
   const onChartPointerUp = (event) => {
+    dispatch({ type: 'END_UNDO_GROUP' });
     if (dragCurvePointRef.current) {
       dragCurvePointRef.current = null;
       return;
@@ -209,13 +235,22 @@ export default function StoryDynamics() {
     <div className="main storydynamics">
       <div className="mhead">
         <div>
-          <div className="crumb">{s.meta.name} / <b>Story Dynamics Graph</b></div>
-          <h2>Story Dynamics Graph</h2>
+          <div className="crumb">{s.meta.name} / Story Dynamics / <button className="crumblink" onClick={() => openActivity(null)}>Whole-game overview</button>{activity && <> / <b>{activity.title}</b></>}</div>
+          <h2>{activity ? activity.title : 'Whole-game experience'}</h2>
         </div>
         <div className="right">
           <span className="mono dim">{graph.curves.length} curves · {graph.tags.length} tags</span>
+          <button className="btn primary" onClick={addActivity}>+ Activity journey</button>
         </div>
       </div>
+
+      <div className="dynamics-layer-controls">
+        <button className={`btn small${!activity ? ' primary' : ''}`} onClick={() => openActivity(null)}>Whole-game overview</button>
+        <label>Whole-game duration (minutes)<input className="field-input" type="number" min="1" step="1" value={duration} onChange={e => { if (Number(e.target.value) >= 1) commitRoot({ ...root, durationMinutes: Number(e.target.value) }, 'story-dynamics:duration'); }} /></label>
+        <span className="hint">Planned emotional journeys. Overview and activity curves are edited independently.</span>
+      </div>
+      <StoryActivityTimeline activities={root.activities} duration={duration} activeId={activity?.id} onOpen={openActivity} />
+      {activity && <StoryActivityDetails activity={activity} duration={duration} sources={sources} onPatch={patchActivity} onInspect={onSelect} />}
 
       <div className="dynamics-toolbar">
         <div className="seg compact">
@@ -229,7 +264,8 @@ export default function StoryDynamics() {
         <input className="field-input compact axis-input" value={graph.yLabel} onChange={(e) => commit({ ...graph, yLabel: e.target.value }, 'story-dynamics:y-label')} aria-label="Y axis label" />
         <button className="ghost" onClick={deleteSelected} disabled={!selected}>Delete selected</button>
         <button className="ghost" onClick={() => commit({ ...graph, curves: [] })}>Clear curves</button>
-        <button className="ghost" onClick={() => { commit(cloneDefaultStoryDynamicsGraph()); setSelected(null); }}>Reset graph</button>
+        <button className="ghost" onClick={() => { commit(activity ? emptyActivityChart() : cloneDefaultStoryDynamicsGraph()); setSelected(null); }}>Reset {activity ? 'activity chart' : 'overview chart'}</button>
+        {activity && <button className="ghost danger" onClick={() => { commitRoot({ ...root, activities: root.activities.filter(item => item.id !== activity.id) }); openActivity(null); }}>Remove activity</button>}
       </div>
 
       <div className="dynamics-stage">
@@ -238,7 +274,7 @@ export default function StoryDynamics() {
           className={`dynamics-chart ${mode === 'tag' ? 'tag-mode' : 'draw-mode'}`}
           viewBox={`0 0 ${VIEWBOX.w} ${VIEWBOX.h}`}
           role="img"
-          aria-label="Story dynamics chart with emotional intensity on the Y axis and player journey on the X axis"
+          aria-label={`${activity ? activity.title : 'Whole-game overview'}: planned emotional journey over ${journeyTime(chartDuration)}`}
           onPointerDown={onChartPointerDown}
           onPointerMove={onChartPointerMove}
           onPointerUp={onChartPointerUp}
@@ -255,6 +291,8 @@ export default function StoryDynamics() {
               </g>
             );
           })}
+          {[0, 25, 50, 75, 100].map(tick => <text key={`time-${tick}`} className="dynamics-time-tick" x={CHART.x + tick / 100 * CHART.w} y={CHART.y + CHART.h + 24}>{journeyTime(tick / 100 * chartDuration)}</text>)}
+          {!graph.curves.length && !drawing && <text className="dynamics-axis-label" x={CHART.x + CHART.w / 2} y={CHART.y + CHART.h / 2} style={{ pointerEvents: 'none' }}>Draw a curve to plan this {activity ? 'activity' : 'overview'} journey</text>}
           <line className="dynamics-axis" x1={CHART.x} y1={CHART.y + CHART.h} x2={CHART.x + CHART.w} y2={CHART.y + CHART.h} />
           <line className="dynamics-axis" x1={CHART.x} y1={CHART.y} x2={CHART.x} y2={CHART.y + CHART.h} />
           <text className="dynamics-axis-label" x={CHART.x + CHART.w / 2} y={CHART.y + CHART.h + 48}>{graph.xLabel}</text>

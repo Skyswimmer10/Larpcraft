@@ -1,0 +1,26 @@
+.group-wizard-body{display:grid;grid-template-columns:195px minmax(0,1fr) 310px;flex:1;min-height:0;overflow:hidden}
+.group-wizard .fc-step-nav button{grid-template-columns:minmax(0,1fr)}
+.group-wizard .nw-main{min-width:0}
+.group-live-preview{overflow:auto;padding:24px 20px;border-left:1px solid var(--line);background:#10131a33}
+.group-live-preview h3{font-size:13px;color:#73ccb2}
+.group-prose{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.85}
+.group-question{margin-bottom:30px}
+.group-question>small{color:var(--muted);font-size:12px}
+.group-question .btn[aria-pressed=true]{border-color:#73ccb2;background:#73ccb218;color:#b3ebda}
+.group-member-card,.group-add-member{min-width:0;margin:16px 0;padding:16px;border:1px solid var(--line);border-radius:9px}
+.group-member-card legend,.group-add-member legend{padding:0 7px;font-size:13px}
+.group-member-card>.linkbtn{margin-left:10px}
+.group-two-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.group-panel{padding:14px 16px}
+.group-panel .nw-field{margin:12px 0}
+.group-panel input.field-input{min-width:0;width:100%;box-sizing:border-box}
+.group-panel h3{margin:0 0 16px}
+.group-panel .group-prose{max-height:180px;overflow:auto}
+.group-drafts{padding:12px 20px;border-bottom:1px solid var(--line);max-height:200px;overflow:auto}
+.group-drafts .btn{margin:4px}
+.group-member-preview{display:grid;gap:9px}
+.group-member-preview .btn{white-space:normal;text-align:left}
+.group-workspace .nw-main textarea{width:100%;min-height:48vh;box-sizing:border-box;line-height:1.7}
+@media(max-width:1100px){.group-wizard-body{grid-template-columns:165px minmax(0,1fr) 260px}}
+@media(max-width:850px){.group-wizard-body{grid-template-columns:150px minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(150px,30%)}.group-wizard-body>.fc-step-nav{grid-row:1/3}.group-live-preview{grid-column:2;border-top:1px solid var(--line);border-left:0;padding:12px 18px}}
+@media(max-width:600px){.group-wizard-body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) minmax(130px,28%)}.group-wizard-body>.fc-step-nav{grid-row:auto;display:flex;flex-direction:row;overflow-x:auto;padding:8px}.group-wizard .fc-step-nav button{min-width:110px;width:auto}.group-live-preview{grid-column:1}.group-two-fields{grid-template-columns:1fr}.group-wizard .nw-header{padding:12px;gap:10px}.group-wizard .nw-header h2{font-size:18px}}

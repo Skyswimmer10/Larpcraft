@@ -1,19 +1,21 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { applyColorPalette, readColorPalette, saveColorPalette, PALETTE_STORAGE_KEY } from '../lib/colorPalettes.js';
 
-const AppearanceContext = createContext({ refreshed: false, focus: false });
+const AppearanceContext = createContext({ refreshed: true, focus: false });
 export const useAppearance = () => useContext(AppearanceContext);
 export function AppearanceProvider({ children }) {
-  const [refreshed, setRefreshed] = useState(() => {
-    try { return localStorage.getItem('larpcraft:refreshed-ui') !== 'off'; } catch { return true; }
-  });
   const [focus, setFocus] = useState(false);
-  const toggleAppearance = () => {
-    const next = !refreshed;
-    setRefreshed(next);
-    setFocus(false);
-    try { localStorage.setItem('larpcraft:refreshed-ui', next ? 'on' : 'off'); } catch { /* In-memory preference still works. */ }
-  };
-  return <AppearanceContext.Provider value={{ refreshed, focus, toggleAppearance, toggleFocus: () => setFocus(value => !value) }}>
-    <div className={`frame${refreshed ? ' ui-refresh' : ''}${refreshed && focus ? ' ui-focus' : ''}`}>{children}</div>
+  const [palette, setPaletteState] = useState(readColorPalette);
+  const setPalette = id => { const next = saveColorPalette(id); applyColorPalette(next); setPaletteState(next); };
+  useEffect(() => {
+    applyColorPalette(palette);
+  }, [palette]);
+  useEffect(() => {
+    const sync = event => { if (event.key === PALETTE_STORAGE_KEY || event.key === null) { const next = readColorPalette(); applyColorPalette(next); setPaletteState(next); } };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
+  return <AppearanceContext.Provider value={{ refreshed: true, focus, palette, setPalette, toggleFocus: () => setFocus(value => !value) }}>
+    <div className={`frame ui-refresh${focus ? ' ui-focus' : ''}`}>{children}</div>
   </AppearanceContext.Provider>;
 }

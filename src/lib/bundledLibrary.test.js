@@ -5,7 +5,9 @@ import { BUNDLED_LIBRARY_VERSION, mergeBundledLibrary } from './bundledLibrary.j
 
 describe('mergeBundledLibrary', () => {
   it('ships the complete captured library and mechanism artwork', () => {
-    expect(Object.keys(deployedLibrary.concepts || {})).toHaveLength(44);
+    expect(Object.keys(deployedLibrary.concepts || {})).toHaveLength(45);
+    expect(Object.keys(deployedLibrary.narrative || {})).toHaveLength(10);
+    expect(Object.keys(deployedLibrary.conversationTemplates || {})).toHaveLength(1);
     expect(Object.values(deployedLibrary.concepts).reduce((sum, concept) => sum + Object.keys(concept.nodes || {}).length, 0)).toBe(481);
     expect(Object.values(deployedLibrary.concepts).reduce((sum, concept) => sum + (concept.edges || []).length, 0)).toBe(371);
     expect(deployedLibrary.concepts['LIB-CPT-N039']).toMatchObject({ name: 'Drive stories' });

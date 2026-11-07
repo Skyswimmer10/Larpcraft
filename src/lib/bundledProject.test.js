@@ -1,20 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import deployedProject from '../data/deployedProject.json';
-import { makeProjectSeed } from '../data/seed.js';
 import { BUNDLED_PROJECT_VERSION, mergeBundledProject } from './bundledProject.js';
 
 describe('mergeBundledProject', () => {
-  it('ships the current captured workspace, including intentionally cleared narrative nodes', () => {
-    expect(Object.keys(deployedProject.nodes || {})).toHaveLength(0);
-    expect(Object.keys(deployedProject.taskNodes || {})).toHaveLength(3);
+  it('ships the current captured workspace with narrative beats, conversations and character work', () => {
+    expect(Object.keys(deployedProject.nodes || {})).toHaveLength(12);
+    expect(Object.values(deployedProject.nodes).some(node=>node.title?.toLowerCase()==='test this'&&node.storyBeat?.workshop)).toBe(true);
+    expect(Object.keys(deployedProject.conversations || {})).toHaveLength(2);
+    expect(Object.keys(deployedProject.relationships || {})).toHaveLength(1);
+    expect(Object.keys(deployedProject.taskNodes || {})).toHaveLength(6);
     expect(Object.keys(deployedProject.masterNodes || {})).toHaveLength(5);
     expect(Object.keys(deployedProject.frames || {})).toHaveLength(0);
     expect(deployedProject.bundledProjectVersion).toBe(BUNDLED_PROJECT_VERSION);
   });
 
   it('preserves an existing richer game when the captured workspace has fewer nodes', () => {
-    const saved = makeProjectSeed();
-    const merged = mergeBundledProject(deployedProject, saved);
+    const bundled={meta:{name:'Operation Chimera',prefix:'CHM'},nodes:{A:{title:'Captured'}},edges:[],taskNodes:{M:{}},taskEdges:[]};
+    const saved={meta:{name:'Operation Chimera',prefix:'CHM'},nodes:{A:{title:'Hosted edit'},B:{}},edges:[{from:'A',to:'B'}],taskNodes:{M:{title:'Hosted mechanic'},N:{}},taskEdges:[]};
+    const merged = mergeBundledProject(bundled, saved);
     expect(merged.nodes).toEqual(saved.nodes);
     expect(merged.taskNodes).toMatchObject(saved.taskNodes);
     expect(merged.edges).toEqual(saved.edges);

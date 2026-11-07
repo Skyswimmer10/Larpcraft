@@ -1,5 +1,10 @@
+import { syncProjectCharacters, enableCharacterProfile, syncCharacterProfile, isProfileNode, characterSources, removeCharacterInput, CHARACTER_INPUT_LABEL } from '../lib/characterProfile.js';
 import { applyFrameScale } from '../lib/frameScale.js';
+import { refreshConversationNames } from '../lib/conversations.js';
+import { syncProjectRelationships } from '../lib/relationships.js';
+import { updateStoryPlanning } from '../lib/storyPlanning.js';
 import { moveFrameContents } from '../lib/frameContents.js';
+import { syncDragonProject } from '../lib/dragonSync.js';
 import { includeGeneratedCharacterNodes, syncCharacterArchetypeGraph } from '../lib/characterArchetype.js';
 
 // Pure state transitions. Every view dispatches through here, so an edit made
@@ -73,6 +78,11 @@ function withHistory(entity, patch) {
 }
 
 export function reducer(state, action) {
+  const next = reduceState(state, action);
+  return next === state || action.type === 'BATCH' ? next : refreshConversationNames(syncProjectCharacters(syncProjectRelationships(syncDragonProject(next), state), state, action));
+}
+
+function reduceState(state, action) {
   switch (action.type) {
     case 'RESET':
       return action.seed;
@@ -213,11 +223,20 @@ export function reducer(state, action) {
     case 'SET_META': {
       return { ...state, meta: { ...state.meta, ...action.patch } };
     }
+    case 'PATCH_STORY_PLANNING':
+      return { ...state, meta: { ...state.meta, storyPlanning: updateStoryPlanning(state.meta.storyPlanning, action.change) } };
 
     // Unfinished FATE work belongs to the project, independently of canvas
     // nodes. These writes use the normal disk/IndexedDB persistence pipeline.
     case 'SAVE_FATE_DRAFT':
       return { ...state, fateWizardDrafts: { ...state.fateWizardDrafts, [action.draft.id]: action.draft } };
+    case 'SAVE_GROUP_DRAFT':
+      return { ...state, groupWizardDrafts: { ...state.groupWizardDrafts, [action.draft.id]: action.draft } };
+    case 'REMOVE_GROUP_DRAFT': {
+      const drafts = { ...state.groupWizardDrafts };
+      delete drafts[action.id];
+      return { ...state, groupWizardDrafts: drafts };
+    }
     case 'REMOVE_FATE_DRAFT': {
       const drafts = { ...state.fateWizardDrafts };
       delete drafts[action.id];
@@ -339,13 +358,14 @@ export function reducer(state, action) {
     // Connect two nodes (or subnodes — e.g. an Outcome branch merging into a
     // later node). Ignores self-loops and duplicate connections.
     case 'ADD_EDGE': {
-      const { from, to, label = '', color = null, fromSide = 'right', toSide = 'left' } = action;
+      const { from, to, label = '', color = null, fromSide = 'right', toSide = 'left', storyLink } = action;
+      const story = storyLink && typeof storyLink === 'object' && !Array.isArray(storyLink) ? { storyLink, label } : {};
       const exists = (id) => state.nodes[id] || state.subnodes?.[id] || state.frameworks?.[id] || state.titleMarkers?.[id];
       if (from === to || !exists(from) || !exists(to)) return state;
       if (state.edges.some((e) => e.from === from && e.to === to)) {
-        return { ...state, edges: state.edges.map((e) => e.from === from && e.to === to ? { ...e, fromSide, toSide } : e) };
+        return { ...state, edges: state.edges.map((e) => e.from === from && e.to === to ? { ...e, fromSide, toSide, ...story } : e) };
       }
-      return { ...state, edges: [...state.edges, { from, to, label, color, fromSide, toSide }] };
+      return { ...state, edges: [...state.edges, { from, to, label, color, fromSide, toSide, ...story }] };
     }
 
     // ---- frames: purely visual grouping; moving a frame carries members ----
@@ -428,6 +448,30 @@ export function reducer(state, action) {
     }
 
     // ---- generic located-graph editing (surface task flow + nested subs) ----
+    case 'REMOVE_CHARACTER_INPUT': {
+      const scope = action.scope || { coll: 'nodes' }, g = locateGraph(state, scope), node = g.nodes[action.id];
+      if (!isProfileNode(node)) return state;
+      const root = scope.coll === 'nodes' && !scope.parentPath?.length && !scope.parentId;
+      const sourceGraph = { ...g, nodes: { ...g.nodes, ...(root ? state.frameworks : {}) }, teams: state.teams, factions: state.factions };
+      const source = characterSources(node, sourceGraph).find(row => row.key === action.key);
+      if (!source) return state;
+      const nextNode = removeCharacterInput(node, sourceGraph, action.key);
+      let next = writeGraph(state, scope, { ...g, nodes: { ...g.nodes, [node.id]: nextNode }, edges: g.edges.filter(edge => !(edge.from === source.nodeId && edge.to === node.id && edge.label === CHARACTER_INPUT_LABEL)) });
+      const sessions = new Set(source.record?.sessionId ? [source.record.sessionId] : []);
+      const scopeKey = JSON.stringify({ coll: scope.coll, path: scope.parentPath || (scope.parentId ? [scope.parentId] : []) });
+      for (const coll of ['fateWizardDrafts', 'kolbWizardDrafts', 'valuesWizardDrafts']) if (next[coll]) next = { ...next, [coll]: Object.fromEntries(Object.entries(next[coll]).filter(([, draft]) => !(draft.workspace?.targetId === node.id && draft.workspace?.scopeKey === scopeKey && sessions.has(draft.workspace?.sessionId)))) };
+      if (next.groupWizardDrafts) next = { ...next, groupWizardDrafts: Object.fromEntries(Object.entries(next.groupWizardDrafts).filter(([, draft]) => !(draft.targetId === node.id && sessions.has(draft.sessionId) && JSON.stringify({ coll: draft.scope?.coll || 'nodes', path: draft.scope?.parentPath || (draft.scope?.parentId ? [draft.scope.parentId] : []) }) === scopeKey))) };
+      return next;
+    }
+    case 'MATERIALIZE_CHARACTER_INPUTS': {
+      const scope = action.scope || { coll: 'nodes' };
+      const g = locateGraph(state, scope);
+      const node = g.nodes[action.id];
+      if (!isProfileNode(node)) return state;
+      const active = enableCharacterProfile(node);
+      const next = syncCharacterProfile({ ...active, characterCanvas: { ...active.characterCanvas, version: 1 } }, g);
+      return JSON.stringify(next) === JSON.stringify(node) ? state : writeGraph(state, scope, { ...g, nodes: { ...g.nodes, [node.id]: next } });
+    }
     case 'GRAPH_ADD_NODE': {
       const { scope, node } = action;
       const g = locateGraph(state, scope);
@@ -447,7 +491,17 @@ export function reducer(state, action) {
       const nodes = { ...g.nodes };
       const removed = includeGeneratedCharacterNodes(nodes, [id]);
       removed.forEach((nodeId) => delete nodes[nodeId]);
-      const next = writeGraph(state, scope, { nodes, edges: g.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)) });
+      let next = writeGraph(state, scope, { nodes, edges: g.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)) });
+      const input = g.nodes[id].characterInput || (g.nodes[id].groupRoster ? { key: 'group:members' } : null);
+      const path = scopePath(scope);
+      if (input && path.length) {
+        const ownerScope = { coll: scope.coll, parentPath: path.slice(0, -1) };
+        const ownerGraph = locateGraph(next, ownerScope);
+        const owner = ownerGraph.nodes[path.at(-1)];
+        if (isProfileNode(owner)) next = writeGraph(next, ownerScope, { ...ownerGraph, nodes: {
+          ...ownerGraph.nodes, [owner.id]: { ...owner, characterCanvas: { ...owner.characterCanvas, hidden: [...new Set([...(owner.characterCanvas?.hidden || []), input.key])] } },
+        } });
+      }
       // Deleting a top-level task also clears its Weaver alignments.
       if ((scope.coll === 'taskNodes' || scope.coll === 'storyboardNodes') && !scopePath(scope).length) {
         next.alignments = (next.alignments || []).filter((a) => a.task !== id);
@@ -458,14 +512,15 @@ export function reducer(state, action) {
       return next;
     }
     case 'GRAPH_ADD_EDGE': {
-      const { scope, from, to, label = '', color = null, fromSide = 'right', toSide = 'left' } = action;
+      const { scope, from, to, label = '', color = null, fromSide = 'right', toSide = 'left', storyLink } = action;
+      const story = storyLink && typeof storyLink === 'object' && !Array.isArray(storyLink) ? { storyLink, label } : {};
       const g = locateGraph(state, scope);
       const exists = (id) => g.nodes[id] || g.titleMarkers?.[id];
       if (from === to || !exists(from) || !exists(to)) return state;
       if (g.edges.some((e) => e.from === from && e.to === to)) {
-        return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges.map((e) => e.from === from && e.to === to ? { ...e, fromSide, toSide } : e) });
+        return writeGraph(state, scope, { nodes: g.nodes, edges: g.edges.map((e) => e.from === from && e.to === to ? { ...e, fromSide, toSide, ...story } : e) });
       }
-      return writeGraph(state, scope, { nodes: g.nodes, edges: [...g.edges, { from, to, label, color, fromSide, toSide }] });
+      return writeGraph(state, scope, { nodes: g.nodes, edges: [...g.edges, { from, to, label, color, fromSide, toSide, ...story }] });
     }
     case 'GRAPH_UPDATE_EDGE': {
       const { scope, from, to, patch } = action;

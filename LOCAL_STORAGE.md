@@ -67,3 +67,13 @@ already published image files. Local canonical files and recovery archives stay
 excluded from Git and deployment uploads. Existing hosted saves retain their
 merge protections, including richer authored graphs. New hosted browser profiles
 start from this release snapshot. Hosted edits still save in that browser.
+
+## Release snapshot — 7 November 2026
+
+Project bundle version 5 and library bundle version 7 capture the current local
+Operation Chimera game and master database, including Story Beat workshops,
+characters, conversations, relationships, reusable created content and updated
+framework work. Images use content-addressed files in `public/library-images/`.
+Canonical JSON was backed up under ignored `.larpcraft/releases/` and remains
+unchanged. Publishing does not create a cloud synchronization service; the
+existing hosted-save merge and workspace-export behavior remains in place.

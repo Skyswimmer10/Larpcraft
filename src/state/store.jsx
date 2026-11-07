@@ -23,8 +23,9 @@ const ProjDispatchCtx = createContext(null);
 
 const MAX_UNDO = 100;
 const GRAPH_PATCH_KEYS = ['nodes', 'edges', 'subnodes', 'frameworks', 'frames', 'numberMarkers', 'titleMarkers'];
-const GRAPH_ENTITY_COLLECTIONS = new Set(['nodes', 'subnodes', 'frameworks', 'frames', 'numberMarkers', 'titleMarkers']);
+const GRAPH_ENTITY_COLLECTIONS = new Set(['nodes', 'subnodes', 'frameworks', 'frames', 'numberMarkers', 'titleMarkers', 'conversations', 'conversationTemplates', 'relationships', 'research']);
 const UNDOABLE_ACTIONS = new Set([
+  'PATCH_STORY_PLANNING',
   'BATCH',
   'ADD_NODE',
   'DELETE_NODE',
@@ -40,6 +41,8 @@ const UNDOABLE_ACTIONS = new Set([
   'GRAPH_UPDATE_NODE',
   'GRAPH_DELETE_NODE',
   'SYNC_CHARACTER_ARCHETYPE',
+  'MATERIALIZE_CHARACTER_INPUTS',
+  'REMOVE_CHARACTER_INPUT',
   'GRAPH_ADD_EDGE',
   'GRAPH_UPDATE_EDGE',
   'GRAPH_REMOVE_EDGE',
@@ -66,6 +69,7 @@ const isGraphPatch = (patch = {}) => GRAPH_PATCH_KEYS.some((key) => Object.proto
 const isUndoableAction = (action) => {
   if (!action || ['RESET', 'UNDO', 'END_UNDO_GROUP'].includes(action.type)) return false;
   if (UNDOABLE_ACTIONS.has(action.type)) return true;
+  if (action.type === 'UPDATE_ENTITY' && action.coll === 'locations' && ['markers', 'arrows', 'mapLabels', 'mapZones'].some(key => Object.prototype.hasOwnProperty.call(action.patch || {}, key))) return true;
   if (['ADD_ENTITY', 'UPDATE_ENTITY', 'DELETE_ENTITY'].includes(action.type) && GRAPH_ENTITY_COLLECTIONS.has(action.coll)) return true;
   if (action.type === 'UPDATE_ENTITY' && ['stories', 'mechStructures', 'concepts'].includes(action.coll)) {
     return isGraphPatch(action.patch);
@@ -78,6 +82,7 @@ const patchKey = (patch = {}) => Object.keys(patch).sort().join(',');
 const undoGroupFor = (action) => {
   if (action.undoGroup) return action.undoGroup;
   switch (action.type) {
+    case 'PATCH_STORY_PLANNING': return `story-planning:${action.change.structure || 'direction'}:${action.change.stage || ''}:${action.change.question || Object.keys(action.change.direction || action.change).join(',')}`;
     case 'UPDATE_ENTITY': return `entity:${action.coll}:${action.id}:${patchKey(action.patch)}`;
     case 'GRAPH_UPDATE_NODE': return `graph-node:${scopeKey(action.scope)}:${action.id}:${patchKey(action.patch)}`;
     case 'GRAPH_UPDATE_FRAME': return `graph-frame:${scopeKey(action.scope)}:${action.id}:${patchKey(action.patch)}`;

@@ -8,7 +8,28 @@
 const ITEM_TYPES = ['artifact', 'gadget', 'consumable', 'key', 'clue', 'status', 'tool', 'wearable'];
 const BUILD = ['concept', 'design', 'build', 'tested', 'packed'];
 const AVAIL = ['ready', 'in-use', 'deployed', 'missing'];
-const NODE_KINDS = ['story', 'location', 'objective', 'enemy', 'mechanic', 'sensor', 'beat', 'reveal', 'branch', 'fact', 'converge', 'timed', 'recovery', 'event', 'character', 'storyLocation', 'item', 'quest', 'concept'];
+const NODE_KINDS = ['story', 'storyBeat', 'location', 'objective', 'enemy', 'mechanic', 'sensor', 'beat', 'reveal', 'branch', 'fact', 'converge', 'timed', 'recovery', 'event', 'character', 'storyLocation', 'item', 'quest', 'concept'];
+
+function storyLinkCsvActions(row) {
+  if (!row.storyLinks) return [];
+  try {
+    const rows = JSON.parse(row.storyLinks);
+    if (!Array.isArray(rows)) return [];
+    return rows.filter(edge => edge && typeof edge.to === 'string' && edge.storyLink && typeof edge.storyLink === 'object' && !Array.isArray(edge.storyLink)).map(edge => ({ type: 'ADD_EDGE', from: row.id, to: edge.to, label: edge.label || 'Story link', storyLink: edge.storyLink, fromSide: edge.fromSide || 'right', toSide: edge.toSide || 'left' }));
+  } catch { return []; }
+}
+
+function storyBeatCsvFields(value, warn) {
+  if (!value) return {};
+  try {
+    const details = JSON.parse(value);
+    if (!details || typeof details !== 'object' || Array.isArray(details)) throw Error('Expected an object');
+    return { storyBeat: details };
+  } catch {
+    warn('invalid Story Beat details; existing details were kept');
+    return {};
+  }
+}
 
 export function genId(existing, prefix) {
   let n = Object.keys(existing).length + 1;
@@ -51,11 +72,12 @@ const NODE_KIND_LABELS = {
   converge: 'Convergence',
   timed: 'Timed event',
   recovery: 'Recovery',
-  event: 'Event',
+  storyBeat: 'Story Beat',
+  event: 'Story Beat',
   character: 'Character',
   storyLocation: 'Story Location',
   item: 'Story Item',
-  quest: 'Quest',
+  quest: 'Story Beat',
   concept: 'Concept',
 };
 const TASK_NODE_KIND_LABELS = {
@@ -198,11 +220,13 @@ export const CSV_SCHEMAS = {
 
   nodes: {
     filename: 'quest-nodes.csv',
-    headers: ['id', 'kind', 'kindName', 'title', 'teamId', 'teamName', 'x', 'y', 'color', 'body', 'itemId', 'itemName', 'locationId', 'locationName', 'mechanicIds', 'mechanicNames', 'sensorIds', 'sensorNames', 'connectsTo', 'connectsToTitles'],
+    headers: ['id', 'kind', 'kindName', 'title', 'teamId', 'teamName', 'x', 'y', 'color', 'body', 'storyBeat', 'storyLinks', 'itemId', 'itemName', 'locationId', 'locationName', 'mechanicIds', 'mechanicNames', 'sensorIds', 'sensorNames', 'connectsTo', 'connectsToTitles'],
     newId: (s) => genId(s.nodes, 'N-'),
     blank: (id) => ({ id, kind: 'story', title: 'New story beat', x: 80, y: 80, body: '', color: null, image: null, locationId: null, itemId: null, mechanicIds: [], sensorIds: [] }),
     toRows: (s) => Object.values(s.nodes).map((n) => ({
       ...n,
+      storyBeat: n.storyBeat ? JSON.stringify(n.storyBeat) : '',
+      storyLinks: JSON.stringify((s.edges || []).filter(edge => edge.from === n.id && edge.storyLink).map(({ to,label,storyLink,fromSide,toSide }) => ({ to,label,storyLink,fromSide,toSide }))),
       kindName: NODE_KIND_LABELS[n.kind] || n.kind,
       teamId: n.teamId ?? '',
       teamName: n.teamId ? (s.teams?.[n.teamId]?.name || n.teamId) : '',
@@ -228,11 +252,12 @@ export const CSV_SCHEMAS = {
       y: Number.isFinite(+row.y) && row.y !== '' ? Math.max(8, Math.round(+row.y)) : 80,
       color: /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(row.color) ? row.color : null,
       body: row.body ?? '',
+      ...storyBeatCsvFields(row.storyBeat, warn),
       itemId: row.itemId && s.items[row.itemId] ? row.itemId : (row.itemId && warn(`unknown item "${row.itemId}"`), null),
       locationId: row.locationId && s.locations[row.locationId] ? row.locationId : (row.locationId && warn(`unknown location "${row.locationId}"`), null),
     }),
     // Rebuild connections after the nodes themselves are merged in.
-    extra: (row) => list(row.connectsTo).map((to) => ({ type: 'ADD_EDGE', from: row.id, to })),
+    extra: (row) => [...list(row.connectsTo).map((to) => ({ type: 'ADD_EDGE', from: row.id, to })), ...storyLinkCsvActions(row)],
   },
 
   taskNodes: {

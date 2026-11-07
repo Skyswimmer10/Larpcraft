@@ -1,0 +1,51 @@
+.relationship-dialog{width:min(860px,94vw);height:min(820px,90dvh);max-width:none;max-height:none;margin:auto;padding:0;border:1px solid #3b5065;border-radius:13px;background:#1a2331;color:var(--ink)}
+.relationship-dialog.relationship-wide{width:min(1180px,96vw)}
+.relationship-dialog[open]{display:flex;flex-direction:column}
+.relationship-dialog::backdrop{background:#080c16b8}
+.relationship-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px 22px;border-bottom:1px solid #344659;flex:none}
+.relationship-dialog h2{font-size:20px;line-height:1.4}
+.relationship-body{padding:22px;overflow:auto;min-height:0}
+.relationship-body>.cp-field{margin-top:20px}
+.relationship-picker{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;padding:22px;overflow:auto;min-height:0}
+.relationship-vocabulary fieldset{border:0;border-top:1px solid #344659;padding:12px 0 18px}
+.relationship-vocabulary legend{font-size:12px;color:#91d4c3;padding-right:8px}
+.relationship-vocabulary fieldset>div{display:flex;flex-wrap:wrap;gap:7px}
+.relationship-word{border:1px solid #46665e;background:#243d38;color:#c1e4d8;border-radius:7px;padding:8px 11px;font-size:12px}
+.relationship-word[aria-pressed=true],.relationship-target .btn[aria-pressed=true],.relationship-target-list button[aria-pressed=true]{background:#395f54;border-color:#98d5c0;color:#fff;box-shadow:inset 0 -2px #98d5c0}
+.relationship-target{display:flex;flex-direction:column;gap:16px;min-width:0}
+.relationship-target h3{font-size:18px;line-height:1.65}
+.relationship-target h3 strong{color:#9fe0c8}
+.relationship-target-modes{display:flex;flex-wrap:wrap;gap:7px}
+.relationship-target-list{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto}
+.relationship-target-list button{display:flex;flex-direction:column;gap:5px;text-align:left;background:#242f43;border:1px solid #3c4b65;border-radius:7px;padding:10px}
+.relationship-target-list small{color:var(--muted);font-size:11px}
+.relationship-brief{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0;font-size:12px}
+.relationship-label{border:1px solid #4a6b61;border-radius:5px;padding:4px 6px;background:#253d36;color:#a8dec9}
+.relationship-name{flex:1;text-align:left;min-width:60px;color:var(--ink);overflow-wrap:anywhere}
+.relationship-name:hover{text-decoration:underline}
+.relationship-details-button{color:#9bd7ca;font-size:12px}
+.relationship-remove{color:#f29c9c}
+.relationship-endpoints{display:grid;grid-template-columns:minmax(100px,1fr) minmax(0,2fr) minmax(100px,1fr);align-items:center;gap:20px}
+.relationship-person{display:flex;flex-direction:column;align-items:center;gap:9px;padding:16px;background:#253047;border:1px solid #3b5065;border-radius:9px;overflow-wrap:anywhere}
+.relationship-person:disabled{cursor:default}
+.relationship-person img{width:100px;height:100px;object-fit:contain}
+.relationship-person small{color:var(--muted);font-size:11px}
+.relationship-paired-labels{text-align:center;font-size:13px;line-height:1.7}
+.relationship-paired-labels b{color:#a1dcc5}
+.relationship-word-settings{margin:20px 0;padding:12px;border:1px solid #344659;border-radius:8px}
+.relationship-word-settings summary{cursor:pointer;font-size:12px}
+.relationship-word-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.relationship-footer{display:flex;gap:18px;align-items:center;margin-top:20px;justify-content:space-between}
+.relationship-footer small{font-size:11px;color:var(--muted)}
+.relationship-review{padding:16px;background:#352e43;border:1px solid #786594;border-radius:8px}
+.relationship-review pre{white-space:pre-wrap;margin:12px 0;line-height:1.6}
+.relationship-canvas{flex:1;display:flex;min-height:0}
+.relationship-canvas-search{padding:14px 20px}
+.relationship-canvas-search input{width:100%}
+.relationship-canvas-person{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.relationship-canvas-person img{width:64px;height:76px;object-fit:contain}
+.relationship-edge-button{font:inherit;color:inherit;padding:0;cursor:pointer;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.relationship-edge-button:hover{text-decoration:underline}
+.elab.relationship-edge-label{display:flex;width:max-content;margin-inline:auto}
+.relationship-dialog button:focus-visible{outline:2px solid #a5d8cb;outline-offset:3px}
+@media(max-width:750px){.relationship-picker{grid-template-columns:minmax(0,1fr)}.relationship-endpoints{grid-template-columns:1fr 1fr}.relationship-paired-labels{grid-column:1/-1;grid-row:2}.relationship-word-fields{grid-template-columns:1fr}}

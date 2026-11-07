@@ -1,3 +1,4 @@
+import { remapCharacterInputs } from './characterProfile.js';
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 export function createCanvasClipboard(nodes, edges, selectedIds) {
@@ -21,7 +22,7 @@ export function offsetCanvasClipboard(clipboard, amount = 28) {
   };
 }
 
-export function remapCanvasClipboard(clipboard, existingNodes, prefix = 'COPY-') {
+export function remapCanvasClipboard(clipboard, existingNodes, prefix = 'COPY-', scope = { coll: 'nodes' }) {
   const occupied = { ...(existingNodes || {}) };
   const idMap = {};
   let index = 1;
@@ -33,7 +34,7 @@ export function remapCanvasClipboard(clipboard, existingNodes, prefix = 'COPY-')
   });
   const nodes = Object.fromEntries(clipboard.nodes.map((node) => {
     const id = idMap[node.id];
-    return [id, { ...clone(node), id }];
+    return [id, remapCharacterInputs({ ...clone(node), id }, idMap, scope)];
   }));
   const edges = (clipboard.edges || []).map((edge) => ({
     ...clone(edge),

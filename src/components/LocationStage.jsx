@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useGame, useDispatch } from '../state/store.jsx';
 import { ENTITY_COLORS } from './bits.jsx';
 import { STAGE_W, STAGE_H } from '../data/seed.js';
+import LocationAnnotationPanel, { LocationAnnotationLayer } from './LocationAnnotations.jsx';
+import { mapRows, mapAudienceVisible, mapZoneRect, moveMapAnnotation, resizeMapZone, updateMapOverlay, removeMapOverlay, anchorMapAnnotation, projectMapAnnotation } from '../lib/locationAnnotations.js';
 
 // ---------------- OpenStreetMap base layer (outdoor locations) ----------------
 // Plain slippy-tile math, no map library. Tiles come straight from
@@ -66,14 +68,51 @@ function OsmLayer({ osm, blocked, onBlocked }) {
 export default function LocationStage({ location, onBack, onSelect }) {
   const s = useGame();
   const dispatch = useDispatch();
+  return <LocationStageEditor location={location} onBack={onBack} onSelect={onSelect} game={s} dispatch={dispatch} />;
+}
+
+export function LocationStageEditor({ location, onBack, onSelect, game: s, dispatch }) {
   const stageRef = useRef(null);
-  const [tool, setTool] = useState('move'); // 'move' | 'arrow'
+  const [tool, setTool] = useState('move');
   const [pending, setPending] = useState(null); // marker waiting for a click: {kind, refId}
   const [drawing, setDrawing] = useState(null); // arrow preview {x1,y1,x2,y2}
   const [tilesBlocked, setTilesBlocked] = useState(false);
   const dragRef = useRef(null);
+  const suppressMarkerClick = useRef(false);
+  const [dragPreview, setDragPreview] = useState(null);
+  const [selected, setSelected] = useState(null), [notesOpen, setNotesOpen] = useState(false);
+  const [audience, setAudience] = useState('facilitator');
+  const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const element = stageRef.current;
+    const measure = () => { const rect = element.getBoundingClientRect(); setStageSize({ w: rect.width, h: rect.height }); };
+    measure();
+    const observer = new ResizeObserver(measure); observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const editing = audience !== 'player';
+  const interactive = editing && tool === 'move' && !pending;
+  const markers = mapRows(location, 'markers'), arrows = mapRows(location, 'arrows');
+  const projectedLocation = location.mapKind === 'osm' ? { ...location, mapLabels: mapRows(location, 'mapLabels').map(row => projectMapAnnotation(row, location.osm, stageSize)), mapZones: mapRows(location, 'mapZones').map(row => projectMapAnnotation(row, location.osm, stageSize)) } : location;
+  const displayLocation = dragPreview ? { ...projectedLocation, [dragPreview.collection]: mapRows(projectedLocation, dragPreview.collection).map(row => row.id === dragPreview.row.id ? dragPreview.row : row) } : projectedLocation;
 
-  const patch = (p) => dispatch({ type: 'UPDATE_ENTITY', coll: 'locations', id: location.id, patch: p });
+  const patch = (p) => {
+    dispatch({ type: 'UPDATE_ENTITY', coll: 'locations', id: location.id, patch: p });
+    dispatch({ type: 'END_UNDO_GROUP' });
+  };
+  const chooseTool = next => { setTool(next); setPending(null); setDrawing(null); setDragPreview(null); dragRef.current = null; };
+  const selectNote = selection => { setSelected(selection); setNotesOpen(true); };
+  const anchor = row => {
+    const rect = stageRef.current.getBoundingClientRect();
+    return location.mapKind === 'osm' ? anchorMapAnnotation(row, location.osm, { w: rect.width, h: rect.height }) : { ...row, osmAnchor: undefined };
+  };
+  const changeNote = (collection, id, changes) => {
+    const row = mapRows(projectedLocation, collection).find(item => item.id === id);
+    const geometry = ['mapLabels', 'mapZones'].includes(collection) && ['x', 'y', 'w', 'h'].some(key => key in changes);
+    patch(updateMapOverlay(location, collection, id, geometry && row ? anchor({ ...row, ...changes }) : changes));
+  };
+  const removeNote = (collection, id) => { patch(removeMapOverlay(location, collection, id)); setSelected(null); };
+  const newId = prefix => `${prefix}:${crypto.randomUUID()}`;
 
   const stagePoint = (e) => {
     const r = stageRef.current.getBoundingClientRect();
@@ -92,11 +131,11 @@ export default function LocationStage({ location, onBack, onSelect }) {
 
   // Placing a marker also wires the game state: items deploy here, sensors move here.
   const placeMarker = (p) => {
-    const id = `M${Date.now().toString(36).toUpperCase()}`;
+    const id = newId('M');
     const marker = { id, kind: pending.kind, refId: pending.refId, x: round1(p.x), y: round1(p.y) };
-    const extra = pending.kind === 'sensor' && !location.sensorIds.includes(pending.refId)
-      ? { sensorIds: [...location.sensorIds, pending.refId] } : {};
-    patch({ markers: [...location.markers, marker], ...extra });
+    const extra = pending.kind === 'sensor' && !(location.sensorIds || []).includes(pending.refId)
+      ? { sensorIds: [...(location.sensorIds || []), pending.refId] } : {};
+    patch({ markers: [...markers, marker], ...extra });
     if (pending.kind === 'item') dispatch({ type: 'DEPLOY_ITEM', itemId: pending.refId, locationId: location.id });
     if (pending.kind === 'sensor') dispatch({ type: 'UPDATE_ENTITY', coll: 'sensors', id: pending.refId, patch: { locationId: location.id } });
     setPending(null);
@@ -104,42 +143,64 @@ export default function LocationStage({ location, onBack, onSelect }) {
 
   // stage-level pointer handlers: place pending marker, or draw an arrow
   const onStageDown = (e) => {
-    if (e.target.closest('.marker')) return;
+    if (!editing || e.button !== 0 || e.target.closest('[data-map-overlay], .marker')) return;
     const p = stagePoint(e);
     if (pending) { placeMarker(p); return; }
-    if (tool === 'arrow') {
+    if (tool === 'label') {
+      const label = anchor({ id: newId('L'), text: 'New label', x: round1(p.x), y: round1(p.y), color: '#e8d25c', audience: 'all' });
+      patch({ mapLabels: [...mapRows(location, 'mapLabels'), label] });
+      selectNote({ collection: 'mapLabels', id: label.id }); setTool('move'); return;
+    }
+    if (tool === 'arrow' || tool === 'zone') {
       setDrawing({ x1: p.x, y1: p.y, x2: p.x, y2: p.y });
       e.currentTarget.setPointerCapture(e.pointerId);
-    }
+    } else setSelected(null);
   };
   const onStageMove = (e) => {
+    if (dragRef.current) {
+      const drag = dragRef.current, p = stagePoint(e);
+      const dx = p.x - drag.start.x, dy = p.y - drag.start.y;
+      if (Math.hypot(dx, dy) > 0.4) drag.moved = true;
+      setDragPreview({ collection: drag.collection, row: drag.resize ? resizeMapZone(drag.row, p) : moveMapAnnotation(drag.row, dx, dy) });
+      return;
+    }
     if (drawing) { const p = stagePoint(e); setDrawing((d) => ({ ...d, x2: p.x, y2: p.y })); }
   };
-  const onStageUp = () => {
+  const onStageUp = (e) => {
+    if (dragRef.current) {
+      const drag = dragRef.current, p = stagePoint(e);
+      const dx = p.x - drag.start.x, dy = p.y - drag.start.y;
+      const moved = drag.moved || Math.hypot(dx, dy) > 0.4;
+      if (moved) changeNote(drag.collection, drag.row.id, drag.resize ? resizeMapZone(drag.row, p) : moveMapAnnotation(drag.row, dx, dy));
+      suppressMarkerClick.current = moved && drag.collection === 'markers';
+      if (!moved) setNotesOpen(true);
+      dragRef.current = null; setDragPreview(null); return;
+    }
     if (!drawing) return;
-    const len = Math.hypot(drawing.x2 - drawing.x1, drawing.y2 - drawing.y1);
-    if (len > 4) {
-      patch({ arrows: [...location.arrows, { id: `A${Date.now().toString(36).toUpperCase()}`, x1: round1(drawing.x1), y1: round1(drawing.y1), x2: round1(drawing.x2), y2: round1(drawing.y2) }] });
+    const p = stagePoint(e);
+    if (tool === 'zone') {
+      const rect = mapZoneRect({ x: drawing.x1, y: drawing.y1 }, p);
+      if (rect.w >= 2 && rect.h >= 2) {
+        const zone = anchor({ id: newId('Z'), name: 'New zone', ...rect, color: '#79c9a5', audience: 'all' });
+        patch({ mapZones: [...mapRows(location, 'mapZones'), zone] });
+        selectNote({ collection: 'mapZones', id: zone.id }); setTool('move');
+      }
+    } else if (Math.hypot(p.x - drawing.x1, p.y - drawing.y1) > 4) {
+      patch({ arrows: [...arrows, { id: newId('A'), x1: round1(drawing.x1), y1: round1(drawing.y1), x2: round1(p.x), y2: round1(p.y) }] });
     }
     setDrawing(null);
   };
 
   // marker dragging (move tool)
-  const onMarkerDown = (e, m) => {
-    if (tool !== 'move') return;
+  const onOverlayDown = (e, collection, row, resize = false) => {
+    if (!interactive || e.button !== 0) return;
     e.stopPropagation();
-    dragRef.current = m.id;
+    suppressMarkerClick.current = false;
+    setSelected({ collection, id: row.id });
+    dragRef.current = { collection, row, start: stagePoint(e), resize, moved: false };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
-  const onMarkerMove = (e) => {
-    if (!dragRef.current) return;
-    const p = stagePoint(e);
-    patch({ markers: location.markers.map((m) => (m.id === dragRef.current ? { ...m, x: round1(p.x), y: round1(p.y) } : m)) });
-  };
-  const onMarkerUp = () => { dragRef.current = null; };
-
-  const removeMarker = (id) => patch({ markers: location.markers.filter((m) => m.id !== id) });
-  const removeArrow = (id) => patch({ arrows: location.arrows.filter((a) => a.id !== id) });
+  const cancelGesture = () => { dragRef.current = null; setDragPreview(null); setDrawing(null); };
 
   // OSM pan/zoom controls
   const panBy = (dx, dy) => {
@@ -155,7 +216,7 @@ export default function LocationStage({ location, onBack, onSelect }) {
     if (Number.isFinite(lat) && Number.isFinite(lon)) patch({ osm: { ...location.osm, lat, lon } });
   };
 
-  const placedIds = new Set(location.markers.map((m) => `${m.kind}:${m.refId}`));
+  const placedIds = new Set(markers.map((m) => `${m.kind}:${m.refId}`));
   const arrowHead = (a) => {
     const ang = Math.atan2(a.y2 - a.y1, a.x2 - a.x1);
     const L = 3.4;
@@ -171,14 +232,14 @@ export default function LocationStage({ location, onBack, onSelect }) {
         </div>
         <div className="right">
           <div className="viewtog">
-            <button className={location.mapKind === 'schematic' ? 'on' : ''} onClick={() => patch({ mapKind: 'schematic' })}>Room schematic</button>
-            <button className={location.mapKind === 'osm' ? 'on' : ''} onClick={() => patch({ mapKind: 'osm' })}>Street map</button>
+            <button disabled={!editing} className={location.mapKind === 'schematic' ? 'on' : ''} onClick={() => patch({ mapKind: 'schematic' })}>Room schematic</button>
+            <button disabled={!editing} className={location.mapKind === 'osm' ? 'on' : ''} onClick={() => patch({ mapKind: 'osm' })}>Street map</button>
           </div>
         </div>
       </div>
 
-      <div className="toolrow">
-        <select className="chip-add" value="" onChange={(e) => {
+      <div className="toolrow location-stage-toolbar">
+        {editing && <><select aria-label="Place map marker" className="chip-add" value="" onChange={(e) => {
           const [kind, refId] = e.target.value.split('|');
           if (kind) { setPending({ kind, refId }); setTool('move'); }
         }}>
@@ -189,17 +250,19 @@ export default function LocationStage({ location, onBack, onSelect }) {
           <optgroup label="Sensors">
             {Object.values(s.sensors).filter((x) => !placedIds.has(`sensor:${x.id}`)).map((x) => <option key={x.id} value={`sensor|${x.id}`}>{x.id} — {x.kind}</option>)}
           </optgroup>
-          <optgroup label="Quest nodes">
+          <optgroup label="Narrative nodes">
             {Object.values(s.nodes).filter((n) => !placedIds.has(`node:${n.id}`)).map((n) => <option key={n.id} value={`node|${n.id}`}>{n.title}</option>)}
           </optgroup>
         </select>
-        <button className={`chip${tool === 'arrow' ? ' on' : ''}`} style={tool === 'arrow' ? { background: '#E8D25C', color: '#1A1D26' } : undefined}
-          onClick={() => { setTool(tool === 'arrow' ? 'move' : 'arrow'); setPending(null); }}>
-          ↗ Draw movement arrow
-        </button>
+        {[['move', '↔ Move'], ['label', 'T Add label'], ['zone', '▧ Draw zone'], ['arrow', '↗ Movement arrow']].map(([id, label]) => <button type="button" className={`chip${tool === id && !pending ? ' on' : ''}`} key={id} aria-pressed={tool === id && !pending} onClick={() => chooseTool(id)}>{label}</button>)}
+        <button type="button" className="chip" aria-expanded={notesOpen} onClick={() => setNotesOpen(value => !value)}>Map notes {notesOpen ? '▴' : '▾'}</button></>}
+        <div className="viewtog map-audience-toggle" aria-label="Map audience"><button type="button" className={editing ? 'on' : ''} aria-pressed={editing} onClick={() => setAudience('facilitator')}>Facilitator edit</button><button type="button" className={!editing ? 'on' : ''} aria-pressed={!editing} onClick={() => { chooseTool('move'); setSelected(null); setAudience('player'); }}>Player preview</button></div>
         {pending && <span className="csvmsg">Click on the map to place the marker</span>}
-        {tool === 'arrow' && !pending && <span className="dim" style={{ fontSize: 11.5 }}>drag to draw · click an arrow to delete it</span>}
-        {location.mapKind === 'osm' && (
+        {tool === 'arrow' && !pending && <span className="dim" style={{ fontSize: 11.5 }}>Drag to draw an arrow. Select it with Move to edit or delete.</span>}
+        {tool === 'label' && <span className="dim">Click on the map to place a label.</span>}
+        {tool === 'zone' && <span className="dim">Drag a rectangle, then name the zone in Map notes.</span>}
+        {!editing && <span className="dim">Player view · facilitator-only notes, markers and arrows are hidden.</span>}
+        {location.mapKind === 'osm' && editing && (
           <span className="osmctl">
             <button className="btn ghost small" onClick={() => panBy(0, -128)}>↑</button>
             <button className="btn ghost small" onClick={() => panBy(0, 128)}>↓</button>
@@ -213,11 +276,11 @@ export default function LocationStage({ location, onBack, onSelect }) {
         )}
       </div>
 
-      <div className="stagewrap">
+      <div className="location-stage-layout"><div className="stagewrap">
         <div
-          className={`stage${pending ? ' placing' : ''}${tool === 'arrow' ? ' drawing' : ''}`}
+          className={`stage${pending || tool === 'label' ? ' placing' : ''}${tool === 'arrow' || tool === 'zone' ? ' drawing' : ''}${!editing ? ' map-player-preview' : ''}`}
           ref={stageRef}
-          onPointerDown={onStageDown} onPointerMove={onStageMove} onPointerUp={onStageUp}
+          onPointerDown={onStageDown} onPointerMove={onStageMove} onPointerUp={onStageUp} onPointerCancel={cancelGesture}
         >
           {location.mapKind === 'osm'
             ? <OsmLayer osm={location.osm} blocked={tilesBlocked} onBlocked={() => setTilesBlocked(true)} />
@@ -225,37 +288,39 @@ export default function LocationStage({ location, onBack, onSelect }) {
               ? <img className="schematic" src={location.schematic.dataUrl} alt="" draggable={false} />
               : <div className="schematic empty"><b>No schematic uploaded</b><span>Add a floor plan under "Room schematic" in the panel on the right — the cover image is separate. Markers and arrows work meanwhile.</span></div>}
 
+          <LocationAnnotationLayer location={displayLocation} audience={audience} selected={editing ? selected : null} interactive={interactive} onDrag={onOverlayDown} onSelect={selectNote} />
+          {drawing && tool === 'zone' && (() => { const rect = mapZoneRect({ x: drawing.x1, y: drawing.y1 }, { x: drawing.x2, y: drawing.y2 }); return <div className="map-zone-preview" style={{ left: `${rect.x / STAGE_W * 100}%`, top: `${rect.y / STAGE_H * 100}%`, width: `${rect.w / STAGE_W * 100}%`, height: `${rect.h / STAGE_H * 100}%` }} />; })()}
           <svg className="stagesvg" viewBox={`0 0 ${STAGE_W} ${STAGE_H}`} preserveAspectRatio="none">
-            {location.arrows.map((a) => (
-              <g key={a.id} className="parrow" onPointerDown={(e) => { e.stopPropagation(); removeArrow(a.id); }}>
+            {arrows.filter(row => mapAudienceVisible(row, audience)).map((a) => (
+              <g key={a.id} className={`parrow${editing && selected?.collection === 'arrows' && selected.id === a.id ? ' selected' : ''}`} role={interactive ? 'button' : undefined} tabIndex={interactive ? 0 : undefined} aria-label="Movement arrow" onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectNote({ collection: 'arrows', id: a.id }); } }} onPointerDown={(e) => { if (interactive) { e.stopPropagation(); selectNote({ collection: 'arrows', id: a.id }); } }}>
                 <path d={`M ${a.x1} ${a.y1} L ${a.x2} ${a.y2} ${arrowHead(a)}`} className="arrowline" />
-                {/* delete hitbox is inert while placing a marker or drawing */}
+                {/* Selection hitbox is inert while placing or drawing. */}
                 <path d={`M ${a.x1} ${a.y1} L ${a.x2} ${a.y2}`} className="arrowhit"
-                  style={{ pointerEvents: pending || tool === 'arrow' ? 'none' : 'stroke' }} />
+                  style={{ pointerEvents: interactive ? 'stroke' : 'none' }} />
               </g>
             ))}
-            {drawing && <path d={`M ${drawing.x1} ${drawing.y1} L ${drawing.x2} ${drawing.y2} ${arrowHead(drawing)}`} className="arrowline preview" />}
+            {drawing && tool === 'arrow' && <path d={`M ${drawing.x1} ${drawing.y1} L ${drawing.x2} ${drawing.y2} ${arrowHead(drawing)}`} className="arrowline preview" />}
           </svg>
 
-          {location.markers.map((m) => {
+          {mapRows(displayLocation, 'markers').filter(row => mapAudienceVisible(row, audience)).map((m) => {
             const meta = markerMeta(m);
             if (!meta) return null;
             return (
-              <div key={m.id} className="marker" style={{ left: `${(m.x / STAGE_W) * 100}%`, top: `${(m.y / STAGE_H) * 100}%` }}
-                onPointerDown={(e) => onMarkerDown(e, m)} onPointerMove={onMarkerMove} onPointerUp={onMarkerUp}
-                onClick={() => { if (m.kind === 'item') onSelect?.({ kind: 'item', id: m.refId }); else if (m.kind === 'node') onSelect?.({ kind: 'node', id: m.refId }); }}>
+              <div key={m.id} className="marker" style={{ left: `${(m.x / STAGE_W) * 100}%`, top: `${(m.y / STAGE_H) * 100}%`, pointerEvents: interactive ? 'auto' : 'none' }}
+                onPointerDown={(e) => onOverlayDown(e, 'markers', m)}
+                onClick={() => { if (!interactive || suppressMarkerClick.current) { suppressMarkerClick.current = false; return; } if (m.kind === 'item') onSelect?.({ kind: 'item', id: m.refId }); else if (m.kind === 'node') onSelect?.({ kind: 'node', id: m.refId }); }}>
                 <span className="mdot" style={{ background: meta.color }} />
                 <span className="mlabel" style={{ borderColor: meta.color }}>{meta.name}
-                  <button className="x" title="Remove marker" onClick={(e) => { e.stopPropagation(); removeMarker(m.id); }}>×</button>
+                  {editing && <button className="x" title="Remove marker" aria-label={`Remove marker: ${meta.name}`} onPointerDown={e => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); removeNote('markers', m.id); }}>×</button>}
                 </span>
               </div>
             );
           })}
         </div>
-      </div>
+      </div>{editing && notesOpen && <LocationAnnotationPanel location={displayLocation} selected={selected} onSelect={selectNote} onChange={changeNote} onRemove={removeNote} markerName={row => markerMeta(row)?.name || row.refId || 'Missing marker reference'} storyLocations={Object.values(s.nodes).filter(node => node.kind === 'storyLocation')} />}</div>
 
       <div className="statusbar">
-        <span><b>{location.markers.length}</b> markers · <b>{location.arrows.length}</b> movement arrows · drag markers to reposition · placing an item marker sets it <b>Deployed</b> here.</span>
+        <span><b>{markers.filter(row => mapAudienceVisible(row, audience)).length}</b> markers · <b>{arrows.filter(row => mapAudienceVisible(row, audience)).length}</b> arrows · <b>{mapRows(location, 'mapLabels').filter(row => mapAudienceVisible(row, audience)).length}</b> labels · <b>{mapRows(location, 'mapZones').filter(row => mapAudienceVisible(row, audience)).length}</b> zones{editing && ' · Changes save with this location. Undo restores deleted notes.'}</span>
       </div>
     </div>
   );

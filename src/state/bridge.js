@@ -1,3 +1,5 @@
+import { remapCharacterInputs } from '../lib/characterProfile.js';
+import { detachStoryBeatLinks, isStoryBeat } from '../lib/storyBeat.js';
 // The Library → Active Project import bridge.
 //
 // Importing DUPLICATES the master template into the project as an instance:
@@ -103,11 +105,13 @@ export function importStory(lib, proj, storyId) {
     const id = genId({ ...proj.nodes, ...nodes }, `${proj.meta.prefix}-N-`);
     idMap[n.id] = id;
     nodes[id] = {
+      ...(['character', 'group'].includes(n.kind) || isStoryBeat(n) ? detachStoryBeatLinks(JSON.parse(JSON.stringify(n))) : {}),
       id, primitiveId: n.primitiveId ?? null, kind: n.kind, title: n.title,
       x: n.x - minX + 60, y: n.y - minY + offsetY,
       body: n.body ?? '', color: n.color ?? null, w: n.w ?? undefined, h: n.h ?? undefined,
       conceptKind: n.conceptKind, conceptId: n.conceptId ?? (n.kind === 'concept' ? n.primitiveId ?? null : null),
       ...(n.narrativeFocus ? { narrativeFocus: n.narrativeFocus } : {}),
+      ...(n.storyDirection ? { storyDirection: JSON.parse(JSON.stringify(n.storyDirection)) } : {}),
       ...(n.narrativeWizard ? { narrativeWizard: JSON.parse(JSON.stringify(n.narrativeWizard)) } : {}),
       ...(n.narrativeWizardHistory ? { narrativeWizardHistory: JSON.parse(JSON.stringify(n.narrativeWizardHistory)) } : {}),
       ...(n.kind === 'concept' ? {
@@ -122,7 +126,7 @@ export function importStory(lib, proj, storyId) {
       } : {}),
       collapsed: n.kind === 'concept' ? true : n.collapsed,
       conceptAnswers: n.kind === 'concept' ? {} : n.conceptAnswers,
-      sub: n.sub ? JSON.parse(JSON.stringify(n.sub)) : undefined,
+      sub: n.sub ? detachStoryBeatLinks(JSON.parse(JSON.stringify(n.sub))) : undefined,
       teamId: null, sets: [], locationId: null, itemId: null, mechanicIds: [], sensorIds: [], history: [],
     };
   });
@@ -182,9 +186,10 @@ export function importStory(lib, proj, storyId) {
       y: marker.y - minY + offsetY,
     };
   }
+  for (const id of Object.keys(nodes)) nodes[id] = remapCharacterInputs(nodes[id], idMap);
   const edges = t.edges
     .filter((e) => idMap[e.from] && idMap[e.to])
-    .map((e) => ({ from: idMap[e.from], to: idMap[e.to], label: e.label || '', color: e.color ?? null }));
+    .map((e) => ({ from: idMap[e.from], to: idMap[e.to], label: e.label || '', color: e.color ?? null, ...(e.storyLink ? { storyLink: JSON.parse(JSON.stringify(e.storyLink)) } : {}) }));
   return { nodes, subnodes, frameworks, frames, numberMarkers, titleMarkers, edges, createdId: idMap[tplNodes[0].id] };
 }
 
@@ -193,11 +198,13 @@ export function importNarrative(lib, proj, narrativeId, x = 100, y = 100) {
   const n = lib.narrative[narrativeId];
   if (!n) return null;
   const id = genId(proj.nodes, `${proj.meta.prefix}-N-`);
-  const node = {
-    id, primitiveId: n.id, kind: 'story', title: n.name,
-    x: Math.round(x), y: Math.round(y), body: n.body || '', color: n.color ?? null,
-    locationId: null, itemId: null, mechanicIds: [], sensorIds: [],
-  };
+  const template = n.template ? detachStoryBeatLinks({ ...JSON.parse(JSON.stringify(n.template)), kind: n.template.kind || n.nodeKind }) : null;
+  const node = remapCharacterInputs({
+    ...(template || {}),
+    id, primitiveId: n.id, kind: template?.kind || n.nodeKind || 'story', title: n.name,
+    x: Math.round(x), y: Math.round(y), body: template?.body ?? n.body ?? '', color: n.color ?? null,
+    locationId: null, itemId: null, mechanicIds: [], sensorIds: [], history: [],
+  });
   return { nodes: { [id]: node }, createdId: id };
 }
 
@@ -218,12 +225,13 @@ export function importMechPrimitive(lib, proj, primitiveId, x = 100, y = 100) {
 export function narrativeToStructNode(narrative, structNodes, x, y) {
   const id = genId(structNodes, 'S');
   const kind = narrative.nodeKind || narrative.kind || 'story';
-  const saved = narrative.template ? JSON.parse(JSON.stringify(narrative.template)) : {};
+  const saved = narrative.template ? detachStoryBeatLinks({ ...JSON.parse(JSON.stringify(narrative.template)), kind }) : {};
   return {
     ...saved,
     id, primitiveId: narrative.id, kind, title: narrative.name,
     x: Math.round(x), y: Math.round(y), body: saved.body ?? narrative.body ?? '', color: narrative.color ?? saved.color ?? null,
     ...(kind === 'item' ? {
+      itemId: null,
       itemType: saved.itemType ?? narrative.itemType ?? 'Artifact',
       shortTitle: saved.shortTitle ?? narrative.shortTitle ?? 'Item',
       playerDescription: saved.playerDescription ?? narrative.playerDescription ?? '',
@@ -253,7 +261,7 @@ export function storyTrackToStructure(proj, id, name) {
   storyNodes.forEach((n, i) => {
     const sid = `S${i + 1}`;
     idMap[n.id] = sid;
-    nodes[sid] = { id: sid, primitiveId: n.primitiveId ?? null, kind: n.kind, title: n.title, x: n.x ?? 60, y: n.y ?? 40 + i * 180, body: n.body || '', color: n.color ?? null, w: n.w ?? undefined, h: n.h ?? undefined };
+    nodes[sid] = { ...(isStoryBeat(n) ? detachStoryBeatLinks(JSON.parse(JSON.stringify(n))) : {}), ...(n.storyDirection ? { storyDirection: JSON.parse(JSON.stringify(n.storyDirection)) } : {}), id: sid, primitiveId: n.primitiveId ?? null, kind: n.kind, title: n.title, x: n.x ?? 60, y: n.y ?? 40 + i * 180, body: n.body || '', color: n.color ?? null, w: n.w ?? undefined, h: n.h ?? undefined };
   });
   const edges = (proj.masterEdges || [])
     .filter((e) => idMap[e.from] && idMap[e.to])

@@ -1,0 +1,7 @@
+.character-input-node { display: grid; gap: 8px; padding: 3px 0; }
+.character-input-node > small { opacity: .8; }
+.character-input-node .btn { white-space: normal; }
+.ci-enabled { display: flex; gap: 7px; align-items: center; font-size: 12px; }
+.ci-description { white-space: pre-wrap; margin: 0; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ci-detailed { padding: 16px; }
+.ci-detailed .ci-description { display: block; overflow: visible; }

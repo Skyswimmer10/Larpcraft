@@ -1,6 +1,7 @@
 import { FATE_STEPS, FATE_FIELDS, FATE_PURPOSE_LABELS, FATE_BANNERS, FATE_WARNINGS, FATE_GAP_SUGGESTIONS } from '../data/fateWizard.js';
 import { NARRATIVE_FOCUSES } from '../data/narrativeGuidance.js';
 import { fateFieldsFor, FATE_DETAIL_QUESTIONS, FATE_PURPOSE_COPY as P } from '../data/fatePurposes.js';
+import { fateCharacterStep, fateCharacterQuestionRows, FATE_ATTENTION, FATE_FEELING_STRENGTH } from './fateCharacter.js';
 
 export const copyFate = value => JSON.parse(JSON.stringify(value));
 export const getFate = (value, path) => path.split('.').reduce((part, key) => part?.[key], value);
@@ -27,9 +28,15 @@ export function normalizeFateDraft(value) {
   if (!Array.isArray(draft.authority.source)) draft.authority.source = draft.authority.source ? [draft.authority.source] : [];
   if (value.revision !== 2) draft.authority.source = [...new Set([...draft.authority.source, ...(draft.authority.secondary || [])])];
   draft.tribe.groups ||= []; draft.tribe.loyalties ||= ''; draft.emotion.recurring ||= []; draft.emotion.patterns ||= [];
+  draft.focus.signals ||= []; draft.authority.people ||= []; draft.tribe.people ||= [];
   if (draft.meta.purpose === 'communication' && draft.output.format === 'Story paragraph') draft.output.format = 'Spoken dialogue';
   if (draft.meta.purpose !== 'communication' && draft.output.format === 'Spoken dialogue') draft.output.format = 'Story paragraph';
   draft.revision = 2;
+  if (draft.meta.purpose === 'character' && !draft.characterRevision) {
+    const previous = fateOutput(draft);
+    if (previous.trim() && draft.output.text === undefined) draft.output.text = previous;
+    draft.characterRevision = 1;
+  }
   return draft;
 }
 const safeKey = value => `k-${encodeURIComponent(value).replace(/\./g, '%2E')}`;
@@ -50,13 +57,13 @@ export function fateChoiceFields(draft, pillar) {
 export function fateChoiceDetails(draft, pillar) {
   return fateChoiceFields(draft, pillar).flatMap(field => fateSelected(draft, field.path).map(option => ({ field, option, path: fateDetailPath(field.path, option), text: getFate(draft, fateDetailPath(field.path, option)) || '' })));
 }
-const PURPOSE_KEYS = ['title', 'context', 'focus', 'authority', 'tribe', 'emotion', 'notes', 'output', 'fieldMeta', 'dismissedWarnings', 'communication'];
+const PURPOSE_KEYS = ['title', 'context', 'focus', 'authority', 'tribe', 'emotion', 'notes', 'output', 'fieldMeta', 'dismissedWarnings', 'communication', 'characterRevision'];
 export function switchFatePurpose(draft, purpose) {
   if (!NARRATIVE_FOCUSES[purpose] || purpose === draft.meta.purpose) return draft;
-  const next = normalizeFateDraft(draft), snapshot = Object.fromEntries(PURPOSE_KEYS.map(key => [key, copyFate(next[key])]));
+  const next = normalizeFateDraft(draft), snapshot = Object.fromEntries(PURPOSE_KEYS.filter(key => next[key] !== undefined).map(key => [key, copyFate(next[key])]));
   snapshot.meta = copyFate(next.meta); next.purposeBanks[draft.meta.purpose] = snapshot;
   const restored = next.purposeBanks[purpose] || createFateDraft({ purpose });
-  for (const key of PURPOSE_KEYS) next[key] = copyFate(restored[key]);
+  for (const key of PURPOSE_KEYS) next[key] = restored[key] === undefined ? undefined : copyFate(restored[key]);
   next.meta = { ...copyFate(restored.meta), purpose, depth: draft.meta.depth };
   next.lastStep = 'setup'; next.updatedAt = Date.now();
   return next;
@@ -65,7 +72,7 @@ export function switchFatePurpose(draft, purpose) {
 export function createFateDraft({ record, answers = record?.answers || {}, purpose = 'communication', title = '', context = '', preferences = {}, id, targetId = '', scope, sessionId } = {}) {
   if (record?.fateDraft?.schemaVersion > 1) throw new Error('This FATE draft was made by a newer version of Larpcraft. Update the app before editing it.');
   let draft = record?.fateDraft ? copyFate(record.fateDraft) : {
-    schemaVersion: 1, id: id || `FATE-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`,
+    schemaVersion: 1, characterRevision: 1, id: id || `FATE-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`,
     createdAt: Date.now(), lastStep: 'setup', title: record?.title || title, context: record?.context || context,
     meta: { purpose: record?.focus || purpose, depth: preferences.lastDepth || 'simple', mode: 'build', influencers: [], targets: [], source: '', otherEntities: '', outcome: '', outcomeText: '', intensity: null, weighting: ['F', 'A', 'T', 'E'], locks: {} },
     focus: { anchor: '' }, authority: { anchor: '' }, tribe: { anchor: '' }, emotion: { anchor: '' }, notes: {},
@@ -92,6 +99,12 @@ export function createFateDraft({ record, answers = record?.answers || {}, purpo
   }
   for (const key of ['resistance', 'response']) if (answers[`fate:${key}`] !== undefined) draft.emotion[key] = answers[`fate:${key}`];
   draft = normalizeFateDraft(draft);
+  if (draft.meta.purpose === 'character') for (const row of fateCharacterQuestionRows(draft)) {
+    if (answers[row.key] === undefined || answers[row.key] === record?.answers?.[row.key]) continue;
+    const answer = answers[row.key];
+    const options = row.path.endsWith('.strength') ? FATE_ATTENTION : FATE_FEELING_STRENGTH;
+    draft = setFate(draft, row.path, row.type === 'array' ? answer.split(' | ').filter(Boolean) : row.type === 'number' ? options.includes(answer) ? options.indexOf(answer) : null : answer);
+  }
   for (const [key, answer] of Object.entries(answers)) if (key.startsWith('fate:detail:') && /^(focus|authority|tribe|emotion)\.details\.k-[^.]+\.k-[^.]+$/.test(key.slice(12))) draft = setFate(draft, key.slice(12), answer);
   for (const pillar of ['F', 'A', 'T', 'E']) if (answers[`fate:words:${pillar}`] !== undefined) draft.communication.lines[pillar] = answers[`fate:words:${pillar}`];
   if (answers['fate:reply'] !== undefined) draft.communication.listenerReply = answers['fate:reply'];
@@ -177,6 +190,7 @@ export function summarizeFateStep(draft, pillar) {
   return [finish(value.anchor), ...fateStepChoiceText(draft, pillar)].filter(Boolean).join(' ');
 }
 export function fateStepChoiceText(draft, pillar) {
+  if (draft.meta.purpose === 'character' && draft.characterRevision) return [...new Set([...fateCharacterStep(draft, pillar), ...fateChoiceDetails(draft, pillar).filter(item => tidy(item.text)).map(item => finish(item.text))])];
   const value = draft[FATE_STEPS.find(step => step.key === pillar).section], lines = [];
   const add = text => { if (text) lines.push(finish(text)); };
   if (pillar === 'F') {
@@ -247,6 +261,7 @@ export function fateCompletion(draft, pillar) {
   return { filled, total: keys.length, ratio: keys.length ? filled / keys.length : 0, anchor: !!draft[step?.section]?.anchor?.trim() };
 }
 export function fateChecks(draft) {
+  if (draft.meta.purpose === 'character' && draft.characterRevision) return [];
   const rows = [];
   for (const pillar of ['F', 'A', 'T', 'E']) if ((draft.meta.mode === 'diagnose' || !['character', 'communication'].includes(draft.meta.purpose)) && !fateCompletion(draft, pillar).anchor) rows.push({ id: `missing:${pillar}`, pillar, message: FATE_WARNINGS.missing.replace('{pillar}', FATE_STEPS.find(step => step.key === pillar).name), suggestion: FATE_GAP_SUGGESTIONS[pillar] });
   const add = (id, pillar) => rows.push({ id, pillar, message: FATE_WARNINGS[id] });
@@ -291,11 +306,13 @@ export function fateQuestions(draft) {
     { key: 'fate:response', prompt: 'What action or line of dialogue could show their response?' },
     ...['F', 'A', 'T', 'E'].map(pillar => ({ key: `fate:notes:${pillar}`, prompt: `${FATE_STEPS.find(step => step.key === pillar).name}: designer notes` })),
     ...['F', 'A', 'T', 'E'].flatMap(pillar => fateChoiceDetails(draft, pillar).filter(item => tidy(item.text)).map(item => ({ key: `fate:detail:${item.path}`, prompt: `${item.option}: ${fateDetailQuestion(draft, item.field.path, item.option)}` }))),
+    ...(purpose === 'character' ? fateCharacterQuestionRows(draft).map(row => ({ key: row.key, prompt: row.prompt })) : []),
     ...(purpose === 'communication' ? [...['F', 'A', 'T', 'E'].map(pillar => ({ key: `fate:words:${pillar}`, prompt: `${FATE_STEPS.find(step => step.key === pillar).name}: ${P.words}` })), { key: 'fate:reply', prompt: P.listenerReply }] : []),
   ];
 }
 export function fateAnswers(draft) {
   return Object.fromEntries([
+    ...(draft.meta.purpose === 'character' ? fateCharacterQuestionRows(draft).map(row => [row.key, row.value]) : []),
     ...['F', 'A', 'T', 'E'].map(pillar => [`phase:${pillar}`, draft[FATE_STEPS.find(step => step.key === pillar).section].anchor]),
     ['fate:resistance', draft.emotion.resistance || ''], ['fate:response', draft.emotion.response || ''],
     ...['F', 'A', 'T', 'E'].map(pillar => [`fate:notes:${pillar}`, draft.notes[pillar] || '']),
@@ -307,6 +324,12 @@ export function fateAnswers(draft) {
 
 export function fateOutput(draft) {
   if (draft.output.text !== undefined) return draft.output.text;
+  if (draft.meta.purpose === 'character' && draft.characterRevision) return ['F', 'A', 'T', 'E'].map((pillar, index) => {
+    const anchor = tidy(draft[FATE_STEPS.find(step => step.key === pillar).section].anchor);
+    const prefix = ['Their attention keeps returning to', 'What carries weight for them is', 'Their sense of belonging centres on', 'Their feelings come into the open through'][index];
+    const introduction = anchor ? /^(they|he|she|it|the |a |an |[“"])/i.test(anchor) && /[.!?]$/.test(anchor) ? anchor : `${prefix} ${lower(anchor)}` : '';
+    return [finish(introduction), ...fateStepChoiceText(draft, pillar)].filter(Boolean).join(' ');
+  }).filter(Boolean).join('\n\n');
   if (draft.meta.mode === 'diagnose') return ['Review of the recorded situation', ...['F', 'A', 'T', 'E'].map(pillar => {
     const step = FATE_STEPS.find(item => item.key === pillar), progress = fateCompletion(draft, pillar);
     return `${step.name}: ${progress.filled}/${progress.total} core details recorded. ${summarizeFateStep(draft, pillar) || FATE_GAP_SUGGESTIONS[pillar]}`;
