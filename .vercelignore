@@ -2,3 +2,9 @@
 node_modules/
 .git/
 .codex-vite.*.log
+.env*
+**/.env*
+.vercel/
+tmp/
+dist/
+output/
